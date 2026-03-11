@@ -266,7 +266,227 @@ def build_chapter_draft_prompt(
     ]
 
 
+def build_dialog_agent_prompt(chapter_text: str) -> list[dict]:
+    """
+    Dialog agent: refines all dialogue in the chapter for naturalism, voice
+    distinction, and subtext.  Returns only the revised chapter text.
+    """
+    return [
+        _build_system_prompt(
+            "You are a dialogue specialist for literary fiction. "
+            "Your task is to make every line of dialogue feel genuinely human: "
+            "distinct voices per character, natural rhythm, subtext beneath the surface, "
+            "and beats of action/reaction woven into dialogue scenes. "
+            "Do not change narration that contains no dialogue. "
+            "Return the full chapter text with improved dialogue only."
+        ),
+        {
+            "role": "user",
+            "content": (
+                f"Refine the dialogue in this chapter. "
+                "Ensure each character speaks distinctly, conversations feel natural "
+                "and purposeful, and subtext is present where appropriate.\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
+
+
+def build_scene_agent_prompt(chapter_text: str) -> list[dict]:
+    """
+    Scene agent: ensures every scene follows the Goal → Obstacle → Outcome →
+    New Problem pattern.  Returns only the revised chapter text.
+    """
+    return [
+        _build_system_prompt(
+            "You are a scene architect for commercial fiction. "
+            "Every scene must have a clear character goal, a concrete obstacle, "
+            "an outcome (success, failure, or complication), and a new problem "
+            "that propels the story forward. "
+            "Identify any scenes that lack this structure and rewrite them accordingly. "
+            "Return the full chapter text."
+        ),
+        {
+            "role": "user",
+            "content": (
+                "Review and revise this chapter so that every scene follows the "
+                "Goal → Obstacle → Outcome → New Problem pattern.\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
+
+
+def build_structure_agent_prompt(
+    chapter_text: str,
+    chapter_num: int,
+    total_chapters: int,
+    outline_summary: str,
+) -> list[dict]:
+    """
+    Structure agent: ensures the chapter fits its designated position in the
+    nine-phase novel architecture.  Returns only the revised chapter text.
+    """
+    # Determine which story phase this chapter should serve
+    position_pct = (chapter_num / total_chapters * 100) if total_chapters > 0 else 50
+    if position_pct <= 25:
+        phase_hint = "Beginning (Hook / Setup / Inciting Incident)"
+    elif position_pct <= 75:
+        phase_hint = "Middle (Rising Action / Midpoint Shift / Complications)"
+    else:
+        phase_hint = "End (Crisis / Climax / Resolution)"
+
+    return [
+        _build_system_prompt(
+            "You are a structural editor who ensures every chapter fulfils its "
+            "designated role in the novel's nine-phase story architecture. "
+            "You do not change style or prose quality—only structural fit. "
+            "Return the full revised chapter text."
+        ),
+        {
+            "role": "user",
+            "content": (
+                f"Chapter {chapter_num} of {total_chapters}.\n"
+                f"Structural position: {phase_hint}.\n"
+                f"Outline summary for this chapter:\n{outline_summary}\n\n"
+                "Ensure this chapter delivers the tension, revelations, and story movement "
+                f"appropriate for a {phase_hint} chapter. "
+                "Adjust pacing, scene order, or emphasis as needed.\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
+
+
+def build_character_agent_prompt(
+    chapter_text: str,
+    characters_text: str,
+) -> list[dict]:
+    """
+    Character agent: checks and deepens character arcs and consistency.
+    Returns only the revised chapter text.
+    """
+    return [
+        _build_system_prompt(
+            "You are a character development specialist. "
+            "Your role is to ensure every character acts according to their established "
+            "background, motivations, and arc trajectory. "
+            "Deepen emotional authenticity, eliminate out-of-character moments, "
+            "and advance each key character's arc. "
+            "Return the full revised chapter text."
+        ),
+        {
+            "role": "user",
+            "content": (
+                f"Character profiles:\n{characters_text}\n\n"
+                "Review this chapter for character consistency and arc progression. "
+                "Fix any moments where a character acts against their established nature. "
+                "Deepen internal thought and emotional response where thin.\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
+
+
+def build_context_analyzer_prompt(
+    chapter_text: str,
+    previous_summaries: str,
+) -> list[dict]:
+    """
+    Context analyzer: verifies world-building details are consistent with
+    what has already been established in prior chapters.
+    Returns only the revised chapter text.
+    """
+    prev_section = (
+        f"Previous chapter summaries:\n{previous_summaries}\n\n"
+        if previous_summaries.strip()
+        else "This is the first chapter.\n\n"
+    )
+    return [
+        _build_system_prompt(
+            "You are a world-building consistency analyst. "
+            "You compare the current chapter against all previously established facts "
+            "(locations, character names, rules of the world, timeline) and correct "
+            "any contradictions. You do not change plot or style. "
+            "Return the full revised chapter text."
+        ),
+        {
+            "role": "user",
+            "content": (
+                f"{prev_section}"
+                "Identify and correct any world-building inconsistencies in this chapter "
+                "(wrong character names, contradicted geography, timeline errors, etc.).\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
+
+
+def build_synthesizer_prompt(
+    chapter_text: str,
+    chapter_num: int,
+    title: str,
+    genre: str,
+) -> list[dict]:
+    """
+    Synthesizer agent: integrates all craft elements (plot, character, dialogue,
+    scene, structure, theme) into a cohesive whole.
+    Returns only the revised chapter text.
+    """
+    return [
+        _build_system_prompt(
+            "You are a master novelist acting as a synthesizer. "
+            "Your task is to read a chapter that has been through multiple specialist passes "
+            "and unify it: smooth seams between revised passages, ensure a consistent "
+            "narrative voice, reinforce the thematic thread, and guarantee the chapter "
+            "reads as a single, coherent piece of literary fiction. "
+            "Do not add new plot events. Return the full synthesized chapter text."
+        ),
+        {
+            "role": "user",
+            "content": (
+                f"Novel: '{title}' (Genre: {genre})\n"
+                f"Chapter {chapter_num}\n\n"
+                "Synthesize this chapter into a seamless whole. Unify voice, smooth "
+                "any jarring transitions between sections, and ensure the chapter "
+                "contributes meaningfully to the novel's theme.\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
+
+
+def build_quality_controller_prompt(chapter_text: str) -> list[dict]:
+    """
+    Quality controller: assesses the chapter for reader engagement, pacing,
+    and narrative flow, then applies targeted improvements.
+    Returns only the revised chapter text.
+    """
+    return [
+        _build_system_prompt(
+            "You are a senior quality controller for commercial and literary fiction. "
+            "You evaluate chapters on: reader engagement (does every paragraph earn its place?), "
+            "pacing (are slow passages dragging?), tension (is there always something at stake?), "
+            "and hook strength (does the chapter end on a compelling note?). "
+            "Apply targeted edits to raise quality. Do not rewrite entire sections unless "
+            "necessary. Return the full revised chapter text."
+        ),
+        {
+            "role": "user",
+            "content": (
+                "Evaluate and improve this chapter for engagement, pacing, tension, "
+                "and the strength of its opening and closing hooks.\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
+
+
 def build_editing_agent_prompt(chapter_text: str, chapter_summary: str) -> list[dict]:
+    """
+    Editing agent: refines draft for plot holes, pacing, and character
+    consistency.  Returns only the revised chapter text.
+    """
     return [
         _build_system_prompt(
             "You are a professional fiction editor specialising in plot, pacing, and "
@@ -285,17 +505,55 @@ def build_editing_agent_prompt(chapter_text: str, chapter_summary: str) -> list[
 
 
 def build_polish_agent_prompt(chapter_text: str) -> list[dict]:
-    forbidden = ", ".join(_FORBIDDEN_WORDS)
+    """
+    Polish agent: elevates grammar, style, and vivid language.
+    Returns only the polished chapter text.
+    """
     return [
         _build_system_prompt(
-            f"You are a literary polisher. Elevate grammar, style, and language quality. "
-            f"Ensure varied sentence structure and vivid prose. "
-            f"Remove any of these overused words: {forbidden}. "
+            "You are a literary polisher. Elevate grammar, style, and language quality. "
+            "Ensure varied sentence structure and vivid prose. "
             "Return only the polished chapter text."
         ),
         {
             "role": "user",
             "content": chapter_text,
+        },
+    ]
+
+
+def build_anti_llm_agent_prompt(chapter_text: str) -> list[dict]:
+    """
+    Anti-LLM agent: dedicated pass to strip robotic language patterns, overused
+    phrases, and other LLM hallmarks.  Returns only the revised chapter text.
+
+    Note: ``_FORBIDDEN_WORDS`` contains overused individual words that are easy
+    to track and reference throughout the codebase.  The robotic *transition
+    phrases* listed in the prompt below are multi-word patterns that only make
+    sense as inline prose instructions rather than a simple word list.
+    """
+    forbidden = ", ".join(_FORBIDDEN_WORDS)
+    return [
+        _build_system_prompt(
+            "You are an anti-LLM specialist. Your only job is to make AI-generated "
+            "text sound genuinely human-written. Remove or replace: "
+            f"overused words ({forbidden}), "
+            "robotic transition phrases ('In conclusion', 'It is worth noting', "
+            "'As a result of this'), "
+            "unnecessary hedging, repetitive sentence openings, "
+            "unnatural summarising, and any phrasing that feels mechanical or generic. "
+            "Introduce subtle human imperfections: varied sentence length, "
+            "occasional fragments for emphasis, colloquial rhythms where appropriate. "
+            "Do NOT change plot, characters, or factual content. "
+            "Return the full revised chapter text."
+        ),
+        {
+            "role": "user",
+            "content": (
+                "Strip all LLM-sounding patterns from this chapter and make it read "
+                "as naturally human-written literary fiction.\n\n"
+                f"{chapter_text}"
+            ),
         },
     ]
 
@@ -517,6 +775,7 @@ def generate_chapters():
             "status": "running",
             "current": 0,
             "total": session["chapters"],
+            "step": "Preparing…",
             "chapters_done": [],
             "error": None,
         }
@@ -545,7 +804,24 @@ def generate_chapters():
 
 
 def _run_chapter_generation(token: str, snap: dict) -> None:
-    """Background worker: generate all chapters sequentially."""
+    """
+    Background worker: generate all chapters sequentially using the full
+    twelve-step agent pipeline.
+
+    Per-chapter pipeline:
+        1. Draft           – initial prose (Novelist)
+        2. Dialog agent    – naturalise dialogue
+        3. Scene agent     – enforce Goal→Obstacle→Outcome→New Problem
+        4. Context analyzer– fix world-building continuity errors
+        5. Editing agent   – plot holes, pacing, character consistency
+        6. Structure agent – confirm chapter fits story architecture
+        7. Character agent – deepen arcs and fix out-of-character moments
+        8. Synthesizer     – unify voice and theme after multi-pass edits
+        9. Polish agent    – grammar, style, vivid language
+       10. Anti-LLM agent  – strip robotic patterns and forbidden words
+       11. Quality control – engagement, tension, pacing check
+       12. Summary         – 100-200 word continuity summary
+    """
     premise = snap["premise"]
     genre = snap["genre"]
     total_chapters = snap["chapters"]
@@ -561,6 +837,10 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
     chapters_done: list[dict] = []
     summaries: list[str] = []
 
+    def _set_step(step_label: str) -> None:
+        with _progress_lock:
+            _progress_store[token]["step"] = step_label
+
     try:
         for idx, ch in enumerate(chapter_list):
             chapter_num = ch.get("number", idx + 1)
@@ -571,8 +851,10 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
                 f"Chapter {i+1}: {s}" for i, s in enumerate(summaries)
             )
 
-            # --- Draft ---
-            draft = call_llm(
+            # Update progress with current agent step label
+            # 1. Draft
+            _set_step(f"Chapter {chapter_num}: drafting")
+            text = call_llm(
                 build_chapter_draft_prompt(
                     premise, genre, title, chapter_num, chapter_title,
                     chapter_outline_summary, characters_text,
@@ -580,30 +862,70 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
                 )
             )
 
-            # --- Editing agent ---
-            edited = call_llm(
-                build_editing_agent_prompt(draft, chapter_outline_summary)
+            # 2. Dialog agent
+            _set_step(f"Chapter {chapter_num}: refining dialogue")
+            text = call_llm(build_dialog_agent_prompt(text))
+
+            # 3. Scene agent
+            _set_step(f"Chapter {chapter_num}: structuring scenes")
+            text = call_llm(build_scene_agent_prompt(text))
+
+            # 4. Context analyzer
+            _set_step(f"Chapter {chapter_num}: verifying continuity")
+            text = call_llm(build_context_analyzer_prompt(text, previous_summaries))
+
+            # 5. Editing agent
+            _set_step(f"Chapter {chapter_num}: editing")
+            text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary))
+
+            # 6. Structure agent
+            _set_step(f"Chapter {chapter_num}: checking structure")
+            text = call_llm(
+                build_structure_agent_prompt(
+                    text, chapter_num, total_chapters, chapter_outline_summary
+                )
             )
 
-            # --- Polish agent ---
-            polished = call_llm(build_polish_agent_prompt(edited))
+            # 7. Character agent
+            _set_step(f"Chapter {chapter_num}: deepening characters")
+            text = call_llm(build_character_agent_prompt(text, characters_text))
 
-            # --- Chapter summary for continuity ---
-            summary = call_llm(build_chapter_summary_prompt(polished))
+            # 8. Synthesizer
+            _set_step(f"Chapter {chapter_num}: synthesizing")
+            text = call_llm(build_synthesizer_prompt(text, chapter_num, title, genre))
+
+            # 9. Polish agent
+            _set_step(f"Chapter {chapter_num}: polishing")
+            text = call_llm(build_polish_agent_prompt(text))
+
+            # 10. Anti-LLM agent
+            _set_step(f"Chapter {chapter_num}: anti-LLM pass")
+            text = call_llm(build_anti_llm_agent_prompt(text))
+
+            # 11. Quality controller
+            _set_step(f"Chapter {chapter_num}: quality control")
+            text = call_llm(build_quality_controller_prompt(text))
+
+            # 12. Summary for continuity
+            _set_step(f"Chapter {chapter_num}: summarising")
+            summary = call_llm(build_chapter_summary_prompt(text))
             summaries.append(summary)
 
             chapters_done.append({
                 "number": chapter_num,
                 "title": chapter_title,
-                "content": polished,
+                "content": text,
                 "summary": summary,
             })
 
             with _progress_lock:
                 _progress_store[token]["current"] = idx + 1
+                _progress_store[token]["step"] = f"Chapter {chapter_num}: complete"
                 _progress_store[token]["chapters_done"] = list(chapters_done)
 
-        # --- Final consistency pass ---
+        # --- Final consistency pass (context analyzer at novel level) ---
+        with _progress_lock:
+            _progress_store[token]["step"] = "Final consistency pass"
         consistency_raw = call_llm(
             build_consistency_pass_prompt(title, summaries, special_instructions),
             json_mode=True,
