@@ -266,7 +266,7 @@ $(function () {
   function startChapterGeneration() {
     showStep("#step-progress");
     $("#chapter-progress-list").empty();
-    updateProgressBar(0, 0);
+    updateProgressBar(0, 0, "Preparing…");
 
     $.ajax({
       url: "/generate_chapters",
@@ -296,7 +296,7 @@ $(function () {
         var current = data.current || 0;
         var total = data.total || _totalChapters;
 
-        updateProgressBar(current, total);
+        updateProgressBar(current, total, data.step || null);
 
         // Render completed chapters in list
         var $list = $("#chapter-progress-list");
@@ -325,11 +325,13 @@ $(function () {
     });
   }
 
-  function updateProgressBar(current, total) {
+  function updateProgressBar(current, total, step) {
     var pct = total > 0 ? Math.round((current / total) * 100) : 0;
     $("#progress-bar").css("width", pct + "%").attr("aria-valuenow", pct);
     $("#progress-percent").text(pct + "%");
-    if (current < total) {
+    if (step !== null && step !== undefined && step !== "") {
+      $("#progress-label").text(step);
+    } else if (current < total) {
       $("#progress-label").text("Writing chapter " + (current + 1) + " of " + total + "…");
     } else {
       $("#progress-label").text("Finalising…");

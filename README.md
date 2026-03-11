@@ -40,8 +40,8 @@
 - **Editable Outline** – AI-generated title, chapter-by-chapter outline, and character list are all fully editable before writing begins.
 - **Seven Genre Options** – Fantasy, Sci-Fi, Mystery, Romance, Horror, Thriller, Historical.
 - **Structured Story Architecture** – Outline generation follows a nine-phase narrative model (Hook → Setup → Inciting Incident → Rising Action → Midpoint Shift → Complications → Crisis → Climax → Resolution) with correct structural proportions.
-- **Specialized Writing Agents** – Eight distinct LLM prompting roles handle drafting, editing, polishing, structure, character, scene, dialogue, and quality control.
-- **Anti-LLM Agent** – Dedicated prompting pass that removes robotic language patterns, overused phrases, and LLM hallmarks to produce human-sounding prose.
+- **Specialized Writing Agents** – Twelve dedicated LLM passes per chapter: drafting, dialogue refinement, scene structuring, context analysis, editing, structure checking, character arc deepening, synthesis, polishing, anti-LLM pass, quality control, and chapter summarisation.
+- **Anti-LLM Agent** – Dedicated LLM pass (step 10 per chapter) that removes robotic language patterns, overused phrases, and LLM hallmarks to produce human-sounding prose.
 - **Continuity Tracking** – Each completed chapter generates a 100–200 word summary that is fed to subsequent chapters to maintain consistency.
 - **Final Consistency Pass** – Global review agent checks all chapter summaries for plot holes, unresolved threads, character arc completion, and thematic payoff.
 - **Live Progress Bar** – Browser polls the backend every 3 seconds; a Bootstrap progress bar updates in real time as chapters are written.
@@ -212,12 +212,20 @@ Click **Approve & Write Chapters** when satisfied. Edits are collected by jQuery
 
 ### Step 3 – Chapter Generation
 
-A Bootstrap progress bar tracks writing progress. The browser polls `/progress/<token>` every 3 seconds. For each chapter, the backend:
+A Bootstrap progress bar tracks writing progress. The progress label updates in real time to show the current agent step. The browser polls `/progress/<token>` every 3 seconds. For each chapter, the backend runs a **twelve-step pipeline**:
 
-1. **Drafts** the chapter using full context (premise, genre, title, outline, characters, all previous chapter summaries, special instructions).
-2. **Edits** the draft via an editing agent (plot holes, pacing, character consistency).
-3. **Polishes** the edited text via a polishing agent (grammar, style, vivid language, forbidden words removed).
-4. **Summarizes** the chapter (100–200 words) for continuity tracking in subsequent chapters.
+1. **Draft** – Initial prose written with full context (premise, genre, title, outline, characters, all previous summaries, special instructions).
+2. **Dialog Agent** – Refines all dialogue for natural rhythm, distinct character voices, and subtext.
+3. **Scene Agent** – Ensures every scene follows the Goal → Obstacle → Outcome → New Problem pattern.
+4. **Context Analyzer** – Checks world-building facts and timeline against previous chapter summaries.
+5. **Editing Agent** – Fixes plot holes, pacing problems, and character inconsistencies.
+6. **Structure Agent** – Verifies the chapter fulfils its designated role in the nine-phase story architecture.
+7. **Character Agent** – Deepens character arcs and corrects any out-of-character moments.
+8. **Synthesizer** – Unifies narrative voice and thematic thread after all specialist passes.
+9. **Polish Agent** – Elevates grammar, style, and vivid language.
+10. **Anti-LLM Agent** – Dedicated pass to strip robotic patterns and overused LLM words.
+11. **Quality Controller** – Checks reader engagement, tension, pacing, and hook strength.
+12. **Summarizer** – Produces a 100–200 word continuity summary for subsequent chapters.
 
 After all chapters are written, a final **consistency pass** reviews all summaries for plot holes, unresolved threads, arc completion, and thematic payoff.
 
@@ -273,6 +281,7 @@ Click **Start Over** to reset the form and begin a new novel.
   "status": "running",
   "current": 7,
   "total": 20,
+  "step": "Chapter 7: refining dialogue",
   "chapters_done": [
     { "number": 1, "title": "The Awakening", "content": "…", "summary": "…" }
   ],
@@ -281,6 +290,7 @@ Click **Start Over** to reset the form and begin a new novel.
 ```
 
 Status values: `"running"` | `"done"` | `"error"`.
+`step` contains a human-readable label of the current agent step (e.g. `"Chapter 7: polishing"`).
 
 ---
 
@@ -306,25 +316,38 @@ JSON mode (`response_format: json_object`) is used wherever structured data is e
 
 ### Specialized Agents
 
-| Agent | Purpose | Invocation |
-|---|---|---|
-| **Title Agent** | Generates a catchy, original novel title. | Once, during Phase 1. |
-| **Story Architect** | Creates a detailed chapter-by-chapter outline following the nine-phase model. | Once, during Phase 1. |
-| **Character Agent** | Develops 3–7 main characters with name, age, background, role, and arc. | Once, during Phase 1. |
-| **Novelist (Draft Agent)** | Writes the initial chapter draft using full context (premise, genre, title, outline, characters, previous summaries, instructions). | Once per chapter. |
-| **Editing Agent** | Refines the draft for plot holes, pacing, and character consistency. Returns improved text only. | Once per chapter. |
-| **Polish Agent** | Elevates grammar, style, and language. Removes forbidden words. Returns polished text. | Once per chapter. |
-| **Summarizer Agent** | Produces a 100–200 word chapter summary for continuity tracking. | Once per chapter. |
-| **Consistency Agent** | Reviews all chapter summaries for plot holes, unresolved threads, arc completion, and thematic payoff. Returns a JSON object with `{issues, overall_assessment}`. | Once, after all chapters. |
+Each chapter goes through a **twelve-step pipeline**, with every step using a dedicated LLM agent:
+
+| Step | Agent | Purpose | Invocation |
+|---|---|---|---|
+| Phase 1 | **Title Agent** | Generates a catchy, original novel title. | Once. |
+| Phase 1 | **Story Architect** | Creates a chapter-by-chapter outline following the nine-phase model. | Once. |
+| Phase 1 | **Character Agent (outline)** | Develops 3–7 main characters with name, age, background, role, and arc. | Once. |
+| Ch. step 1 | **Novelist (Draft Agent)** | Writes the initial chapter draft using full context. | Per chapter. |
+| Ch. step 2 | **Dialog Agent** | Refines all dialogue for naturalism, distinct voices, and subtext. | Per chapter. |
+| Ch. step 3 | **Scene Agent** | Enforces the Goal → Obstacle → Outcome → New Problem pattern in every scene. | Per chapter. |
+| Ch. step 4 | **Context Analyzer** | Fixes world-building and timeline inconsistencies against prior chapter summaries. | Per chapter. |
+| Ch. step 5 | **Editing Agent** | Repairs plot holes, pacing problems, and character inconsistencies. | Per chapter. |
+| Ch. step 6 | **Structure Agent** | Confirms the chapter fulfils its role in the nine-phase story architecture. | Per chapter. |
+| Ch. step 7 | **Character Agent (arc)** | Deepens character arcs and corrects out-of-character moments. | Per chapter. |
+| Ch. step 8 | **Synthesizer Agent** | Unifies narrative voice and thematic thread after all specialist passes. | Per chapter. |
+| Ch. step 9 | **Polish Agent** | Elevates grammar, style, and vivid language. | Per chapter. |
+| Ch. step 10 | **Anti-LLM Agent** | Strips robotic patterns and forbidden overused words (dedicated pass). | Per chapter. |
+| Ch. step 11 | **Quality Controller** | Checks reader engagement, tension, pacing, and hook strength. | Per chapter. |
+| Ch. step 12 | **Summarizer Agent** | Produces a 100–200 word continuity summary for subsequent chapters. | Per chapter. |
+| Post-gen | **Consistency Agent** | Reviews all summaries for plot holes, unresolved threads, arc completion, and thematic payoff. | Once, after all chapters. |
+
+The browser progress bar shows the current agent step label in real time (polled every 3 seconds).
 
 ### Anti-LLM Agent
 
-The Polish Agent and the Novelist's system prompt both act as anti-LLM filters. They are instructed to:
+The **Anti-LLM Agent** is a dedicated LLM pass (step 10 per chapter) with a single responsibility: making AI-generated text sound genuinely human-written. It:
 
-- Use **varied vocabulary and sentence structure** (short punchy sentences mixed with longer, more complex ones).
-- Avoid **robotic transitions** and unnatural phrasing.
-- **Remove or replace** any of the following overused LLM-generated words: `embark`, `delve`, `realm`, `tapestry`, `testament`, `nuance`, `beacon`, `uncharted`, `multifaceted`, `leverage`, `synergy`, `pivotal`, `groundbreaking`, `commendable`, `meticulous`.
-- Produce prose that reads as **naturally human-written**.
+- Replaces or removes **overused LLM words**: `embark`, `delve`, `realm`, `tapestry`, `testament`, `nuance`, `beacon`, `uncharted`, `multifaceted`, `leverage`, `synergy`, `pivotal`, `groundbreaking`, `commendable`, `meticulous`.
+- Eliminates **robotic transition phrases** ("In conclusion", "It is worth noting", "As a result of this").
+- Removes **unnecessary hedging** and repetitive sentence openings.
+- Introduces **subtle human imperfections**: varied sentence length, occasional fragments for emphasis, colloquial rhythms where fitting.
+- Does **not** change plot, characters, or factual content.
 
 ### Rate Limiting & Retries
 
