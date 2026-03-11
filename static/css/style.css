@@ -1,0 +1,54 @@
+/* NovelForge – custom styles */
+
+body {
+  background-color: #f8f9fa;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+/* Editable table cells */
+.editable-cell {
+  min-height: 1.4em;
+  white-space: pre-wrap;
+}
+
+/* Progress steps */
+.step-panel {
+  transition: opacity 0.3s ease;
+}
+
+/* Chapter preview accordion */
+.accordion-body {
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.97rem;
+  line-height: 1.75;
+}
+
+/* Navbar brand */
+.navbar-brand {
+  font-size: 1.4rem;
+  letter-spacing: -0.5px;
+}
+
+/* Card headers */
+.card-header h4 {
+  font-size: 1.15rem;
+}
+
+/* Make tables more readable */
+#chapter-table td,
+#characters-table td {
+  vertical-align: top;
+  font-size: 0.9rem;
+}
+
+/* Chapter progress list items */
+#chapter-progress-list .list-group-item {
+  font-size: 0.9rem;
+}
+
+.list-group-item.done-chapter {
+  border-left: 4px solid #198754;
+}
