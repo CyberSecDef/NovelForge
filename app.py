@@ -49,6 +49,7 @@ app.config["SECRET_KEY"] = config.SECRET_KEY
 Path(config.SESSION_FILE_DIR).mkdir(parents=True, exist_ok=True)
 Path(config.EXPORT_DIR).mkdir(parents=True, exist_ok=True)
 Path("./logs").mkdir(parents=True, exist_ok=True)
+Path("./sessions").mkdir(parents=True, exist_ok=True)
 
 # Configure filesystem-based sessions
 app.config["SESSION_TYPE"] = "filesystem"
@@ -71,6 +72,115 @@ llm_logger.propagate = False
 # In-memory store for chapter-generation progress keyed by session token
 _progress_store: dict[str, dict] = {}
 _progress_lock = threading.Lock()
+
+# ---------------------------------------------------------------------------
+# Session persistence for crash recovery
+# ---------------------------------------------------------------------------
+
+def get_session_id() -> str:
+    """Get or create a unique session ID for this user session."""
+    if "session_id" not in session:
+        session["session_id"] = str(uuid.uuid4())
+    return session["session_id"]
+
+
+def get_session_file_path() -> Path:
+    """Get the file path for the current session's persistence data."""
+    session_id = get_session_id()
+    return Path("./sessions") / f"{session_id}.json"
+
+
+def save_session_state() -> None:
+    """
+    Save current session state and generation progress to disk.
+    Called after each significant step to enable crash recovery.
+    """
+    try:
+        session_file = get_session_file_path()
+        
+        # Gather all session data
+        state = {
+            "session_id": get_session_id(),
+            "premise": session.get("premise", ""),
+            "genre": session.get("genre", ""),
+            "chapters": session.get("chapters", 0),
+            "word_count": session.get("word_count", 0),
+            "special_events": session.get("special_events", ""),
+            "special_instructions": session.get("special_instructions", ""),
+            "title": session.get("title", ""),
+            "chapter_list": session.get("chapter_list", []),
+            "character_list": session.get("character_list", []),
+            "progress_token": session.get("progress_token", ""),
+        }
+        
+        # Add progress store data if available
+        token = session.get("progress_token")
+        if token:
+            with _progress_lock:
+                if token in _progress_store:
+                    state["progress_data"] = _progress_store[token]
+        
+        # Write to file
+        session_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        logger.info(f"Saved session state to {session_file}")
+    except Exception as e:
+        logger.error(f"Failed to save session state: {e}")
+
+
+def load_session_state() -> dict | None:
+    """
+    Load session state from disk if it exists.
+    Returns the state dict or None if no saved state exists.
+    """
+    try:
+        session_file = get_session_file_path()
+        if not session_file.exists():
+            return None
+        
+        state = json.loads(session_file.read_text(encoding="utf-8"))
+        logger.info(f"Loaded session state from {session_file}")
+        return state
+    except Exception as e:
+        logger.error(f"Failed to load session state: {e}")
+        return None
+
+
+def restore_session_from_state(state: dict) -> None:
+    """
+    Restore session and progress store from saved state dict.
+    """
+    # Restore session variables
+    session["premise"] = state.get("premise", "")
+    session["genre"] = state.get("genre", "")
+    session["chapters"] = state.get("chapters", 0)
+    session["word_count"] = state.get("word_count", 0)
+    session["special_events"] = state.get("special_events", "")
+    session["special_instructions"] = state.get("special_instructions", "")
+    session["title"] = state.get("title", "")
+    session["chapter_list"] = state.get("chapter_list", [])
+    session["character_list"] = state.get("character_list", [])
+    session["progress_token"] = state.get("progress_token", "")
+    
+    # Restore progress store if available
+    if "progress_data" in state and state.get("progress_token"):
+        token = state["progress_token"]
+        with _progress_lock:
+            _progress_store[token] = state["progress_data"]
+    
+    logger.info("Restored session from saved state")
+
+
+def clear_session_state() -> None:
+    """
+    Clear the current session's saved state file.
+    """
+    try:
+        session_file = get_session_file_path()
+        if session_file.exists():
+            session_file.unlink()
+            logger.info(f"Cleared session state file {session_file}")
+    except Exception as e:
+        logger.error(f"Failed to clear session state: {e}")
 
 # ---------------------------------------------------------------------------
 # LLM helper
@@ -889,6 +999,9 @@ def approve_outline():
         {k: sanitise_str(v) for k, v in ch.items()} for ch in character_list
     ]
 
+    # Auto-save session state after outline approval
+    save_session_state()
+
     return jsonify({"status": "approved"})
 
 
@@ -934,7 +1047,26 @@ def generate_chapters():
     thread.start()
 
     session["progress_token"] = token
+    
+    # Auto-save session state after starting generation
+    save_session_state()
+    
     return jsonify({"token": token})
+
+
+def _resume_chapter_generation(
+    token: str, 
+    snap: dict, 
+    chapters_done: list[dict], 
+    summaries: list[str], 
+    start_idx: int
+) -> None:
+    """
+    Resume chapter generation from a specific chapter index after a crash.
+    Uses the same pipeline as _run_chapter_generation but starts from start_idx.
+    """
+    # Call the main generation function but with pre-populated chapters_done and summaries
+    _run_chapter_generation_internal(token, snap, chapters_done, summaries, start_idx)
 
 
 def _run_chapter_generation(token: str, snap: dict) -> None:
@@ -956,6 +1088,20 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
        11. Quality control – engagement, tension, pacing check
        12. Summary         – 100-200 word continuity summary
     """
+    _run_chapter_generation_internal(token, snap, [], [], 0)
+
+
+def _run_chapter_generation_internal(
+    token: str, 
+    snap: dict, 
+    chapters_done: list[dict], 
+    summaries: list[str], 
+    start_idx: int
+) -> None:
+    """
+    Internal function that performs the actual chapter generation.
+    Can start from any chapter index to support resume functionality.
+    """
     premise = snap["premise"]
     genre = snap["genre"]
     total_chapters = snap["chapters"]
@@ -968,15 +1114,29 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
     target_per_chapter = max(500, word_count // total_chapters)
     characters_text = _format_characters(character_list)
 
-    chapters_done: list[dict] = []
-    summaries: list[str] = []
-
     def _set_step(step_label: str) -> None:
         with _progress_lock:
             _progress_store[token]["step"] = step_label
+        # Auto-save after each step
+        try:
+            # We need to save from the main session context, but we're in a background thread
+            # So we save the progress_store data directly to a file named by token
+            save_file = Path("./sessions") / f"{token}_progress.json"
+            with _progress_lock:
+                progress_data = dict(_progress_store[token])
+            save_data = {
+                "token": token,
+                "snapshot": snap,
+                "chapters_done": chapters_done,
+                "summaries": summaries,
+                "progress": progress_data,
+            }
+            save_file.write_text(json.dumps(save_data, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.error(f"Failed to auto-save progress: {e}")
 
     try:
-        for idx, ch in enumerate(chapter_list):
+        for idx, ch in enumerate(chapter_list[start_idx:], start=start_idx):
             chapter_num = ch.get("number", idx + 1)
             chapter_title = ch.get("title", f"Chapter {chapter_num}")
             chapter_outline_summary = ch.get("summary", "")
@@ -1072,12 +1232,18 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
         with _progress_lock:
             _progress_store[token]["status"] = "done"
             _progress_store[token]["consistency"] = consistency
+        
+        # Auto-save final state
+        _set_step("Complete")
 
     except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.error("Chapter generation failed for token %s: %s", token, exc)
         with _progress_lock:
             _progress_store[token]["status"] = "error"
             _progress_store[token]["error"] = str(exc)
+        
+        # Auto-save error state
+        _set_step(f"Error: {str(exc)}")
 
 
 def _format_characters(character_list: list[dict]) -> str:
@@ -1101,6 +1267,138 @@ def progress(token: str):
     if data is None:
         return jsonify({"error": "Unknown token"}), 404
     return jsonify(data)
+
+
+@app.route("/check_saved_state")
+def check_saved_state():
+    """
+    Check if there's a saved session state that can be resumed.
+    Returns information about the saved state if it exists.
+    """
+    state = load_session_state()
+    if not state:
+        return jsonify({"has_saved_state": False})
+    
+    # Check if there's progress data
+    token = state.get("progress_token")
+    progress_file = Path("./sessions") / f"{token}_progress.json" if token else None
+    has_progress = progress_file and progress_file.exists() if token else False
+    
+    progress_info = None
+    if has_progress and progress_file:
+        try:
+            progress_data = json.loads(progress_file.read_text(encoding="utf-8"))
+            progress = progress_data.get("progress", {})
+            progress_info = {
+                "current": progress.get("current", 0),
+                "total": progress.get("total", 0),
+                "step": progress.get("step", ""),
+                "status": progress.get("status", ""),
+            }
+        except Exception as e:
+            logger.error(f"Failed to read progress file: {e}")
+    
+    return jsonify({
+        "has_saved_state": True,
+        "title": state.get("title", "Untitled"),
+        "chapters": state.get("chapters", 0),
+        "has_progress": has_progress,
+        "progress_info": progress_info,
+    })
+
+
+@app.route("/resume_session", methods=["POST"])
+def resume_session():
+    """
+    Restore the saved session state and optionally resume chapter generation.
+    """
+    state = load_session_state()
+    if not state:
+        return jsonify({"error": "No saved state found"}), 404
+    
+    # Restore session
+    restore_session_from_state(state)
+    
+    # Check if there's progress to resume
+    token = state.get("progress_token")
+    progress_file = Path("./sessions") / f"{token}_progress.json" if token else None
+    
+    if token and progress_file and progress_file.exists():
+        try:
+            # Load progress data
+            progress_data = json.loads(progress_file.read_text(encoding="utf-8"))
+            
+            # Restore progress store
+            with _progress_lock:
+                if token not in _progress_store:
+                    _progress_store[token] = progress_data.get("progress", {})
+            
+            # Check if we should resume generation
+            progress = progress_data.get("progress", {})
+            if progress.get("status") == "running":
+                # Resume generation from where it left off
+                snapshot = progress_data.get("snapshot", {})
+                chapters_done = progress_data.get("chapters_done", [])
+                summaries = progress_data.get("summaries", [])
+                current_chapter = progress.get("current", 0)
+                
+                # Start a new thread to continue generation
+                thread = threading.Thread(
+                    target=_resume_chapter_generation,
+                    args=(token, snapshot, chapters_done, summaries, current_chapter),
+                    daemon=True,
+                )
+                thread.start()
+                
+                return jsonify({
+                    "status": "resumed",
+                    "token": token,
+                    "message": f"Resuming from chapter {current_chapter + 1}"
+                })
+        except Exception as e:
+            logger.error(f"Failed to resume generation: {e}")
+    
+    return jsonify({"status": "restored", "message": "Session restored successfully"})
+
+
+@app.route("/new_session", methods=["POST"])
+def new_session():
+    """
+    Archive the current LLM log file and start a new session.
+    Clears all session data and saved state.
+    """
+    import shutil
+    from datetime import datetime
+    
+    # Archive the current LLM log file
+    llm_log = Path("./logs/llm.log")
+    if llm_log.exists():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive_name = f"llm_{timestamp}.log"
+        archive_path = Path("./logs") / archive_name
+        try:
+            shutil.copy2(llm_log, archive_path)
+            # Clear the original log file
+            llm_log.write_text("", encoding="utf-8")
+            logger.info(f"Archived LLM log to {archive_path}")
+        except Exception as e:
+            logger.error(f"Failed to archive LLM log: {e}")
+    
+    # Clear session state file
+    clear_session_state()
+    
+    # Clear current session data
+    session.clear()
+    
+    # Clear progress token files
+    try:
+        sessions_dir = Path("./sessions")
+        for progress_file in sessions_dir.glob("*_progress.json"):
+            progress_file.unlink()
+    except Exception as e:
+        logger.error(f"Failed to clear progress files: {e}")
+    
+    return jsonify({"status": "success", "message": "New session started"})
 
 
 @app.route("/export", methods=["POST"])

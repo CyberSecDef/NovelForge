@@ -60,6 +60,105 @@ $(function () {
   }
 
   // -------------------------------------------------------------------
+  // Progress tracking variables (shared across resume and generation)
+  // -------------------------------------------------------------------
+  var _pollInterval = null;
+  var _progressToken = null;
+  var _totalChapters = 0;
+
+  // -------------------------------------------------------------------
+  // Session Resume & New Session
+  // -------------------------------------------------------------------
+  
+  // Check for saved state on page load
+  function checkSavedState() {
+    $.get("/check_saved_state", function (data) {
+      if (data.has_saved_state) {
+        // Show resume modal
+        $("#resume-title").text(data.title || "Untitled");
+        
+        var statusText = "";
+        if (data.has_progress && data.progress_info) {
+          var prog = data.progress_info;
+          if (prog.status === "done") {
+            statusText = "Generation complete";
+          } else if (prog.status === "error") {
+            statusText = "Generation stopped with error";
+          } else {
+            statusText = "In progress - Chapter " + prog.current + " of " + prog.total + " (" + prog.step + ")";
+          }
+        } else {
+          statusText = "Outline ready, generation not started";
+        }
+        
+        $("#resume-status").text(statusText);
+        
+        // Show the modal
+        var modal = new bootstrap.Modal(document.getElementById("resumeModal"));
+        modal.show();
+      }
+    }).fail(function () {
+      console.log("No saved state check available");
+    });
+  }
+  
+  // Resume button click
+  $("#btn-resume").on("click", function () {
+    var $btn = $(this);
+    $btn.prop("disabled", true).html('<span class="spinner-border spinner-border-sm me-1"></span>Resuming...');
+    
+    $.post("/resume_session", function (data) {
+      // Close modal
+      bootstrap.Modal.getInstance(document.getElementById("resumeModal")).hide();
+      
+      if (data.status === "resumed") {
+        // Generation is resuming - show progress step and start polling
+        showStep("#step-progress");
+        $("#chapter-progress-list").empty();
+        _progressToken = data.token;
+        _totalChapters = parseInt($("#chapters").val(), 10) || 20;
+        _pollInterval = setInterval(pollProgress, 3000);
+        // Trigger an immediate poll
+        pollProgress();
+        showAlert("Resuming chapter generation from where it left off...", "info");
+      } else {
+        // Just restored session data - reload to show outline
+        location.reload();
+      }
+    }).fail(function () {
+      $btn.prop("disabled", false).html('<i class="bi bi-arrow-clockwise me-1"></i>Resume Session');
+      showAlert("Failed to resume session. Please try again.", "danger");
+    });
+  });
+  
+  // Start fresh button click
+  $("#btn-start-fresh").on("click", function () {
+    // Just close the modal and stay on the input page
+    bootstrap.Modal.getInstance(document.getElementById("resumeModal")).hide();
+  });
+  
+  // New Session button click
+  $("#btn-new-session").on("click", function () {
+    if (!confirm("Start a new session? This will archive the current progress and clear all data.")) {
+      return;
+    }
+    
+    var $btn = $(this);
+    $btn.prop("disabled", true);
+    
+    $.post("/new_session", function () {
+      // Reload the page to start fresh
+      location.reload();
+    }).fail(function () {
+      $btn.prop("disabled", false);
+      showAlert("Failed to start new session. Please try again.", "danger");
+    });
+  });
+  
+  // Check for saved state on page load
+  checkSavedState();
+
+  // -------------------------------------------------------------------
   // Premise character counter
   // -------------------------------------------------------------------
   $("#premise").on("input", function () {
@@ -398,9 +497,6 @@ $(function () {
   // -------------------------------------------------------------------
   // Step 3 – Chapter Generation
   // -------------------------------------------------------------------
-  var _pollInterval = null;
-  var _progressToken = null;
-  var _totalChapters = 0;
 
   function startChapterGeneration() {
     showStep("#step-progress");
