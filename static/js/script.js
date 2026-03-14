@@ -420,6 +420,118 @@ $(function () {
   });
 
   // -------------------------------------------------------------------
+  // LLM Log Display
+  // -------------------------------------------------------------------
+  var _lastLogLength = 0;
+  var _logPollInterval = null;
+
+  function truncateText(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + "...";
+  }
+
+  function formatLogEntry(entry) {
+    if (entry.type === "request") {
+      // Format request with messages
+      var content = "";
+      if (entry.payload && entry.payload.messages) {
+        entry.payload.messages.forEach(function(msg) {
+          if (msg.role === "system") {
+            content += "[System] " + truncateText(msg.content, 500) + "\n\n";
+          } else if (msg.role === "user") {
+            content += truncateText(msg.content, 2500);
+          }
+        });
+      }
+      return {
+        type: "request",
+        header: "Request to LLM",
+        content: content,
+        timestamp: entry.timestamp
+      };
+    } else if (entry.type === "response") {
+      // Format response
+      var content = "";
+      if (entry.response && entry.response.choices && entry.response.choices[0]) {
+        var message = entry.response.choices[0].message;
+        if (message && message.content) {
+          content = truncateText(message.content, 2500);
+        }
+      }
+      return {
+        type: "response",
+        header: "LLM Response",
+        content: content,
+        timestamp: entry.timestamp
+      };
+    }
+    return null;
+  }
+
+  function addLogMessage(formatted) {
+    if (!formatted || !formatted.content) return;
+
+    var messageClass = formatted.type === "request" ? "request" : "response";
+    var html = 
+      '<div class="llm-message ' + messageClass + '">' +
+        '<div class="llm-bubble">' +
+          '<div class="llm-bubble-header">' + escapeHtml(formatted.header) + '</div>' +
+          '<div class="llm-bubble-content">' + escapeHtml(formatted.content) + '</div>' +
+          '<div class="llm-bubble-timestamp">' + escapeHtml(formatted.timestamp) + '</div>' +
+        '</div>' +
+      '</div>';
+    
+    $("#llm-chat-messages").append(html);
+    
+    // Auto-scroll to bottom
+    var chatWindow = document.getElementById("llm-chat-window");
+    if (chatWindow) {
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+  }
+
+  function pollLLMLog() {
+    $.ajax({
+      url: "/llm_log",
+      method: "GET",
+      success: function(data) {
+        if (data.entries && data.entries.length > _lastLogLength) {
+          // Clear placeholder if first time
+          if (_lastLogLength === 0) {
+            $("#llm-chat-messages").empty();
+          }
+          
+          // Add new entries
+          for (var i = _lastLogLength; i < data.entries.length; i++) {
+            var formatted = formatLogEntry(data.entries[i]);
+            if (formatted) {
+              addLogMessage(formatted);
+            }
+          }
+          _lastLogLength = data.entries.length;
+        }
+      },
+      error: function() {
+        // Silently fail - log polling is non-critical
+      }
+    });
+  }
+
+  // Start polling for LLM log updates
+  _logPollInterval = setInterval(pollLLMLog, 5000); // Poll every 5 seconds
+  pollLLMLog(); // Initial poll
+
+  // Clear log button
+  $("#btn-clear-log").on("click", function() {
+    $("#llm-chat-messages").html(
+      '<div class="text-center text-muted small py-3">' +
+      '<i class="bi bi-info-circle me-1"></i>Log cleared (still polling)' +
+      '</div>'
+    );
+    _lastLogLength = 0;
+  });
+
+  // -------------------------------------------------------------------
   // Start Over
   // -------------------------------------------------------------------
   $("#btn-start-over").on("click", function () {

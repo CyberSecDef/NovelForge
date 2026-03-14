@@ -1157,6 +1157,64 @@ def download_file(filename: str):
     return send_file(str(export_path), as_attachment=True, download_name=safe_filename)
 
 
+@app.route("/llm_log")
+def get_llm_log():
+    """Return recent LLM log entries for the chat display."""
+    # Use absolute path based on app location
+    log_path = Path(__file__).parent / "logs" / "llm.log"
+    
+    if not log_path.exists():
+        logger.warning(f"LLM log file not found at {log_path}")
+        return jsonify({"entries": []})
+    
+    try:
+        entries = []
+        with open(log_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        # Split by lines that start with { (beginning of a JSON object)
+        # This handles pretty-printed JSON where each object spans multiple lines
+        json_objects = []
+        current_obj = ""
+        brace_count = 0
+        
+        for line in content.split('\n'):
+            if line.strip().startswith('{') and brace_count == 0:
+                # Start of a new JSON object
+                if current_obj:
+                    json_objects.append(current_obj)
+                current_obj = line + '\n'
+                brace_count = line.count('{') - line.count('}')
+            elif brace_count > 0:
+                # Continuation of current object
+                current_obj += line + '\n'
+                brace_count += line.count('{') - line.count('}')
+                
+                if brace_count == 0:
+                    # End of current object
+                    json_objects.append(current_obj)
+                    current_obj = ""
+        
+        # Don't forget the last object if any
+        if current_obj:
+            json_objects.append(current_obj)
+        
+        # Parse each JSON object
+        for obj_str in json_objects:
+            try:
+                entry = json.loads(obj_str)
+                entries.append(entry)
+            except json.JSONDecodeError as e:
+                logger.debug(f"Failed to parse log entry: {e}")
+                continue
+        
+        logger.info(f"Returning {len(entries)} log entries")
+        return jsonify({"entries": entries})
+    except Exception as e:
+        logger.error(f"Error reading LLM log: {e}")
+        return jsonify({"entries": [], "error": str(e)})
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
