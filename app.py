@@ -16,6 +16,10 @@ import time
 import logging
 import threading
 import uuid
+import pprint
+
+from dotenv import load_dotenv
+load_dotenv() 
 from pathlib import Path
 
 import requests
@@ -30,7 +34,6 @@ from flask import (
 )
 from flask_session import Session
 import markupsafe
-
 import config
 
 # ---------------------------------------------------------------------------
@@ -38,14 +41,18 @@ import config
 # ---------------------------------------------------------------------------
 
 app = Flask(__name__)
-app.secret_key = config.SECRET_KEY
 
-# Use cachelib-based filesystem sessions (avoids deprecated flask-session keys)
-from cachelib.file import FileSystemCache  # noqa: E402
+# Configure secret key FIRST - required for sessions
+app.config["SECRET_KEY"] = config.SECRET_KEY
 
-_session_cache = FileSystemCache(config.SESSION_FILE_DIR, threshold=500, mode=0o600)
-app.config["SESSION_TYPE"] = "cachelib"
-app.config["SESSION_CACHELIB"] = _session_cache
+# Ensure directories exist BEFORE initializing sessions
+Path(config.SESSION_FILE_DIR).mkdir(parents=True, exist_ok=True)
+Path(config.EXPORT_DIR).mkdir(parents=True, exist_ok=True)
+Path("./logs").mkdir(parents=True, exist_ok=True)
+
+# Configure filesystem-based sessions
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_FILE_DIR"] = config.SESSION_FILE_DIR
 app.config["SESSION_PERMANENT"] = False
 
 Session(app)
@@ -53,9 +60,13 @@ Session(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Ensure directories exist
-Path(config.SESSION_FILE_DIR).mkdir(parents=True, exist_ok=True)
-Path(config.EXPORT_DIR).mkdir(parents=True, exist_ok=True)
+# Set up dedicated LLM logger that writes JSON objects to logs/llm.log
+llm_logger = logging.getLogger("llm_requests")
+llm_logger.setLevel(logging.INFO)
+llm_handler = logging.FileHandler("./logs/llm.log")
+llm_handler.setFormatter(logging.Formatter("%(message)s"))
+llm_logger.addHandler(llm_handler)
+llm_logger.propagate = False
 
 # In-memory store for chapter-generation progress keyed by session token
 _progress_store: dict[str, dict] = {}
@@ -72,8 +83,8 @@ _FORBIDDEN_WORDS = [
     "pivotal", "groundbreaking", "commendable", "meticulous",
 ]
 
-MAX_RETRIES = 3
-RETRY_DELAY = 2  # seconds
+MAX_RETRIES = 5
+RETRY_DELAY = 5  # seconds
 
 
 def call_llm(messages: list[dict], *, json_mode: bool = False) -> str:
@@ -94,13 +105,26 @@ def call_llm(messages: list[dict], *, json_mode: bool = False) -> str:
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
 
+    # Log the request (sanitize API key)
+    request_log = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "type": "request",
+        "url": config.LLM_API_URL,
+        "headers": {
+            "Authorization": f"Bearer {config.LLM_API_KEY[:8]}..." if config.LLM_API_KEY else "None",
+            "Content-Type": "application/json",
+        },
+        "payload": payload,
+    }
+    llm_logger.info(json.dumps(request_log, indent=2))
+
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             resp = requests.post(
                 config.LLM_API_URL,
                 headers=headers,
                 json=payload,
-                timeout=120,
+                timeout=240,
             )
             if resp.status_code == 429 or resp.status_code >= 500:
                 wait = RETRY_DELAY * attempt
@@ -112,6 +136,17 @@ def call_llm(messages: list[dict], *, json_mode: bool = False) -> str:
                 continue
             resp.raise_for_status()
             data = resp.json()
+            
+            # Log the response
+            response_log = {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "type": "response",
+                "status_code": resp.status_code,
+                "headers": dict(resp.headers),
+                "response": data,
+            }
+            llm_logger.info(json.dumps(response_log, indent=2))
+            
             return data["choices"][0]["message"]["content"]
         except requests.exceptions.Timeout:
             logger.warning("LLM request timed out (attempt %d/%d)", attempt, MAX_RETRIES)
@@ -119,9 +154,75 @@ def call_llm(messages: list[dict], *, json_mode: bool = False) -> str:
                 raise RuntimeError("LLM API timed out after multiple retries.")
             time.sleep(RETRY_DELAY * attempt)
         except requests.exceptions.RequestException as exc:
+            # Log the error
+            error_log = {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "type": "error",
+                "error": str(exc),
+            }
+            llm_logger.info(json.dumps(error_log))
             raise RuntimeError(f"LLM API request failed: {exc}") from exc
 
     raise RuntimeError("LLM API failed after maximum retries.")
+
+
+def parse_llm_json(response: str) -> dict:
+    """
+    Parse JSON from LLM response, handling common irregularities:
+    - Markdown code fences (```json, ```)
+    - Extra whitespace
+    - BOM characters
+    - Text before/after the JSON object
+    
+    Raises json.JSONDecodeError if parsing fails.
+    """
+    # Strip BOM if present
+    if response.startswith('\ufeff'):
+        response = response[1:]
+    
+    # Remove markdown code fences
+    response = response.strip()
+    
+    # Handle ```json\n...\n``` or ```\n...\n```
+    if response.startswith('```'):
+        # Find the first newline after opening fence
+        first_newline = response.find('\n')
+        if first_newline != -1:
+            response = response[first_newline + 1:]
+        
+        # Remove closing fence
+        if response.endswith('```'):
+            response = response[:-3]
+    
+    response = response.strip()
+    
+    # Try to extract JSON by finding first { or [ and last } or ]
+    # This handles cases where there's explanatory text before/after
+    start_brace = response.find('{')
+    start_bracket = response.find('[')
+    
+    # Determine which comes first (or if only one exists)
+    if start_brace == -1 and start_bracket == -1:
+        # No JSON structure found, try parsing as-is
+        return json.loads(response)
+    
+    if start_brace == -1:
+        start = start_bracket
+        end_char = ']'
+    elif start_bracket == -1:
+        start = start_brace
+        end_char = '}'
+    else:
+        start = min(start_brace, start_bracket)
+        end_char = '}' if start == start_brace else ']'
+    
+    # Find the matching closing character from the end
+    end = response.rfind(end_char)
+    
+    if end != -1 and end > start:
+        response = response[start:end + 1]
+    
+    return json.loads(response)
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +243,7 @@ def build_title_prompt(premise: str, genre: str) -> list[dict]:
             "content": (
                 f"Generate a single catchy, original title for a {genre} novel based on this premise:\n\n"
                 f"{premise}\n\n"
-                "Return ONLY the title text, nothing else."
+                "***Return ONLY the title text, nothing else.***"
             ),
         },
     ]
@@ -192,9 +293,10 @@ def build_outline_prompt(
                 f"{arch}"
                 f"{events_section}"
                 f"{instructions_section}\n\n"
-                "Return a JSON object with this structure:\n"
-                '{"chapters": [{"number": 1, "title": "...", "summary": "..."}, ...]}\n'
-                "Each chapter summary should be 2-4 sentences describing key events and purpose."
+                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
+                "Required structure:\n"
+                '{"chapters": [{"number": 1, "title": "...", "summary": "..."}, ...]}\n\n'
+                "***Each chapter summary should be 2-4 sentences describing key events and purpose.***"
             ),
         },
     ]
@@ -213,7 +315,8 @@ def build_characters_prompt(
                 f"Based on this {genre} novel premise and outline, create 3-7 main characters.\n\n"
                 f"Premise: {premise}\n\n"
                 f"Outline:\n{outline_text}\n\n"
-                "Return a JSON object with this structure:\n"
+                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
+                "Required structure:\n"
                 '{"characters": [{"name": "...", "age": "...", "background": "...", '
                 '"role": "...", "arc": "..."}, ...]}'
             ),
@@ -258,15 +361,17 @@ def build_chapter_draft_prompt(
                 f"Main characters:\n{characters_text}\n"
                 f"{prev_section}"
                 f"{instructions_section}\n\n"
+                f"***CRITICAL: You are writing CHAPTER {chapter_num}. Keep this chapter number in mind throughout.***\n"
                 f"Target: approximately {target_words:,} words. "
                 "Write immersive, human-sounding prose. "
-                "Follow the scene pattern: Goal → Obstacle → Outcome → New problem."
+                "Follow the scene pattern: Goal → Obstacle → Outcome → New problem.\n\n"
+                "***Return ONLY the chapter text with NO introduction, NO title header, NO explanation.***"
             ),
         },
     ]
 
 
-def build_dialog_agent_prompt(chapter_text: str) -> list[dict]:
+def build_dialog_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
     """
     Dialog agent: refines all dialogue in the chapter for naturalism, voice
     distinction, and subtext.  Returns only the revised chapter text.
@@ -283,16 +388,18 @@ def build_dialog_agent_prompt(chapter_text: str) -> list[dict]:
         {
             "role": "user",
             "content": (
+                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
                 f"Refine the dialogue in this chapter. "
                 "Ensure each character speaks distinctly, conversations feel natural "
                 "and purposeful, and subtext is present where appropriate.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
                 f"{chapter_text}"
             ),
         },
     ]
 
 
-def build_scene_agent_prompt(chapter_text: str) -> list[dict]:
+def build_scene_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
     """
     Scene agent: ensures every scene follows the Goal → Obstacle → Outcome →
     New Problem pattern.  Returns only the revised chapter text.
@@ -309,8 +416,10 @@ def build_scene_agent_prompt(chapter_text: str) -> list[dict]:
         {
             "role": "user",
             "content": (
+                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
                 "Review and revise this chapter so that every scene follows the "
                 "Goal → Obstacle → Outcome → New Problem pattern.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
                 f"{chapter_text}"
             ),
         },
@@ -352,6 +461,7 @@ def build_structure_agent_prompt(
                 "Ensure this chapter delivers the tension, revelations, and story movement "
                 f"appropriate for a {phase_hint} chapter. "
                 "Adjust pacing, scene order, or emphasis as needed.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
                 f"{chapter_text}"
             ),
         },
@@ -361,6 +471,8 @@ def build_structure_agent_prompt(
 def build_character_agent_prompt(
     chapter_text: str,
     characters_text: str,
+    chapter_num: int,
+    title: str,
 ) -> list[dict]:
     """
     Character agent: checks and deepens character arcs and consistency.
@@ -378,10 +490,12 @@ def build_character_agent_prompt(
         {
             "role": "user",
             "content": (
+                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
                 f"Character profiles:\n{characters_text}\n\n"
                 "Review this chapter for character consistency and arc progression. "
                 "Fix any moments where a character acts against their established nature. "
                 "Deepen internal thought and emotional response where thin.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
                 f"{chapter_text}"
             ),
         },
@@ -391,6 +505,8 @@ def build_character_agent_prompt(
 def build_context_analyzer_prompt(
     chapter_text: str,
     previous_summaries: str,
+    chapter_num: int,
+    title: str,
 ) -> list[dict]:
     """
     Context analyzer: verifies world-building details are consistent with
@@ -398,9 +514,9 @@ def build_context_analyzer_prompt(
     Returns only the revised chapter text.
     """
     prev_section = (
-        f"Previous chapter summaries:\n{previous_summaries}\n\n"
+        f"Previous chapter summaries (Chapters 1-{chapter_num-1}):\n{previous_summaries}\n\n"
         if previous_summaries.strip()
-        else "This is the first chapter.\n\n"
+        else "This is Chapter 1 (first chapter).\n\n"
     )
     return [
         _build_system_prompt(
@@ -413,9 +529,11 @@ def build_context_analyzer_prompt(
         {
             "role": "user",
             "content": (
+                f"Novel: '{title}' - Working on Chapter {chapter_num}\n\n"
                 f"{prev_section}"
                 "Identify and correct any world-building inconsistencies in this chapter "
                 "(wrong character names, contradicted geography, timeline errors, etc.).\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
                 f"{chapter_text}"
             ),
         },
@@ -450,13 +568,14 @@ def build_synthesizer_prompt(
                 "Synthesize this chapter into a seamless whole. Unify voice, smooth "
                 "any jarring transitions between sections, and ensure the chapter "
                 "contributes meaningfully to the novel's theme.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
                 f"{chapter_text}"
             ),
         },
     ]
 
 
-def build_quality_controller_prompt(chapter_text: str) -> list[dict]:
+def build_quality_controller_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
     """
     Quality controller: assesses the chapter for reader engagement, pacing,
     and narrative flow, then applies targeted improvements.
@@ -474,15 +593,17 @@ def build_quality_controller_prompt(chapter_text: str) -> list[dict]:
         {
             "role": "user",
             "content": (
+                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
                 "Evaluate and improve this chapter for engagement, pacing, tension, "
                 "and the strength of its opening and closing hooks.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
                 f"{chapter_text}"
             ),
         },
     ]
 
 
-def build_editing_agent_prompt(chapter_text: str, chapter_summary: str) -> list[dict]:
+def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_num: int, title: str) -> list[dict]:
     """
     Editing agent: refines draft for plot holes, pacing, and character
     consistency.  Returns only the revised chapter text.
@@ -495,16 +616,18 @@ def build_editing_agent_prompt(chapter_text: str, chapter_summary: str) -> list[
         {
             "role": "user",
             "content": (
+                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
                 f"Chapter summary (what should happen):\n{chapter_summary}\n\n"
                 f"Chapter draft:\n{chapter_text}\n\n"
                 "Identify and fix: plot holes, pacing issues, character inconsistencies, "
-                "unclear motivations. Return the improved chapter text only."
+                "unclear motivations.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***"
             ),
         },
     ]
 
 
-def build_polish_agent_prompt(chapter_text: str) -> list[dict]:
+def build_polish_agent_prompt(chapter_text: str, chapter_num: int, title: str, genre: str) -> list[dict]:
     """
     Polish agent: elevates grammar, style, and vivid language.
     Returns only the polished chapter text.
@@ -517,12 +640,18 @@ def build_polish_agent_prompt(chapter_text: str) -> list[dict]:
         ),
         {
             "role": "user",
-            "content": chapter_text,
+            "content": (
+                f"Novel: '{title}' ({genre}) - Chapter {chapter_num}\n\n"
+                "Polish this chapter for grammar, style, and language quality. "
+                "Ensure varied sentence structure and vivid prose.\n\n"
+                "***CRITICAL: Return ONLY the complete polished chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
+                f"{chapter_text}"
+            ),
         },
     ]
 
 
-def build_anti_llm_agent_prompt(chapter_text: str) -> list[dict]:
+def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
     """
     Anti-LLM agent: dedicated pass to strip robotic language patterns, overused
     phrases, and other LLM hallmarks.  Returns only the revised chapter text.
@@ -550,21 +679,25 @@ def build_anti_llm_agent_prompt(chapter_text: str) -> list[dict]:
         {
             "role": "user",
             "content": (
+                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
                 "Strip all LLM-sounding patterns from this chapter and make it read "
                 "as naturally human-written literary fiction.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
                 f"{chapter_text}"
             ),
         },
     ]
 
 
-def build_chapter_summary_prompt(chapter_text: str) -> list[dict]:
+def build_chapter_summary_prompt(chapter_text: str, chapter_num: int) -> list[dict]:
     return [
         _build_system_prompt("You are a precise summariser of fiction."),
         {
             "role": "user",
             "content": (
-                f"Write a 100-200 word summary of this chapter for continuity tracking:\n\n{chapter_text}"
+                f"Write a 100-200 word summary of Chapter {chapter_num} for continuity tracking.\n\n"
+                "***CRITICAL: Return ONLY the summary text with NO introduction, NO chapter number header, NO explanation.***\n\n"
+                f"{chapter_text}"
             ),
         },
     ]
@@ -588,7 +721,8 @@ def build_consistency_pass_prompt(
                 "Review for: plot holes, character arc completion, unresolved threads, "
                 "world-building inconsistencies, thematic payoff.\n"
                 f"Special instructions: {special_instructions}\n\n"
-                "Return a JSON object: "
+                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
+                "Required structure:\n"
                 '{"issues": ["..."], "overall_assessment": "..."}'
             ),
         },
@@ -682,7 +816,7 @@ def generate_outline():
             json_mode=True,
         )
         try:
-            outline_data = json.loads(outline_raw)
+            outline_data = parse_llm_json(outline_raw)
             chapter_list = outline_data.get("chapters", [])
         except json.JSONDecodeError:
             # Fallback: wrap in minimal structure
@@ -702,7 +836,7 @@ def generate_outline():
             json_mode=True,
         )
         try:
-            characters_data = json.loads(characters_raw)
+            characters_data = parse_llm_json(characters_raw)
             character_list = characters_data.get("characters", [])
         except json.JSONDecodeError:
             character_list = []
@@ -864,19 +998,19 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
 
             # 2. Dialog agent
             _set_step(f"Chapter {chapter_num}: refining dialogue")
-            text = call_llm(build_dialog_agent_prompt(text))
+            text = call_llm(build_dialog_agent_prompt(text, chapter_num, title))
 
             # 3. Scene agent
             _set_step(f"Chapter {chapter_num}: structuring scenes")
-            text = call_llm(build_scene_agent_prompt(text))
+            text = call_llm(build_scene_agent_prompt(text, chapter_num, title))
 
             # 4. Context analyzer
             _set_step(f"Chapter {chapter_num}: verifying continuity")
-            text = call_llm(build_context_analyzer_prompt(text, previous_summaries))
+            text = call_llm(build_context_analyzer_prompt(text, previous_summaries, chapter_num, title))
 
             # 5. Editing agent
             _set_step(f"Chapter {chapter_num}: editing")
-            text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary))
+            text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title))
 
             # 6. Structure agent
             _set_step(f"Chapter {chapter_num}: checking structure")
@@ -888,7 +1022,7 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
 
             # 7. Character agent
             _set_step(f"Chapter {chapter_num}: deepening characters")
-            text = call_llm(build_character_agent_prompt(text, characters_text))
+            text = call_llm(build_character_agent_prompt(text, characters_text, chapter_num, title))
 
             # 8. Synthesizer
             _set_step(f"Chapter {chapter_num}: synthesizing")
@@ -896,19 +1030,19 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
 
             # 9. Polish agent
             _set_step(f"Chapter {chapter_num}: polishing")
-            text = call_llm(build_polish_agent_prompt(text))
+            text = call_llm(build_polish_agent_prompt(text, chapter_num, title, genre))
 
             # 10. Anti-LLM agent
             _set_step(f"Chapter {chapter_num}: anti-LLM pass")
-            text = call_llm(build_anti_llm_agent_prompt(text))
+            text = call_llm(build_anti_llm_agent_prompt(text, chapter_num, title))
 
             # 11. Quality controller
             _set_step(f"Chapter {chapter_num}: quality control")
-            text = call_llm(build_quality_controller_prompt(text))
+            text = call_llm(build_quality_controller_prompt(text, chapter_num, title))
 
             # 12. Summary for continuity
             _set_step(f"Chapter {chapter_num}: summarising")
-            summary = call_llm(build_chapter_summary_prompt(text))
+            summary = call_llm(build_chapter_summary_prompt(text, chapter_num))
             summaries.append(summary)
 
             chapters_done.append({
@@ -931,7 +1065,7 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
             json_mode=True,
         )
         try:
-            consistency = json.loads(consistency_raw)
+            consistency = parse_llm_json(consistency_raw)
         except json.JSONDecodeError:
             consistency = {"issues": [], "overall_assessment": ""}
 
@@ -1028,8 +1162,7 @@ def download_file(filename: str):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # Bind to 127.0.0.1 for local development.
     # In production, use a WSGI server (e.g. gunicorn) behind a reverse proxy.
-    host = os.environ.get("FLASK_HOST", "127.0.0.1")
+    host = os.environ.get("FLASK_HOST", "0.0.0.0")
     port = int(os.environ.get("FLASK_PORT", "5000"))
     app.run(debug=False, host=host, port=port)
