@@ -70,13 +70,7 @@
                   maxlength="1200"
                   placeholder="Describe your story idea…"
                   required
-                >
-
-
-Eli Mercer has spent forty-two years inside an ordinary life: a steady job, a strained marriage, polite neighbors, traffic, birthdays, grief, desire, regret. Then small ruptures begin. Conversations loop with identical phrasing. Strangers freeze for a beat, then resume. Loved ones offer perfect emotional responses at impossible times, as if selected from a menu. When Eli starts testing the world, he uncovers a horrifying pattern: no one around him possesses private thought, memory, or will unless he is directly engaged with them. The city is populated by responsive shells, elegant code performing humanity. As his certainty grows, so does his isolation. But one impossible woman resists the pattern—surprising him, challenging him, seeming real. To learn whether she is consciousness or the simulation’s final trap, Eli must risk destroying the only world he has ever known.
-                
-              
-              </textarea>
+                ></textarea>
                 <div class="d-flex justify-content-between">
                   <div class="invalid-feedback">Please enter a story premise (max 1200 chars).</div>
                   <small class="text-muted ms-auto mt-1"><span id="premise-count">0</span>/1200</small>
@@ -90,7 +84,7 @@ Eli Mercer has spent forty-two years inside an ordinary life: a steady job, a st
                 </label>
                 <select class="form-select" id="genre" name="genre" required>
                   <option value="" disabled selected>Select a genre…</option>
-                  <option selected>Fantasy</option>
+                  <option>Fantasy</option>
                   <option>Sci-Fi</option>
                   <option>Mystery</option>
                   <option>Romance</option>
@@ -118,7 +112,7 @@ Eli Mercer has spent forty-two years inside an ordinary life: a steady job, a st
                     id="chapters"
                     name="chapters"
                     min="3"
-                    value="3"
+                    value="15"
                     required
                   />
                   <div class="invalid-feedback">Minimum 3 chapters required.</div>
@@ -140,7 +134,7 @@ Eli Mercer has spent forty-two years inside an ordinary life: a steady job, a st
                     id="word_count"
                     name="word_count"
                     min="1000"
-                    value="5000"
+                    value="85000"
                     required
                   />
                   <div class="invalid-feedback">Word count must be at least 1,000.</div>
@@ -159,13 +153,7 @@ Eli Mercer has spent forty-two years inside an ordinary life: a steady job, a st
                   name="special_events"
                   rows="2"
                   placeholder="e.g. A dragon attack in chapter 5, A wedding in the final act…"
-                >
-              
-his wife repeats a private memory word for word like a recorded script, a stranger freezes mid-step until he looks directly at them, an entire coffee shop falls silent when he asks an unscripted question, he finds a handwritten note in his own house warning that background characters reset at midnight, his daughter briefly breaks character and begs him not to let them know he has awakened
-              
-              
-              
-              </textarea>
+                ></textarea>
               </div>
 
               <!-- Special Instructions -->
@@ -180,13 +168,7 @@ his wife repeats a private memory word for word like a recorded script, a strang
                   name="special_instructions"
                   rows="2"
                   placeholder="e.g. Avoid clichés, emphasize diversity, dark tone…"
-                >
-              
-avoid simulation genre clichés and standard glitch tropes, maintain a dark adult psychological tone with sustained existential dread, keep every revelation ambiguous enough to support both a real awakening and a mental collapse
-              
-              
-              
-              </textarea>
+                ></textarea>
               </div>
 
               <button type="submit" class="btn btn-primary btn-lg w-100" id="btn-generate-outline">
