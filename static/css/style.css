@@ -44,6 +44,15 @@ body {
   font-size: 0.9rem;
 }
 
+/* Chapter action buttons */
+#chapter-table .btn-group {
+  white-space: nowrap;
+}
+
+#chapter-table td:last-child {
+  white-space: nowrap;
+}
+
 /* Chapter progress list items */
 #chapter-progress-list .list-group-item {
   font-size: 0.9rem;

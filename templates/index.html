@@ -213,6 +213,7 @@
                     <th style="width:60px">#</th>
                     <th style="width:220px">Title</th>
                     <th>Summary</th>
+                    <th style="width:180px">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="chapter-tbody">
@@ -222,7 +223,12 @@
             </div>
 
             <!-- Characters -->
-            <h5 class="fw-semibold mb-2">Main Characters</h5>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="fw-semibold mb-0">Main Characters</h5>
+              <button class="btn btn-sm btn-outline-primary" id="btn-add-character">
+                <i class="bi bi-plus-circle me-1"></i>Add Character
+              </button>
+            </div>
             <div class="table-responsive mb-4">
               <table class="table table-bordered table-hover align-top" id="characters-table">
                 <thead class="table-dark">
@@ -232,6 +238,7 @@
                     <th>Role</th>
                     <th>Background</th>
                     <th>Arc</th>
+                    <th style="width:80px">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="characters-tbody">

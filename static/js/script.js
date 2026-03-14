@@ -163,33 +163,172 @@ $(function () {
     // Chapters table
     var $tbody = $("#chapter-tbody").empty();
     $.each(data.chapters || [], function (_, ch) {
-      var row =
-        "<tr>" +
-        "<td>" + escapeHtml(ch.number || "") + "</td>" +
-        "<td><div class='editable-cell' contenteditable='true' data-field='title'>" +
-        escapeHtml(ch.title || "") +
-        "</div></td>" +
-        "<td><div class='editable-cell' contenteditable='true' data-field='summary'>" +
-        escapeHtml(ch.summary || "") +
-        "</div></td>" +
-        "</tr>";
-      $tbody.append(row);
+      addChapterRow(ch.number || "", ch.title || "", ch.summary || "");
     });
 
     // Characters table
     var $ctbody = $("#characters-tbody").empty();
     $.each(data.characters || [], function (_, c) {
-      var row =
-        "<tr>" +
-        "<td><div class='editable-cell' contenteditable='true' data-field='name'>" + escapeHtml(c.name || "") + "</div></td>" +
-        "<td><div class='editable-cell' contenteditable='true' data-field='age'>" + escapeHtml(c.age || "") + "</div></td>" +
-        "<td><div class='editable-cell' contenteditable='true' data-field='role'>" + escapeHtml(c.role || "") + "</div></td>" +
-        "<td><div class='editable-cell' contenteditable='true' data-field='background'>" + escapeHtml(c.background || "") + "</div></td>" +
-        "<td><div class='editable-cell' contenteditable='true' data-field='arc'>" + escapeHtml(c.arc || "") + "</div></td>" +
-        "</tr>";
-      $ctbody.append(row);
+      addCharacterRow(c.name || "", c.age || "", c.role || "", c.background || "", c.arc || "");
     });
   }
+
+  // -------------------------------------------------------------------
+  // Add/Delete Character Functions
+  // -------------------------------------------------------------------
+  function addCharacterRow(name, age, role, background, arc) {
+    var row =
+      "<tr>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='name'>" + escapeHtml(name) + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='age'>" + escapeHtml(age) + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='role'>" + escapeHtml(role) + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='background'>" + escapeHtml(background) + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='arc'>" + escapeHtml(arc) + "</div></td>" +
+      "<td class='text-center'>" +
+      "<button class='btn btn-sm btn-outline-danger btn-delete-character' title='Delete Character'><i class='bi bi-trash'></i></button>" +
+      "</td>" +
+      "</tr>";
+    $("#characters-tbody").append(row);
+  }
+
+  // Add Character button
+  $("#btn-add-character").on("click", function () {
+    addCharacterRow("New Character", "", "Protagonist/Antagonist/Supporting", "Enter background...", "Enter character arc...");
+  });
+
+  // Delete Character button (delegated event)
+  $("#characters-tbody").on("click", ".btn-delete-character", function () {
+    var $row = $(this).closest("tr");
+    var characterName = $row.find("[data-field='name']").text().trim();
+    
+    if ($("#characters-tbody tr").length <= 1) {
+      showAlert("Cannot delete the last character. At least one character is required.", "warning");
+      return;
+    }
+    
+    if (confirm("Delete character '" + characterName + "'?")) {
+      $row.remove();
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Add/Delete Chapter Functions
+  // -------------------------------------------------------------------
+  function addChapterRow(number, title, summary) {
+    var row =
+      "<tr>" +
+      "<td class='chapter-number'>" + escapeHtml(number) + "</td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='title'>" +
+      escapeHtml(title) +
+      "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='summary'>" +
+      escapeHtml(summary) +
+      "</div></td>" +
+      "<td class='text-center'>" +
+      "<div class='btn-group btn-group-sm me-1' role='group'>" +
+      "<button class='btn btn-outline-secondary btn-move-up' title='Move Up'><i class='bi bi-arrow-up'></i></button>" +
+      "<button class='btn btn-outline-secondary btn-move-down' title='Move Down'><i class='bi bi-arrow-down'></i></button>" +
+      "</div>" +
+      "<div class='btn-group btn-group-sm me-1' role='group'>" +
+      "<button class='btn btn-outline-success btn-add-before' title='Add Before'><i class='bi bi-plus-circle'></i></button>" +
+      "<button class='btn btn-outline-success btn-add-after' title='Add After'><i class='bi bi-plus-circle'></i></button>" +
+      "</div>" +
+      "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter'><i class='bi bi-trash'></i></button>" +
+      "</td>" +
+      "</tr>";
+    $("#chapter-tbody").append(row);
+    renumberChapters();
+  }
+
+  function renumberChapters() {
+    $("#chapter-tbody tr").each(function (idx) {
+      $(this).find(".chapter-number").text(idx + 1);
+    });
+  }
+
+  // Move chapter up
+  $("#chapter-tbody").on("click", ".btn-move-up", function () {
+    var $row = $(this).closest("tr");
+    var $prev = $row.prev();
+    if ($prev.length) {
+      $row.insertBefore($prev);
+      renumberChapters();
+    }
+  });
+
+  // Move chapter down
+  $("#chapter-tbody").on("click", ".btn-move-down", function () {
+    var $row = $(this).closest("tr");
+    var $next = $row.next();
+    if ($next.length) {
+      $row.insertAfter($next);
+      renumberChapters();
+    }
+  });
+
+  // Add chapter before
+  $("#chapter-tbody").on("click", ".btn-add-before", function () {
+    var $row = $(this).closest("tr");
+    var newRow =
+      "<tr>" +
+      "<td class='chapter-number'></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='title'>New Chapter</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='summary'>Enter chapter summary...</div></td>" +
+      "<td class='text-center'>" +
+      "<div class='btn-group btn-group-sm me-1' role='group'>" +
+      "<button class='btn btn-outline-secondary btn-move-up' title='Move Up'><i class='bi bi-arrow-up'></i></button>" +
+      "<button class='btn btn-outline-secondary btn-move-down' title='Move Down'><i class='bi bi-arrow-down'></i></button>" +
+      "</div>" +
+      "<div class='btn-group btn-group-sm me-1' role='group'>" +
+      "<button class='btn btn-outline-success btn-add-before' title='Add Before'><i class='bi bi-plus-circle'></i></button>" +
+      "<button class='btn btn-outline-success btn-add-after' title='Add After'><i class='bi bi-plus-circle'></i></button>" +
+      "</div>" +
+      "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter'><i class='bi bi-trash'></i></button>" +
+      "</td>" +
+      "</tr>";
+    $row.before(newRow);
+    renumberChapters();
+  });
+
+  // Add chapter after
+  $("#chapter-tbody").on("click", ".btn-add-after", function () {
+    var $row = $(this).closest("tr");
+    var newRow =
+      "<tr>" +
+      "<td class='chapter-number'></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='title'>New Chapter</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='summary'>Enter chapter summary...</div></td>" +
+      "<td class='text-center'>" +
+      "<div class='btn-group btn-group-sm me-1' role='group'>" +
+      "<button class='btn btn-outline-secondary btn-move-up' title='Move Up'><i class='bi bi-arrow-up'></i></button>" +
+      "<button class='btn btn-outline-secondary btn-move-down' title='Move Down'><i class='bi bi-arrow-down'></i></button>" +
+      "</div>" +
+      "<div class='btn-group btn-group-sm me-1' role='group'>" +
+      "<button class='btn btn-outline-success btn-add-before' title='Add Before'><i class='bi bi-plus-circle'></i></button>" +
+      "<button class='btn btn-outline-success btn-add-after' title='Add After'><i class='bi bi-plus-circle'></i></button>" +
+      "</div>" +
+      "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter'><i class='bi bi-trash'></i></button>" +
+      "</td>" +
+      "</tr>";
+    $row.after(newRow);
+    renumberChapters();
+  });
+
+  // Delete Chapter button (delegated event)
+  $("#chapter-tbody").on("click", ".btn-delete-chapter", function () {
+    var $row = $(this).closest("tr");
+    var chapterNum = $row.find(".chapter-number").text();
+    
+    if ($("#chapter-tbody tr").length <= 1) {
+      showAlert("Cannot delete the last chapter. At least one chapter is required.", "warning");
+      return;
+    }
+    
+    if (confirm("Delete Chapter " + chapterNum + "?")) {
+      $row.remove();
+      renumberChapters();
+    }
+  });
 
   // -------------------------------------------------------------------
   // Back button on outline step
