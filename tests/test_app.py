@@ -192,6 +192,117 @@ class TestRoutes:
         )
         assert r.status_code == 400
 
+    def test_export_editors_notes_no_token(self, client):
+        r = client.post(
+            "/export_editors_notes",
+            data=json.dumps({"token": "fake-token"}),
+            content_type="application/json",
+        )
+        assert r.status_code == 400
+
+    def test_export_editors_notes_success_filename(self, client):
+        from app import _progress_lock, _progress_store
+
+        token = "test-token-editors-notes"
+        with _progress_lock:
+            _progress_store[token] = {
+                "status": "done",
+                "consistency": {
+                    "overall_assessment": "Strong arc with minor pacing issues.",
+                    "issues": ["Chapter 3 timeline inconsistency"],
+                },
+            }
+
+        with client.session_transaction() as sess:
+            sess["title"] = "My Great Novel"
+
+        r = client.post(
+            "/export_editors_notes",
+            data=json.dumps({"token": token}),
+            content_type="application/json",
+        )
+
+        assert r.status_code == 200
+        payload = r.get_json()
+        assert "download_url" in payload
+        assert payload["download_url"].endswith("My_Great_Novel-Editors_Notes.md")
+
+    def test_revise_chapter_requires_instructions(self, client):
+        from app import _progress_lock, _progress_store
+
+        token = "test-token-revise-empty"
+        with _progress_lock:
+            _progress_store[token] = {
+                "status": "done",
+                "chapters_done": [{"number": 1, "title": "Ch1", "content": "Text", "summary": "S"}],
+                "consistency": {"issues": [], "overall_assessment": ""},
+            }
+
+        r = client.post(
+            "/revise_chapter",
+            data=json.dumps({"token": token, "chapter_number": 1, "instructions": ""}),
+            content_type="application/json",
+        )
+        assert r.status_code == 400
+
+    def test_revise_chapter_success_reruns_agents(self, client, monkeypatch):
+        from app import _progress_lock, _progress_store
+
+        token = "test-token-revise-success"
+        with _progress_lock:
+            _progress_store[token] = {
+                "status": "done",
+                "current": 2,
+                "total": 2,
+                "step": "Complete",
+                "chapters_done": [
+                    {"number": 1, "title": "Ch1", "content": "Old chapter 1", "summary": "Old summary 1"},
+                    {"number": 2, "title": "Ch2", "content": "Old chapter 2", "summary": "Old summary 2"},
+                ],
+                "consistency": {"issues": [], "overall_assessment": ""},
+            }
+
+        with client.session_transaction() as sess:
+            sess["title"] = "My Novel"
+            sess["genre"] = "Fantasy"
+            sess["chapters"] = 2
+            sess["chapter_list"] = [
+                {"number": 1, "title": "Ch1", "summary": "Outline 1"},
+                {"number": 2, "title": "Ch2", "summary": "Outline 2"},
+            ]
+            sess["character_list"] = []
+            sess["special_instructions"] = ""
+
+        def fake_call_llm(messages, json_mode=False):
+            user_content = messages[-1]["content"]
+            if "Write a 100-200 word summary" in user_content:
+                return "Updated summary"
+            if "Required structure" in user_content and '"issues"' in user_content:
+                return '{"issues": ["Issue after revision"], "overall_assessment": "Revised consistency"}'
+            return "Updated chapter content"
+
+        monkeypatch.setattr("app.call_llm", fake_call_llm)
+
+        r = client.post(
+            "/revise_chapter",
+            data=json.dumps(
+                {
+                    "token": token,
+                    "chapter_number": 1,
+                    "instructions": "Increase tension in final scene.",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert r.status_code == 200
+        payload = r.get_json()
+        assert payload["status"] == "done"
+        assert payload["step"] == "Chapter 1: revised"
+        assert payload["chapters_done"][0]["content"] == "Updated chapter content"
+        assert payload["chapters_done"][0]["summary"] == "Updated summary"
+        assert payload["consistency"]["overall_assessment"] == "Revised consistency"
+
     def test_download_path_traversal(self, client):
         """Directory traversal attempt should 404 (file won't exist)."""
         r = client.get("/download/../../etc/passwd")

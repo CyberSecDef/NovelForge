@@ -356,9 +356,39 @@
               <ul id="consistency-issues" class="mb-0 ps-3"></ul>
             </div>
 
+            <div class="card bg-light border-0 text-start mb-3">
+              <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-pencil-square me-2"></i>Revise Individual Chapter</h6>
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <label for="revise-chapter-select" class="form-label mb-1">Chapter</label>
+                    <select id="revise-chapter-select" class="form-select"></select>
+                  </div>
+                  <div class="col-md-8">
+                    <label for="revise-instructions" class="form-label mb-1">Revision Instructions</label>
+                    <textarea
+                      id="revise-instructions"
+                      class="form-control"
+                      rows="3"
+                      maxlength="4000"
+                      placeholder="Example: Increase tension in the final scene and foreshadow chapter 9's betrayal."
+                    ></textarea>
+                  </div>
+                </div>
+                <button class="btn btn-primary mt-3" id="btn-revise-chapter">
+                  <span class="spinner-border spinner-border-sm d-none me-2" id="revise-chapter-spinner"></span>
+                  <i class="bi bi-arrow-repeat me-2"></i>Apply Instructions to Chapter
+                </button>
+              </div>
+            </div>
+
             <button class="btn btn-success btn-lg me-2" id="btn-export">
               <span class="spinner-border spinner-border-sm d-none me-2" id="export-spinner"></span>
               <i class="bi bi-download me-2"></i>Download as Markdown
+            </button>
+            <button class="btn btn-outline-success btn-lg me-2" id="btn-export-editors-notes">
+              <span class="spinner-border spinner-border-sm d-none me-2" id="export-editors-notes-spinner"></span>
+              <i class="bi bi-clipboard-check me-2"></i>Download Editor's Notes
             </button>
             <button class="btn btn-outline-secondary btn-lg" id="btn-start-over">
               <i class="bi bi-arrow-counterclockwise me-2"></i>Start Over

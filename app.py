@@ -813,6 +813,39 @@ def build_chapter_summary_prompt(chapter_text: str, chapter_num: int) -> list[di
     ]
 
 
+def build_chapter_revision_prompt(
+    chapter_text: str,
+    chapter_num: int,
+    title: str,
+    chapter_outline_summary: str,
+    revision_instructions: str,
+) -> list[dict]:
+    """
+    Revision prompt for incorporating editor instructions into an already-generated
+    chapter before running the full agent pipeline again.
+    """
+    return [
+        _build_system_prompt(
+            "You are a senior developmental editor revising an existing chapter. "
+            "Apply requested changes precisely while preserving coherence, voice, "
+            "and continuity with the larger novel. Return the full revised chapter text only."
+        ),
+        {
+            "role": "user",
+            "content": (
+                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
+                f"Chapter outline summary (must remain aligned):\n{chapter_outline_summary}\n\n"
+                f"Editor instructions to weave into this chapter:\n{revision_instructions}\n\n"
+                "Revise the chapter to incorporate these instructions naturally into plot, "
+                "character behavior, scene flow, and prose. Keep what already works; only "
+                "change what is necessary to satisfy the instructions.\n\n"
+                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
+
+
 def build_consistency_pass_prompt(
     title: str, all_summaries: list[str], special_instructions: str
 ) -> list[dict]:
@@ -1091,6 +1124,72 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
     _run_chapter_generation_internal(token, snap, [], [], 0)
 
 
+def _run_all_chapter_agents(
+    text: str,
+    chapter_num: int,
+    title: str,
+    genre: str,
+    total_chapters: int,
+    chapter_outline_summary: str,
+    characters_text: str,
+    previous_summaries: str,
+    step_callback=None,
+) -> tuple[str, str]:
+    """
+    Run all chapter refinement agents (post-draft) and return:
+    (final_chapter_text, continuity_summary)
+    """
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: refining dialogue")
+    text = call_llm(build_dialog_agent_prompt(text, chapter_num, title))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: structuring scenes")
+    text = call_llm(build_scene_agent_prompt(text, chapter_num, title))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: verifying continuity")
+    text = call_llm(build_context_analyzer_prompt(text, previous_summaries, chapter_num, title))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: editing")
+    text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: checking structure")
+    text = call_llm(
+        build_structure_agent_prompt(
+            text, chapter_num, total_chapters, chapter_outline_summary
+        )
+    )
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: deepening characters")
+    text = call_llm(build_character_agent_prompt(text, characters_text, chapter_num, title))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: synthesizing")
+    text = call_llm(build_synthesizer_prompt(text, chapter_num, title, genre))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: polishing")
+    text = call_llm(build_polish_agent_prompt(text, chapter_num, title, genre))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: anti-LLM pass")
+    text = call_llm(build_anti_llm_agent_prompt(text, chapter_num, title))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: quality control")
+    text = call_llm(build_quality_controller_prompt(text, chapter_num, title))
+
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: summarising")
+    summary = call_llm(build_chapter_summary_prompt(text, chapter_num))
+
+    return text, summary
+
+
 def _run_chapter_generation_internal(
     token: str, 
     snap: dict, 
@@ -1156,53 +1255,17 @@ def _run_chapter_generation_internal(
                 )
             )
 
-            # 2. Dialog agent
-            _set_step(f"Chapter {chapter_num}: refining dialogue")
-            text = call_llm(build_dialog_agent_prompt(text, chapter_num, title))
-
-            # 3. Scene agent
-            _set_step(f"Chapter {chapter_num}: structuring scenes")
-            text = call_llm(build_scene_agent_prompt(text, chapter_num, title))
-
-            # 4. Context analyzer
-            _set_step(f"Chapter {chapter_num}: verifying continuity")
-            text = call_llm(build_context_analyzer_prompt(text, previous_summaries, chapter_num, title))
-
-            # 5. Editing agent
-            _set_step(f"Chapter {chapter_num}: editing")
-            text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title))
-
-            # 6. Structure agent
-            _set_step(f"Chapter {chapter_num}: checking structure")
-            text = call_llm(
-                build_structure_agent_prompt(
-                    text, chapter_num, total_chapters, chapter_outline_summary
-                )
+            text, summary = _run_all_chapter_agents(
+                text=text,
+                chapter_num=chapter_num,
+                title=title,
+                genre=genre,
+                total_chapters=total_chapters,
+                chapter_outline_summary=chapter_outline_summary,
+                characters_text=characters_text,
+                previous_summaries=previous_summaries,
+                step_callback=_set_step,
             )
-
-            # 7. Character agent
-            _set_step(f"Chapter {chapter_num}: deepening characters")
-            text = call_llm(build_character_agent_prompt(text, characters_text, chapter_num, title))
-
-            # 8. Synthesizer
-            _set_step(f"Chapter {chapter_num}: synthesizing")
-            text = call_llm(build_synthesizer_prompt(text, chapter_num, title, genre))
-
-            # 9. Polish agent
-            _set_step(f"Chapter {chapter_num}: polishing")
-            text = call_llm(build_polish_agent_prompt(text, chapter_num, title, genre))
-
-            # 10. Anti-LLM agent
-            _set_step(f"Chapter {chapter_num}: anti-LLM pass")
-            text = call_llm(build_anti_llm_agent_prompt(text, chapter_num, title))
-
-            # 11. Quality controller
-            _set_step(f"Chapter {chapter_num}: quality control")
-            text = call_llm(build_quality_controller_prompt(text, chapter_num, title))
-
-            # 12. Summary for continuity
-            _set_step(f"Chapter {chapter_num}: summarising")
-            summary = call_llm(build_chapter_summary_prompt(text, chapter_num))
             summaries.append(summary)
 
             chapters_done.append({
@@ -1244,6 +1307,124 @@ def _run_chapter_generation_internal(
         
         # Auto-save error state
         _set_step(f"Error: {str(exc)}")
+
+
+@app.route("/revise_chapter", methods=["POST"])
+def revise_chapter():
+    """
+    Apply custom editor instructions to one generated chapter, then re-run all
+    chapter agents on that updated material.
+
+    Expects JSON: {
+      "token": "<progress_token>",
+      "chapter_number": <int>,
+      "instructions": "<revision instructions>"
+    }
+    """
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+    instructions = str(data.get("instructions", "")).strip()
+
+    try:
+        chapter_number = int(data.get("chapter_number", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Chapter number must be a valid number."}), 400
+
+    if not token:
+        return jsonify({"error": "Missing progress token."}), 400
+    if chapter_number < 1:
+        return jsonify({"error": "Chapter number must be at least 1."}), 400
+    if not instructions:
+        return jsonify({"error": "Revision instructions are required."}), 400
+
+    with _progress_lock:
+        progress_data = _progress_store.get(token)
+
+    if not progress_data or progress_data.get("status") != "done":
+        return jsonify({"error": "Novel generation not complete."}), 400
+
+    chapters_done = list(progress_data.get("chapters_done", []))
+    if not chapters_done:
+        return jsonify({"error": "No generated chapters found."}), 400
+
+    target_idx = next(
+        (i for i, chapter in enumerate(chapters_done) if int(chapter.get("number", 0)) == chapter_number),
+        None,
+    )
+    if target_idx is None:
+        return jsonify({"error": "Selected chapter was not found."}), 404
+
+    title = session.get("title", "Novel")
+    genre = session.get("genre", "")
+    total_chapters = int(session.get("chapters", len(chapters_done) or 1))
+    chapter_list = session.get("chapter_list", [])
+    character_list = session.get("character_list", [])
+    special_instructions = session.get("special_instructions", "")
+
+    chapter_outline_summary = ""
+    for chapter_outline in chapter_list:
+        try:
+            if int(chapter_outline.get("number", 0)) == chapter_number:
+                chapter_outline_summary = chapter_outline.get("summary", "")
+                break
+        except (TypeError, ValueError):
+            continue
+
+    target_chapter = chapters_done[target_idx]
+    previous_summaries = "\n\n".join(
+        f"Chapter {c.get('number', i+1)}: {c.get('summary', '')}"
+        for i, c in enumerate(chapters_done[:target_idx])
+    )
+    characters_text = _format_characters(character_list)
+
+    try:
+        revised_text = call_llm(
+            build_chapter_revision_prompt(
+                chapter_text=target_chapter.get("content", ""),
+                chapter_num=chapter_number,
+                title=title,
+                chapter_outline_summary=chapter_outline_summary,
+                revision_instructions=instructions,
+            )
+        )
+
+        revised_text, revised_summary = _run_all_chapter_agents(
+            text=revised_text,
+            chapter_num=chapter_number,
+            title=title,
+            genre=genre,
+            total_chapters=total_chapters,
+            chapter_outline_summary=chapter_outline_summary,
+            characters_text=characters_text,
+            previous_summaries=previous_summaries,
+            step_callback=None,
+        )
+
+        chapters_done[target_idx]["content"] = revised_text
+        chapters_done[target_idx]["summary"] = revised_summary
+
+        all_summaries = [str(ch.get("summary", "")) for ch in chapters_done]
+        consistency_raw = call_llm(
+            build_consistency_pass_prompt(title, all_summaries, special_instructions),
+            json_mode=True,
+        )
+        try:
+            consistency = parse_llm_json(consistency_raw)
+        except json.JSONDecodeError:
+            consistency = {"issues": [], "overall_assessment": ""}
+
+        with _progress_lock:
+            _progress_store[token]["status"] = "done"
+            _progress_store[token]["step"] = f"Chapter {chapter_number}: revised"
+            _progress_store[token]["chapters_done"] = chapters_done
+            _progress_store[token]["consistency"] = consistency
+            response_payload = dict(_progress_store[token])
+
+        return jsonify(response_payload)
+
+    except RuntimeError as exc:
+        logger.error("Chapter revision failed for token %s: %s", token, exc)
+        return jsonify({"error": str(exc)}), 502
 
 
 def _format_characters(character_list: list[dict]) -> str:
@@ -1437,6 +1618,52 @@ def export_novel():
     # Safe filename
     safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:80]
     filename = f"{safe_title}.md"
+    export_path = Path(config.EXPORT_DIR) / filename
+
+    export_path.write_text(markdown_content, encoding="utf-8")
+
+    return jsonify({"download_url": f"/download/{filename}"})
+
+
+@app.route("/export_editors_notes", methods=["POST"])
+def export_editors_notes():
+    """
+    Export editor's notes into a Markdown file and return a download URL.
+    Expects JSON: { "token": "<progress_token>" }
+    """
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+
+    with _progress_lock:
+        progress_data = _progress_store.get(token)
+
+    if not progress_data or progress_data.get("status") != "done":
+        return jsonify({"error": "Novel generation not complete."}), 400
+
+    title = session.get("title", "Novel")
+    consistency = progress_data.get("consistency", {})
+    overall_assessment = (consistency.get("overall_assessment") or "").strip()
+    issues = consistency.get("issues") or []
+
+    if not overall_assessment and not issues:
+        return jsonify({"error": "No editor's notes are available for this novel."}), 400
+
+    lines = [f"# {title} - Editor's Notes\n"]
+
+    if overall_assessment:
+        lines.append("## Overall Assessment\n")
+        lines.append(f"{overall_assessment}\n")
+
+    if issues:
+        lines.append("## Issues\n")
+        for issue in issues:
+            lines.append(f"- {issue}")
+
+    markdown_content = "\n".join(lines)
+
+    safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:80]
+    safe_title = "_".join(safe_title.split()) or "Novel"
+    filename = f"{safe_title}-Editors_Notes.md"
     export_path = Path(config.EXPORT_DIR) / filename
 
     export_path.write_text(markdown_content, encoding="utf-8")

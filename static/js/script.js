@@ -65,6 +65,7 @@ $(function () {
   var _pollInterval = null;
   var _progressToken = null;
   var _totalChapters = 0;
+  var _doneData = null;
 
   // -------------------------------------------------------------------
   // Session Resume & New Session
@@ -577,6 +578,8 @@ $(function () {
   // Step 4 – Done
   // -------------------------------------------------------------------
   function showDoneStep(data) {
+    _doneData = data || {};
+
     var title = $("#outline-title").val() || "Your Novel";
     var chaptersCount = (data.chapters_done || []).length;
     var wordEst = chaptersCount * Math.round(parseInt($("#word_count").val(), 10) / (parseInt($("#chapters").val(), 10) || 20));
@@ -595,7 +598,23 @@ $(function () {
       $.each(consistency.issues || [], function (_, issue) {
         $ul.append("<li>" + escapeHtml(issue) + "</li>");
       });
+    } else {
+      $("#consistency-alert").addClass("d-none");
+      $("#consistency-assessment").text("");
+      $("#consistency-issues").empty();
     }
+
+    // Populate chapter revision selector
+    var $reviseSelect = $("#revise-chapter-select").empty();
+    $.each(data.chapters_done || [], function (_, ch) {
+      $reviseSelect.append(
+        $("<option>")
+          .val(ch.number)
+          .text("Chapter " + ch.number + ": " + (ch.title || "Untitled"))
+      );
+    });
+    var hasChapters = (data.chapters_done || []).length > 0;
+    $("#btn-revise-chapter").prop("disabled", !hasChapters);
 
     // Build preview accordion
     var $acc = $("#chapters-preview-accordion").empty();
@@ -650,6 +669,91 @@ $(function () {
       complete: function () {
         $("#export-spinner").addClass("d-none");
         $("#btn-export").prop("disabled", false);
+      },
+    });
+  });
+
+  $("#btn-export-editors-notes").on("click", function () {
+    clearAlerts();
+    $("#export-editors-notes-spinner").removeClass("d-none");
+    $("#btn-export-editors-notes").prop("disabled", true);
+
+    $.ajax({
+      url: "/export_editors_notes",
+      method: "POST",
+      contentType: "application/json",
+      data: JSON.stringify({ token: _progressToken }),
+      success: function (resp) {
+        if (resp.download_url) {
+          var $a = $("<a>")
+            .attr("href", resp.download_url)
+            .attr("download", "")
+            .appendTo("body");
+          $a[0].click();
+          $a.remove();
+        }
+      },
+      error: function (xhr) {
+        var msg =
+          (xhr.responseJSON && xhr.responseJSON.error) ||
+          "Editor's notes export failed.";
+        showAlert(msg);
+      },
+      complete: function () {
+        $("#export-editors-notes-spinner").addClass("d-none");
+        $("#btn-export-editors-notes").prop("disabled", false);
+      },
+    });
+  });
+
+  $("#btn-revise-chapter").on("click", function () {
+    clearAlerts();
+
+    if (!_progressToken) {
+      showAlert("No active generation token was found. Please regenerate chapters.", "warning");
+      return;
+    }
+
+    var chapterNumber = parseInt($("#revise-chapter-select").val(), 10);
+    var instructions = $("#revise-instructions").val().trim();
+
+    if (isNaN(chapterNumber) || chapterNumber < 1) {
+      showAlert("Please select a chapter to revise.", "warning");
+      return;
+    }
+
+    if (!instructions) {
+      showAlert("Please enter revision instructions before applying.", "warning");
+      return;
+    }
+
+    $("#revise-chapter-spinner").removeClass("d-none");
+    $("#btn-revise-chapter").prop("disabled", true);
+
+    $.ajax({
+      url: "/revise_chapter",
+      method: "POST",
+      contentType: "application/json",
+      data: JSON.stringify({
+        token: _progressToken,
+        chapter_number: chapterNumber,
+        instructions: instructions,
+      }),
+      success: function (resp) {
+        _doneData = resp;
+        showDoneStep(_doneData);
+        $("#revise-instructions").val("");
+        showAlert("Chapter revision complete. All chapter agents were rerun.", "success");
+      },
+      error: function (xhr) {
+        var msg =
+          (xhr.responseJSON && xhr.responseJSON.error) ||
+          "Chapter revision failed.";
+        showAlert(msg);
+      },
+      complete: function () {
+        $("#revise-chapter-spinner").addClass("d-none");
+        $("#btn-revise-chapter").prop("disabled", false);
       },
     });
   });
@@ -781,8 +885,13 @@ $(function () {
 
     // Clear generated content
     $("#consistency-alert").addClass("d-none");
+    $("#consistency-assessment").text("");
+    $("#consistency-issues").empty();
     $("#chapters-preview-accordion").empty();
     $("#chapter-progress-list").empty();
+    $("#revise-instructions").val("");
+    $("#revise-chapter-select").empty();
+    _doneData = null;
 
     showStep("#step-input");
   });
