@@ -165,7 +165,7 @@ $(function () {
   $("#premise").on("input", function () {
     var len = $(this).val().length;
     $("#premise-count").text(len);
-    if (len > 1200) {
+    if (len > 2000) {
       $(this).addClass("is-invalid");
     } else {
       $(this).removeClass("is-invalid");
@@ -183,7 +183,7 @@ $(function () {
     var valid = true;
 
     var premise = $("#premise").val().trim();
-    if (!premise || premise.length > 1200) {
+    if (!premise || premise.length > 2000) {
       $("#premise").addClass("is-invalid");
       valid = false;
     } else {
