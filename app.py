@@ -44,6 +44,8 @@ app = Flask(__name__)
 
 # Configure secret key FIRST - required for sessions
 app.config["SECRET_KEY"] = config.SECRET_KEY
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+
 
 # Ensure directories exist BEFORE initializing sessions
 Path(config.SESSION_FILE_DIR).mkdir(parents=True, exist_ok=True)
@@ -6065,7 +6067,7 @@ def get_llm_log():
             json_objects.append(current_obj)
         
         # Parse each JSON object
-        for obj_str in json_objects:
+        for obj_str in json_objects[-10:]:
             try:
                 entry = json.loads(obj_str)
                 entries.append(entry)
@@ -6088,4 +6090,4 @@ if __name__ == "__main__":
     # In production, use a WSGI server (e.g. gunicorn) behind a reverse proxy.
     host = os.environ.get("FLASK_HOST", "0.0.0.0")
     port = int(os.environ.get("FLASK_PORT", "5000"))
-    app.run(debug=False, host=host, port=port)
+    app.run(debug=True, host=host, port=port)

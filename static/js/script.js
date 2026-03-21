@@ -24,12 +24,24 @@ $(function () {
   // Step-panel helpers
   // -------------------------------------------------------------------
   var STEPS = ["#step-input", "#step-outline", "#step-progress", "#step-done"];
+  var STEP_TAB_BUTTONS = {
+    "#step-input": "#step1-novel-setup-btn",
+    "#step-outline": "#step2-chapter-outline-btn",
+    "#step-progress": "#step3-chapter-writing-btn",
+    "#step-done": "#step4-complete-export-btn",
+  };
 
   function showStep(id) {
+    var tabButtonSelector = STEP_TAB_BUTTONS[id];
+    var tabButton = tabButtonSelector ? document.querySelector(tabButtonSelector) : null;
+    if (tabButton) {
+      bootstrap.Tab.getOrCreateInstance(tabButton).show();
+    }
+
+    // Legacy cleanup: ensure old section-based d-none classes do not hide content.
     $.each(STEPS, function (_, sel) {
-      $(sel).addClass("d-none");
+      $(sel).removeClass("d-none");
     });
-    $(id).removeClass("d-none");
     $("html, body").animate({ scrollTop: 0 }, 200);
   }
 
@@ -57,6 +69,82 @@ $(function () {
   // XSS-safe string escaping
   function escapeHtml(str) {
     return $("<div>").text(String(str)).html();
+  }
+
+  var DEFAULT_STICKY_STATUS = "AI-Powered Novel Generator";
+  var _activeLLMRequests = 0;
+  var _hasInitializedLogSnapshot = false;
+
+  function setStickyStatus(text, options) {
+    options = options || {};
+    if (_activeLLMRequests < 1 && !options.force) {
+      return;
+    }
+    $("#sticky-status-text").text(text || DEFAULT_STICKY_STATUS);
+  }
+
+  function inferStatusFromRequestEntry(entry) {
+    var messages = (entry && entry.payload && entry.payload.messages) || [];
+    var combined = messages
+      .map(function (msg) {
+        return (msg && msg.content) ? String(msg.content) : "";
+      })
+      .join("\n")
+      .toLowerCase();
+
+      console.log(combined)
+    if (!combined) return "Prompting LLM";
+
+    if (combined.indexOf("title") !== -1 && combined.indexOf("novel") !== -1) {
+      return "Generating Novel Title";
+    }
+    if (combined.indexOf("chapter outline") !== -1 || combined.indexOf("chapter-by-chapter") !== -1) {
+      return "Generating Chapter Outline";
+    }
+    if (combined.indexOf("character agent") !== -1 || combined.indexOf("character arc") !== -1) {
+      return "Generating Character Arcs";
+    }
+    if (combined.indexOf("draft agent") !== -1 || combined.indexOf("write the chapter") !== -1) {
+      return "Drafting Chapter Content";
+    }
+    if (combined.indexOf("dialog agent") !== -1 || combined.indexOf("dialogue") !== -1) {
+      return "Refining Chapter Dialog";
+    }
+    if (combined.indexOf("scene agent") !== -1 || combined.indexOf("scene") !== -1) {
+      return "Improving Chapter Scenes";
+    }
+    if (combined.indexOf("context analyzer") !== -1 || combined.indexOf("world-building") !== -1) {
+      return "Checking Story Continuity";
+    }
+    if (combined.indexOf("editing agent") !== -1) {
+      return "Editing Chapter Draft";
+    }
+    if (combined.indexOf("structure agent") !== -1 || combined.indexOf("story architecture") !== -1) {
+      return "Validating Story Structure";
+    }
+    if (combined.indexOf("synthesizer") !== -1) {
+      return "Synthesizing Chapter Revisions";
+    }
+    if (combined.indexOf("polish agent") !== -1 || combined.indexOf("polish") !== -1) {
+      return "Polishing Chapter Prose";
+    }
+    if (combined.indexOf("anti-llm") !== -1 || combined.indexOf("forbidden words") !== -1) {
+      return "Removing Robotic Language";
+    }
+    if (combined.indexOf("quality controller") !== -1 || combined.indexOf("quality control") !== -1) {
+      return "Running Quality Control";
+    }
+    if (combined.indexOf("summary") !== -1 && combined.indexOf("chapter") !== -1) {
+      return "Summarizing Chapter";
+    }
+    if (combined.indexOf("consistency") !== -1) {
+      return "Checking Novel Consistency";
+    }
+    if (combined.indexOf("revise") !== -1 || combined.indexOf("revision") !== -1) {
+      return "Applying Chapter Revisions";
+    }
+
+    return "Prompting LLM";
   }
 
   // -------------------------------------------------------------------
@@ -157,7 +245,7 @@ $(function () {
   });
   
   // Check for saved state on page load
-  checkSavedState();
+  // checkSavedState();
 
   // -------------------------------------------------------------------
   // Premise character counter
@@ -259,6 +347,7 @@ $(function () {
   // -------------------------------------------------------------------
   function renderOutline(data) {
     $("#outline-title").val(data.title || "");
+    
 
     // Chapters table
     var $tbody = $("#chapter-tbody").empty();
@@ -475,6 +564,9 @@ $(function () {
 
     $("#approve-spinner").removeClass("d-none");
     $("#btn-approve-outline").prop("disabled", true);
+
+    // Show the step 3 - chapter writing tab
+    showStep("#step3-chapter-writing-tab");
 
     $.ajax({
       url: "/approve_outline",
@@ -761,8 +853,16 @@ $(function () {
   // -------------------------------------------------------------------
   // LLM Log Display
   // -------------------------------------------------------------------
-  var _lastLogLength = 0;
+  var _seenLogSignatures = {};
   var _logPollInterval = null;
+
+  function entrySignature(entry) {
+    if (!entry) return "";
+    var payloadMessages = (entry.payload && entry.payload.messages) || [];
+    var messageCount = payloadMessages.length;
+    var firstMessage = messageCount > 0 && payloadMessages[0].content ? String(payloadMessages[0].content).slice(0, 60) : "";
+    return [entry.timestamp || "", entry.type || "", messageCount, firstMessage].join("|");
+  }
 
   function truncateText(text, maxLength) {
     if (text.length <= maxLength) return text;
@@ -834,20 +934,53 @@ $(function () {
       url: "/llm_log",
       method: "GET",
       success: function(data) {
-        if (data.entries && data.entries.length > _lastLogLength) {
-          // Clear placeholder if first time
-          if (_lastLogLength === 0) {
-            $("#llm-chat-messages").empty();
-          }
-          
-          // Add new entries
-          for (var i = _lastLogLength; i < data.entries.length; i++) {
-            var formatted = formatLogEntry(data.entries[i]);
-            if (formatted) {
-              addLogMessage(formatted);
+        var entries = data.entries || [];
+
+        if (!_hasInitializedLogSnapshot) {
+          for (var j = 0; j < entries.length; j++) {
+            var initialSignature = entrySignature(entries[j]);
+            if (initialSignature) {
+              _seenLogSignatures[initialSignature] = true;
             }
           }
-          _lastLogLength = data.entries.length;
+          _hasInitializedLogSnapshot = true;
+          _activeLLMRequests = 0;
+          setStickyStatus(DEFAULT_STICKY_STATUS, { force: true });
+          return;
+        }
+
+        if (entries.length === 0) return;
+
+        // Clear placeholder on first visible log entry
+        if (Object.keys(_seenLogSignatures).length === 0) {
+          $("#llm-chat-messages").empty();
+        }
+
+        for (var i = 0; i < entries.length; i++) {
+          var entry = entries[i];
+          var signature = entrySignature(entry);
+          if (!signature || _seenLogSignatures[signature]) {
+            continue;
+          }
+
+          _seenLogSignatures[signature] = true;
+
+          if (entry.type === "request") {
+            _activeLLMRequests += 1;
+            setStickyStatus(inferStatusFromRequestEntry(entry));
+          } else if (entry.type === "response" || entry.type === "error") {
+            if (_activeLLMRequests > 0) {
+              _activeLLMRequests -= 1;
+            }
+            if (_activeLLMRequests === 0) {
+              setStickyStatus(DEFAULT_STICKY_STATUS, { force: true });
+            }
+          }
+
+          var formatted = formatLogEntry(entry);
+          if (formatted) {
+            addLogMessage(formatted);
+          }
         }
       },
       error: function() {
@@ -867,7 +1000,10 @@ $(function () {
       '<i class="bi bi-info-circle me-1"></i>Log cleared (still polling)' +
       '</div>'
     );
-    _lastLogLength = 0;
+    _seenLogSignatures = {};
+    _activeLLMRequests = 0;
+    _hasInitializedLogSnapshot = false;
+    setStickyStatus(DEFAULT_STICKY_STATUS, { force: true });
   });
 
   // -------------------------------------------------------------------
