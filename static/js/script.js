@@ -861,7 +861,7 @@ $(function () {
     var payloadMessages = (entry.payload && entry.payload.messages) || [];
     var messageCount = payloadMessages.length;
     var firstMessage = messageCount > 0 && payloadMessages[0].content ? String(payloadMessages[0].content).slice(0, 60) : "";
-    return [entry.timestamp || "", entry.type || "", messageCount, firstMessage].join("|");
+    return [entry.timestamp || "", entry.type || "", entry.action || "", messageCount, firstMessage].join("|");
   }
 
   function truncateText(text, maxLength) {
@@ -967,7 +967,8 @@ $(function () {
 
           if (entry.type === "request") {
             _activeLLMRequests += 1;
-            setStickyStatus(inferStatusFromRequestEntry(entry));
+            var statusText = entry.action || inferStatusFromRequestEntry(entry);
+            setStickyStatus(statusText);
           } else if (entry.type === "response" || entry.type === "error") {
             if (_activeLLMRequests > 0) {
               _activeLLMRequests -= 1;

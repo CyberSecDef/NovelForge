@@ -17,6 +17,7 @@ import logging
 import threading
 import uuid
 import pprint
+import yaml
 
 from dotenv import load_dotenv
 load_dotenv() 
@@ -212,8 +213,39 @@ _FORBIDDEN_WORDS = [
 MAX_RETRIES = 5
 RETRY_DELAY = 5  # seconds
 
+def load_prompt_by_name(prompt_name, filename='prompts.yaml'):
+    """
+    Loads a specific prompt by name from a YAML file.
+    
+    Args:
+        prompt_name (str): The name (key) of the prompt to retrieve.
+        filename (str): The path to the YAML file.
+        
+    Returns:
+        dict or None: The prompt dictionary if found, otherwise None.
+    """
+    # Ensure the file path is correct
+    filepath = os.path.join(os.getcwd(), filename)
+    if not os.path.exists(filepath):
+        print(f"Error: {filename} not found at {filepath}")
+        return None
 
-def call_llm(messages: list[dict], *, json_mode: bool = False) -> str:
+    try:
+        with open(filepath, 'r', encoding='utf-8') as file:
+            # Use safe_load to avoid potential security issues from untrusted sources
+            prompts_data = yaml.safe_load(file)
+            
+            if prompts_data and prompt_name in prompts_data:
+                return prompts_data[prompt_name]
+            else:
+                print(f"Error: Prompt '{prompt_name}' not found in {filename}")
+                return None
+                
+    except yaml.YAMLError as e:
+        print(f"Error parsing YAML file: {e}")
+        return None
+
+def call_llm(messages: list[dict], *, action: str = "", json_mode: bool = False) -> str:
     """
     Call the configured LLM API and return the assistant message content.
 
@@ -228,6 +260,8 @@ def call_llm(messages: list[dict], *, json_mode: bool = False) -> str:
         "model": config.LLM_MODEL,
         "messages": messages,
     }
+    action = action if action else "Updating Content"
+
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
 
@@ -235,6 +269,7 @@ def call_llm(messages: list[dict], *, json_mode: bool = False) -> str:
     request_log = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "type": "request",
+        "action": action,
         "url": config.LLM_API_URL,
         "headers": {
             "Authorization": f"Bearer {config.LLM_API_KEY[:8]}..." if config.LLM_API_KEY else "None",
@@ -684,6 +719,10 @@ def plan_story_architecture(
     """Run the Story Architecture Planner with safe fallback behavior."""
     total_chapters = max(1, len(chapter_list))
     try:
+
+        welcome_data = load_prompt_by_name('story_architecture_planning')
+
+
         raw = call_llm(
             build_story_architecture_prompt(
                 title=title,
@@ -692,6 +731,7 @@ def plan_story_architecture(
                 chapter_list=chapter_list,
                 special_instructions=special_instructions,
             ),
+            action="Planning Story Architecture",
             json_mode=True,
         )
         return normalise_story_architecture(parse_llm_json(raw), chapter_list, total_chapters)
@@ -963,6 +1003,7 @@ def plan_master_timeline(
                 character_list=character_list,
                 special_instructions=special_instructions,
             ),
+            action="Planning Master Timeline",
             json_mode=True,
         )
         parsed = parse_llm_json(raw)
@@ -1290,6 +1331,7 @@ def plan_character_fate_registry(
                 master_timeline=master_timeline,
                 special_instructions=special_instructions,
             ),
+            action="Planning Character Fate Registry",
             json_mode=True,
         )
         parsed = parse_llm_json(raw)
@@ -1595,6 +1637,7 @@ def plan_character_arc_plan(
                 chapter_list=chapter_list,
                 special_instructions=special_instructions,
             ),
+            action="Planning Character Arcs",
             json_mode=True,
         )
         parsed = parse_llm_json(raw)
@@ -1912,6 +1955,7 @@ def plan_antagonist_motivation_plan(
                 master_timeline=master_timeline,
                 special_instructions=special_instructions,
             ),
+            action="Planning Antagonist Motivation",
             json_mode=True,
         )
         parsed = parse_llm_json(raw)
@@ -2166,6 +2210,7 @@ def plan_technology_rules(
                 chapter_list=chapter_list,
                 special_instructions=special_instructions,
             ),
+            action="Planning Technology Rules",
             json_mode=True,
         )
         parsed = parse_llm_json(raw)
@@ -2409,6 +2454,7 @@ def plan_theme_reinforcement(
             build_theme_reinforcement_prompt(
                 title, premise, genre, chapter_list, special_instructions
             ),
+            action="Planning Theme Reinforcement",
             json_mode=True,
         )
         parsed = parse_llm_json(raw)
@@ -2573,7 +2619,8 @@ def run_continuity_gatekeeper(
                 chapter_fate_context=chapter_fate_context,
                 chapter_arc_context=chapter_arc_context,
                 character_state_log=character_state_log,
-            )
+            ),
+            action=f"Running Continuity Gatekeeper for Chapter {chapter_num}",
         )
     except Exception:
         return ""
@@ -3447,7 +3494,8 @@ def run_per_chapter_compression_check(
                 chapter_summary=chapter_summary,
                 previous_summaries=previous_summaries,
                 title=title,
-            )
+            ),
+            action=f"Running Per-Chapter Compression Check for Chapter {chapter_num}"
         )
     except Exception:
         return ""
@@ -3518,7 +3566,8 @@ def run_character_state_updater(
                 characters_text=characters_text,
                 chapter_num=chapter_num,
                 title=title,
-            )
+            ),
+            action=f"Running Character State Updater for Chapter {chapter_num}"
         )
     except Exception:
         return ""
@@ -4353,13 +4402,14 @@ def generate_outline():
 
     try:
         # 1. Generate title
-        title = call_llm(build_title_prompt(str(premise), genre)).strip().strip('"')
+        title = call_llm(build_title_prompt(str(premise), genre), action="Generating Title").strip().strip('"')
 
         # 2. Generate outline
         outline_raw = call_llm(
             build_outline_prompt(
                 str(premise), genre, chapters, word_count, special_events, special_instructions
             ),
+            action="Generating Outline",
             json_mode=True,
         )
         try:
@@ -4407,6 +4457,7 @@ def generate_outline():
         # 3. Generate characters
         characters_raw = call_llm(
             build_characters_prompt(str(premise), genre, outline_text),
+            action="Generating Characters",
             json_mode=True,
         )
         try:
@@ -4726,11 +4777,11 @@ def _run_all_chapter_agents(
     """
     if step_callback:
         step_callback(f"Chapter {chapter_num}: refining dialogue")
-    text = call_llm(build_dialog_agent_prompt(text, chapter_num, title))
+    text = call_llm(build_dialog_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: refining dialogue")
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: structuring scenes")
-    text = call_llm(build_scene_agent_prompt(text, chapter_num, title))
+    text = call_llm(build_scene_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: structuring scenes")
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: verifying continuity")
@@ -4743,12 +4794,13 @@ def _run_all_chapter_agents(
             chapter_timeline_context,
             chapter_technology_context,
             chapter_theme_context,
-        )
+        ),
+        action=f"Chapter {chapter_num}: verifying continuity"
     )
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: editing")
-    text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title))
+    text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title), action=f"Chapter {chapter_num}: editing")
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: removing redundancy")
@@ -4759,7 +4811,8 @@ def _run_all_chapter_agents(
             chapter_outline_summary,
             chapter_num,
             title,
-        )
+        ),
+        action=f"Chapter {chapter_num}: removing redundancy"
     )
 
     if step_callback:
@@ -4771,9 +4824,11 @@ def _run_all_chapter_agents(
             total_chapters,
             chapter_outline_summary,
             chapter_architecture_context,
-        )
+        ),
+        action=f"Chapter {chapter_num}: checking structure"
     )
 
+    
     if step_callback:
         step_callback(f"Chapter {chapter_num}: verifying operational distinctiveness")
     text = call_llm(
@@ -4783,7 +4838,8 @@ def _run_all_chapter_agents(
             chapter_outline_summary,
             chapter_num,
             title,
-        )
+        ),
+        action=f"Chapter {chapter_num}: verifying operational distinctiveness"
     )
 
     if step_callback:
@@ -4797,7 +4853,8 @@ def _run_all_chapter_agents(
             chapter_fate_context,
             chapter_arc_context,
             chapter_antagonist_context,
-        )
+        ),
+        action=f"Chapter {chapter_num}: deepening characters"
     )
 
     if step_callback:
@@ -4809,24 +4866,25 @@ def _run_all_chapter_agents(
             chapter_num,
             title,
             chapter_arc_context,
-        )
+        ),
+        action=f"Chapter {chapter_num}: tracking character threads"
     )
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: synthesizing")
-    text = call_llm(build_synthesizer_prompt(text, chapter_num, title, genre))
+    text = call_llm(build_synthesizer_prompt(text, chapter_num, title, genre), action=f"Chapter {chapter_num}: synthesizing")
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: polishing")
-    text = call_llm(build_polish_agent_prompt(text, chapter_num, title, genre))
+    text = call_llm(build_polish_agent_prompt(text, chapter_num, title, genre), action=f"Chapter {chapter_num}: polishing")
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: anti-LLM pass")
-    text = call_llm(build_anti_llm_agent_prompt(text, chapter_num, title))
+    text = call_llm(build_anti_llm_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: anti-LLM pass")
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: quality control")
-    text = call_llm(build_quality_controller_prompt(text, chapter_num, title))
+    text = call_llm(build_quality_controller_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: quality control")
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: tracking story momentum")
@@ -4837,12 +4895,13 @@ def _run_all_chapter_agents(
             chapter_num,
             title,
             total_chapters,
-        )
+        ),
+        action=f"Chapter {chapter_num}: tracking story momentum"
     )
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: summarising")
-    summary = call_llm(build_chapter_summary_prompt(text, chapter_num))
+    summary = call_llm(build_chapter_summary_prompt(text, chapter_num), action=f"Chapter {chapter_num}: summarising")
 
     return text, summary
 
@@ -4994,7 +5053,8 @@ def _run_chapter_generation_internal(
                     chapter_theme_context,
                     gatekeeper_brief,
                     compression_guidance,
-                )
+                ),
+                action=f"Chapter {chapter_num}: drafting"
             )
 
             text, summary = _run_all_chapter_agents(
@@ -5058,6 +5118,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["step"] = "Final consistency pass"
         consistency_raw = call_llm(
             build_consistency_pass_prompt(title, summaries, special_instructions),
+            action="Final consistency pass",
             json_mode=True,
         )
         try:
@@ -5076,6 +5137,7 @@ def _run_chapter_generation_internal(
                 master_timeline=master_timeline,
                 character_fate_registry=character_fate_registry,
             ),
+            action="Global continuity audit",
             json_mode=True,
         )
         try:
@@ -5104,6 +5166,7 @@ def _run_chapter_generation_internal(
                 all_summaries=summaries,
                 continuity_audit=global_audit,
             ),
+            action="Narrative compression analysis",
             json_mode=True,
         )
         try:
@@ -5130,6 +5193,7 @@ def _run_chapter_generation_internal(
                 character_fate_registry=character_fate_registry,
                 character_state_log=character_state_log,
             ),
+            action="Character resolution validation",
             json_mode=True,
         )
         try:
@@ -5155,6 +5219,7 @@ def _run_chapter_generation_internal(
                 theme_reinforcement=theme_reinforcement,
                 total_chapters=total_chapters,
             ),
+            action="Thematic payoff analysis",
             json_mode=True,
         )
         try:
@@ -5181,6 +5246,7 @@ def _run_chapter_generation_internal(
                 character_arc_plan=character_arc_plan,
                 total_chapters=total_chapters,
             ),
+            action="Climax integrity check",
             json_mode=True,
         )
         try:
@@ -5212,6 +5278,7 @@ def _run_chapter_generation_internal(
                 continuity_audit=global_audit,
                 resolution_report=resolution_report,
             ),
+            action="Loose thread resolution",
             json_mode=True,
         )
         try:
@@ -5238,6 +5305,7 @@ def _run_chapter_generation_internal(
                 character_arc_plan=character_arc_plan,
                 thematic_report=thematic_report,
             ),
+            action="Reader immersion testing",
             json_mode=True,
         )
         try:
@@ -5426,7 +5494,8 @@ def revise_chapter():
                 chapter_technology_context=chapter_technology_context,
                 chapter_theme_context=chapter_theme_context,
                 gatekeeper_brief=gatekeeper_brief,
-            )
+            ),
+            action=f"Chapter {chapter_number}: applying revision instructions"
         )
 
         revised_text, revised_summary = _run_all_chapter_agents(
@@ -5455,6 +5524,7 @@ def revise_chapter():
         all_summaries = [str(ch.get("summary", "")) for ch in chapters_done]
         consistency_raw = call_llm(
             build_consistency_pass_prompt(title, all_summaries, special_instructions),
+            action="Final consistency pass after revision",
             json_mode=True,
         )
         try:
