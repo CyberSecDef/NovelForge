@@ -10,31 +10,29 @@ Requires environment variables (see .env.example / config.py):
     SECRET_KEY   – Flask secret key (change in production)
 """
 
-import os
+# Standard library
 import json
-import time
 import logging
-import threading
-import uuid
+import os
 import pprint
-import yaml
-
-from dotenv import load_dotenv
-load_dotenv() 
+import threading
+import time
+import uuid
 from pathlib import Path
 
-import requests
-from flask import (
-    Flask,
-    render_template,
-    request,
-    jsonify,
-    session,
-    send_file,
-    abort,
-)
-from flask_session import Session
+# Third-party
 import markupsafe
+import requests
+import yaml
+from dotenv import load_dotenv
+from flask import Flask, abort, jsonify, render_template, request, send_file, session
+from flask_session import Session
+from jinja2 import Template
+
+# Load environment variables before local imports so config picks them up
+load_dotenv()
+
+# Local
 import config
 
 # ---------------------------------------------------------------------------
@@ -245,6 +243,35 @@ def load_prompt_by_name(prompt_name, filename='prompts.yaml'):
         print(f"Error parsing YAML file: {e}")
         return None
 
+
+_prompts_cache: dict | None = None
+
+
+def _load_prompts() -> dict:
+    """Load and cache prompts from prompts.yml, keyed by prompt name."""
+    global _prompts_cache
+    if _prompts_cache is None:
+        filepath = os.path.join(os.path.dirname(__file__), "prompts.yml")
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        _prompts_cache = {p["name"]: p for p in data.get("prompts", [])}
+    return _prompts_cache
+
+
+def render_prompt(name: str, **context) -> list[dict]:
+    """Render a named prompt from prompts.yml using Jinja2 and return a message list."""
+    prompts = _load_prompts()
+    if name not in prompts:
+        raise KeyError(f"Prompt '{name}' not found in prompts.yml")
+    prompt = prompts[name]
+    system_text = Template(prompt["system"]).render(**context)
+    user_text = Template(prompt["user"]).render(**context)
+    return [
+        {"role": "system", "content": system_text.strip()},
+        {"role": "user", "content": user_text.strip()},
+    ]
+
+
 def call_llm(messages: list[dict], *, action: str = "", json_mode: bool = False) -> str:
     """
     Call the configured LLM API and return the assistant message content.
@@ -416,47 +443,16 @@ def build_story_architecture_prompt(
         f"Chapter {ch.get('number', i + 1)}: {ch.get('title', f'Chapter {i + 1}')} – {ch.get('summary', '')}"
         for i, ch in enumerate(chapter_list)
     )
-    instructions_section = (
-        f"\nSpecial instructions:\n{special_instructions.strip()}"
-        if special_instructions.strip()
-        else ""
+    return render_prompt(
+        "story_architecture_planning",
+        title=title,
+        premise=premise,
+        genre=genre,
+        total_chapters=total_chapters,
+        architecture_mode=architecture_mode,
+        outline_text=outline_text,
+        special_instructions=special_instructions or "",
     )
-    return [
-        _build_system_prompt(
-            "You are the Story Architecture Planner. Convert outlines into a strict, "
-            "production-ready act structure that escalates cleanly and limits major plot operations. "
-            "You must choose and enforce a coherent architecture, keep the number of major operations "
-            "per chapter intentionally limited, and ensure escalation grows logically toward a midpoint "
-            "reversal, climax, and resolution."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel title: {title}\n"
-                f"Genre: {genre}\n"
-                f"Premise: {premise}\n"
-                f"Chapter count: {total_chapters}\n"
-                f"Required architecture model: strict {architecture_mode}.\n\n"
-                f"Outline:\n{outline_text}"
-                f"{instructions_section}\n\n"
-                "Convert this outline into a strict story architecture plan. "
-                "Limit each chapter to a small number of major operations, and make the escalation more intense as the novel progresses.\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"architecture_type": "three-act or four-act", '
-                '"acts": [{"act": 1, "label": "...", "chapter_start": 1, "chapter_end": 3, "purpose": "...", "escalation": "..."}], '
-                '"global_turns": {'
-                '"inciting_incident": {"chapter": 1, "detail": "..."}, '
-                '"midpoint_reversal": {"chapter": 1, "detail": "..."}, '
-                '"climax": {"chapter": 1, "detail": "..."}, '
-                '"resolution": {"chapter": 1, "detail": "..."}}, '
-                '"chapter_plan": ['
-                '{"number": 1, "act": "Act I", "phase": "Setup", "purpose": "...", '
-                '"escalation": "...", "operation_limit": 1, "required_turn": "...", '
-                '"carry_forward": "..."}]}'
-            ),
-        },
-    ]
 
 
 def _coerce_positive_int(value, default: int) -> int:
@@ -719,10 +715,6 @@ def plan_story_architecture(
     """Run the Story Architecture Planner with safe fallback behavior."""
     total_chapters = max(1, len(chapter_list))
     try:
-
-        welcome_data = load_prompt_by_name('story_architecture_planning')
-
-
         raw = call_llm(
             build_story_architecture_prompt(
                 title=title,
@@ -808,44 +800,15 @@ def build_master_timeline_prompt(
     if not characters_text.strip():
         characters_text = "- No explicit characters provided. Infer conservatively from outline."
 
-    instructions_section = (
-        f"\nSpecial instructions:\n{special_instructions.strip()}"
-        if special_instructions.strip()
-        else ""
+    return render_prompt(
+        "master_timeline_building",
+        title=title,
+        premise=premise,
+        genre=genre,
+        chapter_text=chapter_text,
+        characters_text=characters_text,
+        special_instructions=special_instructions or "",
     )
-
-    return [
-        _build_system_prompt(
-            "You are the Master Timeline Builder. Build a strict chronological ledger "
-            "of major events and character state transitions. Focus on event causality, "
-            "ordering, and non-contradictory character states."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel title: {title}\n"
-                f"Genre: {genre}\n"
-                f"Premise: {premise}\n\n"
-                f"Chapter outline:\n{chapter_text}\n\n"
-                f"Characters:\n{characters_text}"
-                f"{instructions_section}\n\n"
-                "Create a chronological ledger of major events, especially captures, deaths, rescues, interrogations, and recoveries. "
-                "For each event, define who is affected and the resulting character state changes. "
-                "Prevent contradictory states (e.g., dead and later active without explicit recovery mechanism).\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"ledger": ['
-                '{"index": 1, "chapter": 1, "event_type": "capture|death|rescue|interrogation|recovery|operation|other", '
-                '"event": "...", "actors": ["..."], "targets": ["..."], '
-                '"state_changes": [{"character": "...", "field": "status", "from": "...", "to": "..."}], '
-                '"continuity_note": "..."}], '
-                '"character_states": [{"character": "...", "status": "active|captured|injured|deceased|missing|recovered", '
-                '"location": "...", "last_event_index": 1, "notes": "..."}], '
-                '"chapter_constraints": [{"chapter": 1, "must_include": ["..."], "must_avoid": ["..."]}], '
-                '"continuity_risks": ["..."]}'
-            ),
-        },
-    ]
 
 
 def _build_fallback_master_timeline(chapter_list: list[dict], character_list: list[dict]) -> dict:
@@ -1114,49 +1077,18 @@ def build_character_fate_registry_prompt(
                 timeline_lines.append(
                     f"- Ch {event.get('chapter')}: {event.get('event', '')} [{event.get('event_type', 'other')}]"
                 )
-    timeline_section = (
-        "\nMaster Timeline events:\n" + "\n".join(timeline_lines)
-        if timeline_lines
-        else ""
-    )
-    instructions_section = (
-        f"\nSpecial instructions:\n{special_instructions.strip()}"
-        if special_instructions.strip()
-        else ""
-    )
+    timeline_text = "\n".join(timeline_lines)
 
-    return [
-        _build_system_prompt(
-            "You are the Character Fate Registry planner. Track each character's life/death state, "
-            "injuries, captures, and narrative status across the story while enforcing consistency. "
-            "A character cannot be both dead and active unless an explicit recovery mechanism exists in the plan."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel title: {title}\n"
-                f"Genre: {genre}\n"
-                f"Premise: {premise}\n\n"
-                f"Characters:\n{characters_text}\n\n"
-                f"Outline:\n{chapter_text}"
-                f"{timeline_section}"
-                f"{instructions_section}\n\n"
-                "Create a Character Fate Registry that tracks life/death, injuries, capture/release state, and narrative status for each character. "
-                "Enforce one definitive death or final outcome when required and identify contradiction risks.\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"registry": ['
-                '{"character": "...", "current_status": "alive|captured|injured|deceased|missing|recovered|unknown", '
-                '"capture_state": "free|captured|escaped|unknown", "injuries": ["..."], '
-                '"narrative_status": "active|inactive|resolved|deceased", '
-                '"definitive_outcome_required": false, "definitive_outcome": "unknown|survival|death|redemption|exile|betrayal", '
-                '"outcome_locked": false, "single_death_rule": true, "death_chapter": null, '
-                '"recovery_conditions": ["..."], "state_constraints": ["..."], "pivotal_chapters": [1]}], '
-                '"chapter_constraints": [{"chapter": 1, "must_track": ["..."], "must_not_contradict": ["..."]}], '
-                '"conflict_checks": ["..."]}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "character_fate_registry",
+        title=title,
+        premise=premise,
+        genre=genre,
+        characters_text=characters_text,
+        chapter_text=chapter_text,
+        timeline_text=timeline_text,
+        special_instructions=special_instructions or "",
+    )
 
 
 def _build_fallback_character_fate_registry(character_list: list[dict], total_chapters: int) -> dict:
@@ -1424,43 +1356,16 @@ def build_character_arc_planner_prompt(
         f"Chapter {ch.get('number', i + 1)}: {ch.get('title', f'Chapter {i + 1}')} – {ch.get('summary', '')}"
         for i, ch in enumerate(chapter_list)
     )
-    instructions_section = (
-        f"\nSpecial instructions:\n{special_instructions.strip()}"
-        if special_instructions.strip()
-        else ""
-    )
 
-    return [
-        _build_system_prompt(
-            "You are the Character Arc Planner. Define clear character arc scaffolding for primary characters. "
-            "Each arc must include: start state, midpoint transformation, crisis point, and final moral choice. "
-            "Arcs must progress coherently across chapters without contradiction."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel title: {title}\n"
-                f"Genre: {genre}\n"
-                f"Premise: {premise}\n\n"
-                f"Characters:\n{characters_text}\n\n"
-                f"Chapter outline:\n{chapters_text}"
-                f"{instructions_section}\n\n"
-                "Create a character arc plan for primary characters only. "
-                "Define the start state, midpoint transformation, crisis point, and final moral choice for each character. "
-                "Add chapter beats showing where each phase is expressed.\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"arcs": ['
-                '{"character": "...", "role": "primary|secondary", '
-                '"start_state": "...", "midpoint_transformation": "...", "crisis_point": "...", '
-                '"final_moral_choice": "...", "arc_theme": "...", '
-                '"chapter_beats": [{"chapter": 1, "phase": "start|midpoint|crisis|final", "beat": "..."}], '
-                '"consistency_rules": ["..."]}], '
-                '"chapter_constraints": [{"chapter": 1, "must_advance": ["..."], "must_not_undo": ["..."]}], '
-                '"global_arc_risks": ["..."]}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "character_arc_planner",
+        title=title,
+        premise=premise,
+        genre=genre,
+        characters_text=characters_text,
+        chapters_text=chapters_text,
+        special_instructions=special_instructions or "",
+    )
 
 
 def _build_fallback_character_arc_plan(
@@ -1735,48 +1640,18 @@ def build_antagonist_motivation_prompt(
                 timeline_lines.append(
                     f"- Ch {event.get('chapter')}: {event.get('event', '')} [{event.get('event_type', 'other')}]"
                 )
-    timeline_section = (
-        "\nMaster Timeline events:\n" + "\n".join(timeline_lines)
-        if timeline_lines
-        else ""
-    )
-    instructions_section = (
-        f"\nSpecial instructions:\n{special_instructions.strip()}"
-        if special_instructions.strip()
-        else ""
-    )
+    timeline_text = "\n".join(timeline_lines)
 
-    return [
-        _build_system_prompt(
-            "You are the Antagonist Motivation Architect. Build a stable motivational model for each antagonist: "
-            "what they want, why they escalate, what line they will not cross, and how pressure shifts tactics chapter by chapter. "
-            "Antagonist behavior must stay causally consistent with prior actions and constraints."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel title: {title}\n"
-                f"Genre: {genre}\n"
-                f"Premise: {premise}\n\n"
-                f"Characters:\n{characters_text}\n\n"
-                f"Chapter outline:\n{chapters_text}"
-                f"{timeline_section}"
-                f"{instructions_section}\n\n"
-                "Create an Antagonist Motivation Plan focused on coherent motivation and escalation. "
-                "For each antagonist, define core motivation, external goal, internal need, fear trigger, moral line, pressure points, "
-                "and chapter escalation actions tied to motivation.\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"antagonists": ['
-                '{"character": "...", "motivation_core": "...", "external_goal": "...", "internal_need": "...", '
-                '"fear_trigger": "...", "moral_line": "...", "pressure_points": ["..."], '
-                '"escalation_plan": [{"chapter": 1, "action": "...", "tactic": "...", "motivation_link": "..."}], '
-                '"consistency_rules": ["..."]}], '
-                '"chapter_constraints": [{"chapter": 1, "must_show": ["..."], "must_not_break": ["..."]}], '
-                '"global_risks": ["..."]}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "antagonist_motivation",
+        title=title,
+        premise=premise,
+        genre=genre,
+        characters_text=characters_text,
+        chapters_text=chapters_text,
+        timeline_text=timeline_text,
+        special_instructions=special_instructions or "",
+    )
 
 
 def _build_fallback_antagonist_motivation_plan(
@@ -2043,42 +1918,15 @@ def build_technology_rules_prompt(
         f"Chapter {ch.get('number', i + 1)}: {ch.get('title', f'Chapter {i + 1}')} – {ch.get('summary', '')}"
         for i, ch in enumerate(chapter_list)
     )
-    instructions_section = (
-        f"\nSpecial instructions:\n{special_instructions.strip()}"
-        if special_instructions.strip()
-        else ""
-    )
 
-    return [
-        _build_system_prompt(
-            "You are the Technology Rules Designer. Define hard constraints for fictional technology: "
-            "latency, detection limits, resource limits, failure modes, and countermeasures. "
-            "Rules must be enforceable in scene-level writing and should prevent omnipotent shortcuts."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel title: {title}\n"
-                f"Genre: {genre}\n"
-                f"Premise: {premise}\n\n"
-                f"Chapter outline:\n{chapters_text}"
-                f"{instructions_section}\n\n"
-                "Create a Technology Rules specification that will be used during drafting. "
-                "Include fixed limits, known failure modes, and chapter-specific enforcement guidance.\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"systems": ['
-                '{"name": "...", "purpose": "...", "latency_ms": 0, '
-                '"detection_methods": ["..."], "detection_blind_spots": ["..."], '
-                '"resource_constraints": ["..."], "operational_limits": ["..."], '
-                '"failure_modes": ["..."], "countermeasures": ["..."], '
-                '"forbidden_capabilities": ["..."]}], '
-                '"global_constraints": ["..."], '
-                '"chapter_constraints": [{"chapter": 1, "must_respect": ["..."], "must_not_allow": ["..."]}], '
-                '"continuity_risks": ["..."]}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "technology_rules",
+        title=title,
+        premise=premise,
+        genre=genre,
+        chapters_text=chapters_text,
+        special_instructions=special_instructions or "",
+    )
 
 
 def _build_fallback_technology_rules(chapter_list: list[dict]) -> dict:
@@ -2290,54 +2138,14 @@ def build_theme_reinforcement_prompt(
         f"Chapter {c.get('number', i+1)}: {c.get('title', '')} – {c.get('summary', '')}"
         for i, c in enumerate(chapter_list)
     )
-    instructions_section = (
-        f"\nSpecial instructions:\n{special_instructions}" if special_instructions.strip() else ""
+    return render_prompt(
+        "theme_reinforcement",
+        title=title,
+        premise=premise,
+        genre=genre,
+        chapters_text=chapters_text,
+        special_instructions=special_instructions or "",
     )
-    return [
-        _build_system_prompt(
-            "You are the Theme Reinforcement Planner for a novel. "
-            "Your task is to identify the core thematic pillars of the story "
-            "(e.g. memory, bureaucracy, moral compromise, identity, loyalty) "
-            "and map precisely where each theme appears, deepens, or pays off "
-            "across the narrative. You ensure themes are woven consistently "
-            "throughout chapters rather than appearing randomly or being abandoned."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}'\n"
-                f"Genre: {genre}\n"
-                f"Premise: {premise}\n\n"
-                f"Chapter outline:\n{chapters_text}"
-                f"{instructions_section}\n\n"
-                "Identify 2-4 core thematic pillars for this novel. For each theme:\n"
-                "- Name and describe it\n"
-                "- List its key motifs or symbols\n"
-                "- Identify 2-3 pillar moments in the story where it peaks\n"
-                "- Map which chapters it appears in and how it should manifest\n\n"
-                "Also provide:\n"
-                "- global_thematic_arcs: 2-4 overarching thematic progressions\n"
-                "- chapter_constraints: per-chapter thematic guidance\n"
-                "- continuity_risks: ways the themes could be broken or contradicted\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{\n'
-                '  "themes": [\n'
-                '    {\n'
-                '      "name": "...",\n'
-                '      "description": "...",\n'
-                '      "motifs": ["..."],\n'
-                '      "pillar_moments": ["..."],\n'
-                '      "chapter_appearances": [{"chapter": 1, "role": "setup", "guidance": "..."}]\n'
-                '    }\n'
-                '  ],\n'
-                '  "global_thematic_arcs": ["..."],\n'
-                '  "chapter_constraints": [{"chapter": 1, "themes_present": ["..."], "thematic_guidance": "..."}],\n'
-                '  "continuity_risks": ["..."]\n'
-                '}'
-            ),
-        },
-    ]
 
 
 def _build_fallback_theme_reinforcement(chapter_list: list[dict]) -> dict:
@@ -2537,61 +2345,17 @@ def build_continuity_gatekeeper_prompt(
     forbidden scenarios, locked events, and required character states.
     Runs immediately before the Draft agent for every chapter.
     """
-    prev_section = (
-        f"Previous chapter summaries (Chapters 1-{chapter_num-1}):\n{previous_summaries}\n\n"
-        if previous_summaries.strip()
-        else "This is Chapter 1 (no prior chapters).\n\n"
+    return render_prompt(
+        "continuity_gatekeeper",
+        chapter_num=chapter_num,
+        chapter_title=chapter_title,
+        chapter_summary=chapter_summary,
+        previous_summaries=previous_summaries or "",
+        chapter_timeline_context=chapter_timeline_context or "",
+        chapter_fate_context=chapter_fate_context or "",
+        chapter_arc_context=chapter_arc_context or "",
+        character_state_log=character_state_log or "",
     )
-    timeline_section = (
-        f"Master Timeline Builder – events established so far:\n{chapter_timeline_context}\n\n"
-        if chapter_timeline_context.strip()
-        else ""
-    )
-    fate_section = (
-        f"Character Fate Registry – current character states:\n{chapter_fate_context}\n\n"
-        if chapter_fate_context.strip()
-        else ""
-    )
-    arc_section = (
-        f"Character Arc Planner – arc constraints for this chapter:\n{chapter_arc_context}\n\n"
-        if chapter_arc_context.strip()
-        else ""
-    )
-    state_log_section = (
-        f"Character State Updater – confirmed states at end of previous chapters:\n{character_state_log}\n\n"
-        if character_state_log.strip()
-        else ""
-    )
-    return [
-        _build_system_prompt(
-            "You are the Continuity Gatekeeper for a novel-in-progress. "
-            "Your sole job is to validate what is and is not permitted in the upcoming chapter "
-            "based on the established master timeline and character state registry. "
-            "You do NOT write prose. You produce a concise validation brief: "
-            "who is alive, dead, captured, or injured; which events have already occurred "
-            "and are locked; which character states cannot be contradicted; "
-            "and specific scenarios that must not appear in this chapter. "
-            "Be precise, sparse, and clinical."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Upcoming chapter: Chapter {chapter_num} – '{chapter_title}'\n"
-                f"Chapter plan: {chapter_summary}\n\n"
-                f"{prev_section}"
-                f"{timeline_section}"
-                f"{fate_section}"
-                f"{arc_section}"
-                f"{state_log_section}"
-                "Produce a Continuity Gatekeeper brief for this chapter. Include:\n"
-                "1. CHARACTER STATES – who is alive / dead / captured / injured AT THIS POINT\n"
-                "2. LOCKED EVENTS – events that have already occurred and cannot be re-staged or contradicted\n"
-                "3. FORBIDDEN SCENARIOS – specific situations that must not appear in this chapter\n"
-                "4. REQUIRED CONTINUITY – facts the chapter must honour (locations, objects, relationships)\n\n"
-                "Use bullet points. Be concise. No narrative prose."
-            ),
-        },
-    ]
 
 
 def run_continuity_gatekeeper(
@@ -2627,19 +2391,7 @@ def run_continuity_gatekeeper(
 
 
 def build_title_prompt(premise: str, genre: str) -> list[dict]:
-    return [
-        _build_system_prompt(
-            "You are a bestselling author skilled at crafting memorable book titles."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Generate a single catchy, original title for a {genre} novel based on this premise:\n\n"
-                f"{premise}\n\n"
-                "***Return ONLY the title text, nothing else.***"
-            ),
-        },
-    ]
+    return render_prompt("title", premise=premise, genre=genre)
 
 
 def build_outline_prompt(
@@ -2650,71 +2402,21 @@ def build_outline_prompt(
     special_events: str,
     special_instructions: str,
 ) -> list[dict]:
-    arch = (
-        "Novel architecture:\n"
-        "1. Hook (opening tension/question)\n"
-        "2. Setup (protagonist, world, tone, conflict)\n"
-        "3. Inciting incident (disruptive event)\n"
-        "4. Rising action (escalating obstacles)\n"
-        "5. Midpoint shift (major revelation)\n"
-        "6. Complications (worsening problems)\n"
-        "7. Crisis (hardest decision)\n"
-        "8. Climax (decisive confrontation)\n"
-        "9. Resolution (aftermath, character changes)\n\n"
-        "Structure: Beginning 25% (Hook→Setup→Inciting), "
-        "Middle 50% (Rising→Midpoint→Complications), "
-        "End 25% (Crisis→Climax→Resolution).\n"
-        "Scene pattern: Goal → Obstacle → Outcome → New problem."
+    return render_prompt(
+        "outline",
+        premise=premise,
+        genre=genre,
+        chapters=chapters,
+        word_count=f"{word_count:,}",
+        special_events=special_events or "",
+        special_instructions=special_instructions or "",
     )
-    events_section = (
-        f"\nSpecial events to incorporate:\n{special_events}" if special_events.strip() else ""
-    )
-    instructions_section = (
-        f"\nSpecial instructions:\n{special_instructions}" if special_instructions.strip() else ""
-    )
-    return [
-        _build_system_prompt(
-            "You are a master story architect who creates detailed, compelling novel outlines."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Create a detailed chapter-by-chapter outline for a {genre} novel.\n\n"
-                f"Premise: {premise}\n"
-                f"Total chapters: {chapters}\n"
-                f"Target word count: {word_count:,}\n"
-                f"{arch}"
-                f"{events_section}"
-                f"{instructions_section}\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"chapters": [{"number": 1, "title": "...", "summary": "..."}, ...]}\n\n'
-                "***Each chapter summary should be 2-4 sentences describing key events and purpose.***"
-            ),
-        },
-    ]
 
 
 def build_characters_prompt(
     premise: str, genre: str, outline_text: str
 ) -> list[dict]:
-    return [
-        _build_system_prompt(
-            "You are a character development expert who creates vivid, memorable fictional characters."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Based on this {genre} novel premise and outline, create 3-7 main characters.\n\n"
-                f"Premise: {premise}\n\n"
-                f"Outline:\n{outline_text}\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"characters": [{"name": "...", "age": "...", "background": "...", '
-                '"role": "...", "arc": "..."}, ...]}'
-            ),
-        },
-    ]
+    return render_prompt("characters", premise=premise, genre=genre, outline_text=outline_text)
 
 
 def build_chapter_draft_prompt(
@@ -2738,100 +2440,29 @@ def build_chapter_draft_prompt(
     gatekeeper_brief: str = "",
     compression_guidance: str = "",
 ) -> list[dict]:
-    instructions_section = (
-        f"\nSpecial instructions: {special_instructions}" if special_instructions.strip() else ""
+    return render_prompt(
+        "chapter_draft",
+        title=title,
+        genre=genre,
+        premise=premise,
+        chapter_num=chapter_num,
+        chapter_title=chapter_title,
+        chapter_summary=chapter_summary,
+        characters_text=characters_text,
+        previous_summaries=previous_summaries or "",
+        target_words=f"{target_words:,}",
+        special_instructions=special_instructions or "",
+        chapter_architecture_context=chapter_architecture_context or "",
+        chapter_timeline_context=chapter_timeline_context or "",
+        chapter_fate_context=chapter_fate_context or "",
+        chapter_arc_context=chapter_arc_context or "",
+        chapter_antagonist_context=chapter_antagonist_context or "",
+        chapter_technology_context=chapter_technology_context or "",
+        chapter_theme_context=chapter_theme_context or "",
+        gatekeeper_brief=gatekeeper_brief or "",
+        compression_guidance=compression_guidance or "",
+        forbidden_words=", ".join(_FORBIDDEN_WORDS),
     )
-    prev_section = (
-        f"\nPrevious chapter summaries (for continuity):\n{previous_summaries}"
-        if previous_summaries.strip()
-        else ""
-    )
-    architecture_section = (
-        f"\n{chapter_architecture_context}\n"
-        if chapter_architecture_context.strip()
-        else ""
-    )
-    timeline_section = (
-        f"\n{chapter_timeline_context}\n"
-        if chapter_timeline_context.strip()
-        else ""
-    )
-    fate_section = (
-        f"\n{chapter_fate_context}\n"
-        if chapter_fate_context.strip()
-        else ""
-    )
-    arc_section = (
-        f"\n{chapter_arc_context}\n"
-        if chapter_arc_context.strip()
-        else ""
-    )
-    antagonist_section = (
-        f"\n{chapter_antagonist_context}\n"
-        if chapter_antagonist_context.strip()
-        else ""
-    )
-    technology_section = (
-        f"\n{chapter_technology_context}\n"
-        if chapter_technology_context.strip()
-        else ""
-    )
-    theme_section = (
-        f"\n{chapter_theme_context}\n"
-        if chapter_theme_context.strip()
-        else ""
-    )
-    gatekeeper_section = (
-        f"\nContinuity Gatekeeper brief (HARD CONSTRAINTS – do not violate):\n{gatekeeper_brief}\n"
-        if gatekeeper_brief.strip()
-        else ""
-    )
-    compression_section = (
-        f"\nNarrative Compression Guidance (avoid these patterns from previous chapters):\n{compression_guidance}\n"
-        if compression_guidance.strip()
-        else ""
-    )
-    return [
-        _build_system_prompt(
-            "You are a skilled novelist writing in a natural, human voice. "
-            "Vary sentence length and structure. Use vivid, specific detail. "
-            "Avoid overused phrases, clichés, and robotic transitions. "
-            "Do NOT use the words: " + ", ".join(_FORBIDDEN_WORDS) + "."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Write Chapter {chapter_num}: {chapter_title} of '{title}'.\n\n"
-                f"Genre: {genre}\n"
-                f"Premise: {premise}\n"
-                f"Chapter summary: {chapter_summary}\n\n"
-                f"Main characters:\n{characters_text}\n"
-                f"{prev_section}"
-                f"{architecture_section}"
-                f"{timeline_section}"
-                f"{fate_section}"
-                f"{arc_section}"
-                f"{antagonist_section}"
-                f"{technology_section}"
-                f"{theme_section}"
-                f"{gatekeeper_section}"
-                f"{compression_section}"
-                f"{instructions_section}\n\n"
-                f"***CRITICAL: You are writing CHAPTER {chapter_num}. Keep this chapter number in mind throughout.***\n"
-                f"Target: approximately {target_words:,} words. "
-                "Write immersive, human-sounding prose. "
-                "Follow the scene pattern: Goal → Obstacle → Outcome → New problem. "
-                "Respect the Story Architecture Planner constraints, especially the chapter's escalation target and major operations limit. "
-                "Respect Character Fate Registry constraints and do not introduce contradictory character states. "
-                "Advance Character Arc Planner beats where relevant for this chapter.\n\n"
-                "Preserve Antagonist Motivation Architect coherence so antagonist tactics follow established motivation and pressure.\n\n"
-                "Follow Technology Rules Designer limits so systems have latency, cost, blind spots, and failure modes.\n\n"
-                "Honour Theme Reinforcement Planner guidance so each chapter carries its designated thematic role and advances the thematic arc.\n\n"
-                "Obey ALL Continuity Gatekeeper constraints. Do not introduce any forbidden scenario, resurrect dead characters, or contradict locked events.\n\n"
-                "***Return ONLY the chapter text with NO introduction, NO title header, NO explanation.***"
-            ),
-        },
-    ]
 
 
 def build_dialog_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
@@ -2839,27 +2470,7 @@ def build_dialog_agent_prompt(chapter_text: str, chapter_num: int, title: str) -
     Dialog agent: refines all dialogue in the chapter for naturalism, voice
     distinction, and subtext.  Returns only the revised chapter text.
     """
-    return [
-        _build_system_prompt(
-            "You are a dialogue specialist for literary fiction. "
-            "Your task is to make every line of dialogue feel genuinely human: "
-            "distinct voices per character, natural rhythm, subtext beneath the surface, "
-            "and beats of action/reaction woven into dialogue scenes. "
-            "Do not change narration that contains no dialogue. "
-            "Return the full chapter text with improved dialogue only."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                f"Refine the dialogue in this chapter. "
-                "Ensure each character speaks distinctly, conversations feel natural "
-                "and purposeful, and subtext is present where appropriate.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt("dialog_agent", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_scene_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
@@ -2867,26 +2478,7 @@ def build_scene_agent_prompt(chapter_text: str, chapter_num: int, title: str) ->
     Scene agent: ensures every scene follows the Goal → Obstacle → Outcome →
     New Problem pattern.  Returns only the revised chapter text.
     """
-    return [
-        _build_system_prompt(
-            "You are a scene architect for commercial fiction. "
-            "Every scene must have a clear character goal, a concrete obstacle, "
-            "an outcome (success, failure, or complication), and a new problem "
-            "that propels the story forward. "
-            "Identify any scenes that lack this structure and rewrite them accordingly. "
-            "Return the full chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                "Review and revise this chapter so that every scene follows the "
-                "Goal → Obstacle → Outcome → New Problem pattern.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt("scene_agent", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_structure_agent_prompt(
@@ -2908,35 +2500,16 @@ def build_structure_agent_prompt(
         phase_hint = "Middle (Rising Action / Midpoint Shift / Complications)"
     else:
         phase_hint = "End (Crisis / Climax / Resolution)"
-    architecture_section = (
-        f"\nStory Architecture Planner guidance:\n{chapter_architecture_context}\n"
-        if chapter_architecture_context.strip()
-        else ""
-    )
 
-    return [
-        _build_system_prompt(
-            "You are a structural editor who ensures every chapter fulfils its "
-            "designated role in the novel's nine-phase story architecture. "
-            "You do not change style or prose quality—only structural fit. "
-            "Return the full revised chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Chapter {chapter_num} of {total_chapters}.\n"
-                f"Structural position: {phase_hint}.\n"
-                f"Outline summary for this chapter:\n{outline_summary}\n\n"
-                f"{architecture_section}"
-                "Ensure this chapter delivers the tension, revelations, and story movement "
-                f"appropriate for a {phase_hint} chapter. "
-                "Follow the Story Architecture Planner guidance exactly when it is provided, including the chapter purpose, escalation target, turning point, and operation limit. "
-                "Adjust pacing, scene order, or emphasis as needed.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt(
+        "structure_agent",
+        chapter_num=chapter_num,
+        total_chapters=total_chapters,
+        phase_hint=phase_hint,
+        outline_summary=outline_summary,
+        chapter_architecture_context=chapter_architecture_context or "",
+        chapter_text=chapter_text,
+    )
 
 
 def build_character_agent_prompt(
@@ -2952,49 +2525,16 @@ def build_character_agent_prompt(
     Character agent: checks and deepens character arcs and consistency.
     Returns only the revised chapter text.
     """
-    fate_section = (
-        f"Character Fate Registry guidance:\n{chapter_fate_context}\n\n"
-        if chapter_fate_context.strip()
-        else ""
+    return render_prompt(
+        "character_agent",
+        title=title,
+        chapter_num=chapter_num,
+        characters_text=characters_text,
+        chapter_fate_context=chapter_fate_context or "",
+        chapter_arc_context=chapter_arc_context or "",
+        chapter_antagonist_context=chapter_antagonist_context or "",
+        chapter_text=chapter_text,
     )
-    arc_section = (
-        f"Character Arc Planner guidance:\n{chapter_arc_context}\n\n"
-        if chapter_arc_context.strip()
-        else ""
-    )
-    antagonist_section = (
-        f"Antagonist Motivation Architect guidance:\n{chapter_antagonist_context}\n\n"
-        if chapter_antagonist_context.strip()
-        else ""
-    )
-    return [
-        _build_system_prompt(
-            "You are a character development specialist. "
-            "Your role is to ensure every character acts according to their established "
-            "background, motivations, and arc trajectory. "
-            "Deepen emotional authenticity, eliminate out-of-character moments, "
-            "and advance each key character's arc. "
-            "Return the full revised chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                f"Character profiles:\n{characters_text}\n\n"
-                f"{fate_section}"
-                f"{arc_section}"
-                f"{antagonist_section}"
-                "Review this chapter for character consistency and arc progression. "
-                "Fix any moments where a character acts against their established nature. "
-                "Follow Character Fate Registry constraints exactly, preserving definitive outcomes and status transitions. "
-                "Follow Character Arc Planner beats and preserve cumulative arc progression. "
-                "Keep antagonist behavior aligned with Antagonist Motivation Architect constraints. "
-                "Deepen internal thought and emotional response where thin.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
 
 
 def build_character_thread_tracker_prompt(
@@ -3011,39 +2551,14 @@ def build_character_thread_tracker_prompt(
     purpose, or left in narrative stasis.
     Returns only the revised chapter text.
     """
-    arc_section = (
-        f"Character Arc Planner context:\n{chapter_arc_context}\n\n"
-        if chapter_arc_context.strip()
-        else ""
+    return render_prompt(
+        "character_thread_tracker",
+        title=title,
+        chapter_num=chapter_num,
+        characters_text=characters_text,
+        chapter_arc_context=chapter_arc_context or "",
+        chapter_text=chapter_text,
     )
-    return [
-        _build_system_prompt(
-            "You are the Character Thread Tracker for a novel manuscript. "
-            "Your task is to ensure that every named character who appears in this chapter "
-            "receives meaningful narrative movement: a decision, revelation, relationship shift, "
-            "emotional consequence, or clear situational change. "
-            "A character must never leave the chapter in exactly the same state as they entered it. "
-            "Identify any character who is present but static, and revise their scenes "
-            "to give them a forward beat. Do not invent major new plot events. "
-            "Return the full revised chapter text only."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                f"Character profiles:\n{characters_text}\n\n"
-                f"{arc_section}"
-                "Review every named character who appears in this chapter. "
-                "For each one, verify they experience some form of forward narrative movement: "
-                "a decision made, a relationship shifted, a belief tested, a status changed, "
-                "or a psychological consequence registered.\n\n"
-                "For any character who appears but remains static, add or strengthen a beat "
-                "that advances their thread without breaking continuity or inventing new plot events.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
 
 
 def build_context_analyzer_prompt(
@@ -3061,55 +2576,17 @@ def build_context_analyzer_prompt(
     what has already been established in prior chapters.
     Returns only the revised chapter text.
     """
-    prev_section = (
-        f"Previous chapter summaries (Chapters 1-{chapter_num-1}):\n{previous_summaries}\n\n"
-        if previous_summaries.strip()
-        else "This is Chapter 1 (first chapter).\n\n"
+    return render_prompt(
+        "context_analyzer",
+        title=title,
+        chapter_num=chapter_num,
+        previous_summaries=previous_summaries or "",
+        chapter_timeline_context=chapter_timeline_context or "",
+        chapter_technology_context=chapter_technology_context or "",
+        chapter_theme_context=chapter_theme_context or "",
+        gatekeeper_brief=gatekeeper_brief or "",
+        chapter_text=chapter_text,
     )
-    timeline_section = (
-        f"Master Timeline Builder guidance:\n{chapter_timeline_context}\n\n"
-        if chapter_timeline_context.strip()
-        else ""
-    )
-    technology_section = (
-        f"Technology Rules Designer guidance:\n{chapter_technology_context}\n\n"
-        if chapter_technology_context.strip()
-        else ""
-    )
-    theme_section = (
-        f"Theme Reinforcement Planner guidance:\n{chapter_theme_context}\n\n"
-        if chapter_theme_context.strip()
-        else ""
-    )
-    gatekeeper_section = (
-        f"Continuity Gatekeeper brief:\n{gatekeeper_brief}\n\n"
-        if gatekeeper_brief.strip()
-        else ""
-    )
-    return [
-        _build_system_prompt(
-            "You are a world-building consistency analyst. "
-            "You compare the current chapter against all previously established facts "
-            "(locations, character names, rules of the world, timeline) and correct "
-            "any contradictions. You do not change plot or style. "
-            "Return the full revised chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Working on Chapter {chapter_num}\n\n"
-                f"{prev_section}"
-                f"{timeline_section}"
-                f"{technology_section}"
-                f"{theme_section}"
-                f"{gatekeeper_section}"
-                "Identify and correct any world-building inconsistencies in this chapter "
-                "(wrong character names, contradicted geography, timeline errors, etc.).\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
 
 
 def build_synthesizer_prompt(
@@ -3123,28 +2600,7 @@ def build_synthesizer_prompt(
     scene, structure, theme) into a cohesive whole.
     Returns only the revised chapter text.
     """
-    return [
-        _build_system_prompt(
-            "You are a master novelist acting as a synthesizer. "
-            "Your task is to read a chapter that has been through multiple specialist passes "
-            "and unify it: smooth seams between revised passages, ensure a consistent "
-            "narrative voice, reinforce the thematic thread, and guarantee the chapter "
-            "reads as a single, coherent piece of literary fiction. "
-            "Do not add new plot events. Return the full synthesized chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' (Genre: {genre})\n"
-                f"Chapter {chapter_num}\n\n"
-                "Synthesize this chapter into a seamless whole. Unify voice, smooth "
-                "any jarring transitions between sections, and ensure the chapter "
-                "contributes meaningfully to the novel's theme.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt("synthesizer", title=title, genre=genre, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_quality_controller_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
@@ -3153,26 +2609,7 @@ def build_quality_controller_prompt(chapter_text: str, chapter_num: int, title: 
     and narrative flow, then applies targeted improvements.
     Returns only the revised chapter text.
     """
-    return [
-        _build_system_prompt(
-            "You are a senior quality controller for commercial and literary fiction. "
-            "You evaluate chapters on: reader engagement (does every paragraph earn its place?), "
-            "pacing (are slow passages dragging?), tension (is there always something at stake?), "
-            "and hook strength (does the chapter end on a compelling note?). "
-            "Apply targeted edits to raise quality. Do not rewrite entire sections unless "
-            "necessary. Return the full revised chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                "Evaluate and improve this chapter for engagement, pacing, tension, "
-                "and the strength of its opening and closing hooks.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt("quality_controller", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_num: int, title: str) -> list[dict]:
@@ -3180,23 +2617,13 @@ def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_
     Editing agent: refines draft for plot holes, pacing, and character
     consistency.  Returns only the revised chapter text.
     """
-    return [
-        _build_system_prompt(
-            "You are a professional fiction editor specialising in plot, pacing, and "
-            "character consistency. Your job is to refine, not rewrite wholesale."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                f"Chapter summary (what should happen):\n{chapter_summary}\n\n"
-                f"Chapter draft:\n{chapter_text}\n\n"
-                "Identify and fix: plot holes, pacing issues, character inconsistencies, "
-                "unclear motivations.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***"
-            ),
-        },
-    ]
+    return render_prompt(
+        "editing_agent",
+        title=title,
+        chapter_num=chapter_num,
+        chapter_summary=chapter_summary,
+        chapter_text=chapter_text,
+    )
 
 
 def build_narrative_redundancy_detector_prompt(
@@ -3211,37 +2638,14 @@ def build_narrative_redundancy_detector_prompt(
     sacrificial beats, and over-familiar scene logic so each chapter earns its
     place with distinct narrative movement. Returns only the revised chapter.
     """
-    previous_section = (
-        f"Previous chapter summaries for comparison:\n{previous_summaries}\n\n"
-        if previous_summaries.strip()
-        else "This is Chapter 1, so there are no prior chapters to compare.\n\n"
+    return render_prompt(
+        "narrative_redundancy_detector",
+        title=title,
+        chapter_num=chapter_num,
+        chapter_summary=chapter_summary,
+        previous_summaries=previous_summaries or "",
+        chapter_text=chapter_text,
     )
-    return [
-        _build_system_prompt(
-            "You are the Narrative Redundancy Detector for a novel manuscript. "
-            "Your task is to identify repeated operations, duplicated emotional beats, "
-            "recycled sacrifice patterns, or scenes that feel too similar to prior chapters. "
-            "Strengthen the chapter by collapsing repetition into fewer, sharper moments, "
-            "while preserving plot continuity, character logic, and required story events. "
-            "Do not invent major new plot events. Return the full revised chapter text only."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                f"Chapter summary (must remain aligned):\n{chapter_summary}\n\n"
-                f"{previous_section}"
-                "Review this chapter for narrative redundancy. Specifically look for:\n"
-                "- repeated operations that feel too similar to earlier chapters\n"
-                "- duplicate sacrifice, escape, interrogation, or infiltration beats\n"
-                "- scenes that restate an emotional point without escalating it\n"
-                "- sequences that can be compressed into fewer, stronger events\n\n"
-                "Revise the chapter so it remains coherent but more distinct, efficient, and forceful.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
 
 
 def build_operational_distinctiveness_prompt(
@@ -3256,42 +2660,14 @@ def build_operational_distinctiveness_prompt(
     differs in strategy, environment, and stakes from operations in prior chapters.
     Returns only the revised chapter text.
     """
-    previous_section = (
-        f"Previous chapter summaries for comparison:\n{previous_summaries}\n\n"
-        if previous_summaries.strip()
-        else "This is Chapter 1, so there are no prior chapters to compare.\n\n"
+    return render_prompt(
+        "operational_distinctiveness",
+        title=title,
+        chapter_num=chapter_num,
+        chapter_summary=chapter_summary,
+        previous_summaries=previous_summaries or "",
+        chapter_text=chapter_text,
     )
-    return [
-        _build_system_prompt(
-            "You are the Operational Distinctiveness Agent for a novel manuscript. "
-            "Your task is to ensure that each major operation—infiltration, interrogation, "
-            "extraction, sabotage, ambush, heist, or confrontation—differs meaningfully from "
-            "operations in prior chapters in terms of strategy, location, personnel, stakes, "
-            "and outcome. Where the current chapter repeats the same operational pattern as a "
-            "prior chapter (same approach, same failure mode, same power dynamic), revise the "
-            "operation so it introduces a novel tactical problem or escalated stakes. "
-            "Preserve all character relationships, plot outcomes, and continuity. "
-            "Do not invent entirely new plots. Return the full revised chapter text only."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                f"Chapter summary (must remain aligned):\n{chapter_summary}\n\n"
-                f"{previous_section}"
-                "Review this chapter for operational repetition. Specifically look for:\n"
-                "- operations that use the same strategic approach as a prior chapter\n"
-                "- confrontations that resolve through the same mechanism as before\n"
-                "- identical power dynamics (same side always holds all leverage)\n"
-                "- repeated failure modes or escape routes that mirror earlier chapters\n"
-                "- operations staged in the same environment with no new tactical element\n\n"
-                "Where such repetition exists, revise the operation to introduce a distinct "
-                "strategy, a different environmental challenge, or an escalated stakes dynamic.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
 
 
 def build_polish_agent_prompt(chapter_text: str, chapter_num: int, title: str, genre: str) -> list[dict]:
@@ -3299,23 +2675,7 @@ def build_polish_agent_prompt(chapter_text: str, chapter_num: int, title: str, g
     Polish agent: elevates grammar, style, and vivid language.
     Returns only the polished chapter text.
     """
-    return [
-        _build_system_prompt(
-            "You are a literary polisher. Elevate grammar, style, and language quality. "
-            "Ensure varied sentence structure and vivid prose. "
-            "Return only the polished chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' ({genre}) - Chapter {chapter_num}\n\n"
-                "Polish this chapter for grammar, style, and language quality. "
-                "Ensure varied sentence structure and vivid prose.\n\n"
-                "***CRITICAL: Return ONLY the complete polished chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt("polish_agent", title=title, genre=genre, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
@@ -3328,32 +2688,13 @@ def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str)
     phrases* listed in the prompt below are multi-word patterns that only make
     sense as inline prose instructions rather than a simple word list.
     """
-    forbidden = ", ".join(_FORBIDDEN_WORDS)
-    return [
-        _build_system_prompt(
-            "You are an anti-LLM specialist. Your only job is to make AI-generated "
-            "text sound genuinely human-written. Remove or replace: "
-            f"overused words ({forbidden}), "
-            "robotic transition phrases ('In conclusion', 'It is worth noting', "
-            "'As a result of this'), "
-            "unnecessary hedging, repetitive sentence openings, "
-            "unnatural summarising, and any phrasing that feels mechanical or generic. "
-            "Introduce subtle human imperfections: varied sentence length, "
-            "occasional fragments for emphasis, colloquial rhythms where appropriate. "
-            "Do NOT change plot, characters, or factual content. "
-            "Return the full revised chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                "Strip all LLM-sounding patterns from this chapter and make it read "
-                "as naturally human-written literary fiction.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt(
+        "anti_llm_agent",
+        title=title,
+        chapter_num=chapter_num,
+        chapter_text=chapter_text,
+        forbidden_words=", ".join(_FORBIDDEN_WORDS),
+    )
 
 
 def build_story_momentum_tracker_prompt(
@@ -3380,55 +2721,19 @@ def build_story_momentum_tracker_prompt(
     else:
         escalation_target = "push stakes to maximum – survival, identity, or irreversible loss"
 
-    previous_section = (
-        f"Previous chapter summaries (escalation baseline):\n{previous_summaries}\n\n"
-        if previous_summaries.strip()
-        else "This is Chapter 1 – establish the foundational threat and personal stakes.\n\n"
+    return render_prompt(
+        "story_momentum_tracker",
+        title=title,
+        chapter_num=chapter_num,
+        total_chapters=total_chapters,
+        escalation_target=escalation_target,
+        previous_summaries=previous_summaries or "",
+        chapter_text=chapter_text,
     )
-    return [
-        _build_system_prompt(
-            "You are the Story Momentum Tracker for a novel manuscript. "
-            "Your task is to confirm that the stakes, urgency, and narrative tension "
-            "in each chapter are greater than those in the chapters that preceded it. "
-            "Narrative momentum must escalate: each chapter must leave the protagonist "
-            "in a more difficult, more exposed, or more consequential position than before. "
-            "Where the current chapter's tone, stakes, or consequences feel flat, "
-            "repetitive, or lower than a prior chapter, revise the chapter to raise the "
-            "urgency, deepen the cost of failure, or sharpen the emotional stakes. "
-            "Do not invent entirely new plot directions. Return only the revised chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' – Chapter {chapter_num} of {total_chapters}\n"
-                f"Escalation target for this position: {escalation_target}\n\n"
-                f"{previous_section}"
-                "Evaluate this chapter for narrative momentum. Check for:\n"
-                "- stakes that feel equal to or lower than a prior chapter\n"
-                "- tension that resolves too comfortably without raising new pressure\n"
-                "- protagonist emerging without meaningful cost or new vulnerability\n"
-                "- emotional stakes that repeat without escalating\n"
-                "- missed opportunities to force harder choices or sharper consequences\n\n"
-                f"Revise the chapter so it meets the escalation target: {escalation_target}.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
 
 
 def build_chapter_summary_prompt(chapter_text: str, chapter_num: int) -> list[dict]:
-    return [
-        _build_system_prompt("You are a precise summariser of fiction."),
-        {
-            "role": "user",
-            "content": (
-                f"Write a 100-200 word summary of Chapter {chapter_num} for continuity tracking.\n\n"
-                "***CRITICAL: Return ONLY the summary text with NO introduction, NO chapter number header, NO explanation.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt("chapter_summary", chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_per_chapter_compression_check_prompt(
@@ -3443,35 +2748,13 @@ def build_per_chapter_compression_check_prompt(
     NEXT chapter to avoid repeating similar operations, emotional beats, or
     structural patterns.
     """
-    return [
-        _build_system_prompt(
-            "You are a Narrative Compression Analyst. After each chapter is written, "
-            "you compare it against all previous chapters to identify redundancy patterns. "
-            "Your output provides concise guidance for the NEXT chapter to ensure it does "
-            "not repeat operations, emotional beats, or structural patterns already used. "
-            "Be specific and actionable. Focus only on patterns that risk repetition."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}'\n\n"
-                f"=== PREVIOUS CHAPTER SUMMARIES ===\n{previous_summaries}\n\n"
-                f"=== JUST COMPLETED: CHAPTER {chapter_num} ===\n{chapter_summary}\n\n"
-                "Analyze the completed chapter against all previous chapters. Identify:\n"
-                "1. Operation types already used (infiltration, interrogation, chase, ambush, etc.) "
-                "that should NOT be repeated in the next chapter without significant variation\n"
-                "2. Emotional beats already delivered (betrayal reveal, sacrifice moment, "
-                "trust broken, hope restored) that should not repeat without escalation\n"
-                "3. Structural patterns (e.g., chapter ends on cliffhanger, opens with action) "
-                "that have been used recently and should be varied\n"
-                "4. Character dynamics already explored that need fresh angles\n\n"
-                "Return a brief (3-5 bullet points) guidance note for the NEXT chapter writer. "
-                "Each bullet should state what to AVOID repeating and suggest what to do INSTEAD.\n\n"
-                "If no significant redundancy risks exist, return: 'No compression concerns for next chapter.'\n\n"
-                "***CRITICAL: Return ONLY the guidance text with NO introduction, NO JSON, NO explanation.***"
-            ),
-        },
-    ]
+    return render_prompt(
+        "per_chapter_compression_check",
+        title=title,
+        chapter_num=chapter_num,
+        chapter_summary=chapter_summary,
+        previous_summaries=previous_summaries,
+    )
 
 
 def run_per_chapter_compression_check(
@@ -3516,35 +2799,14 @@ def build_character_state_updater_prompt(
     Gatekeeper before every subsequent chapter to prevent contradictions.
     Returns only the character state log text – not chapter prose.
     """
-    return [
-        _build_system_prompt(
-            "You are the Character State Updater for a novel manuscript. "
-            "After each chapter you record the definitive state of every named character. "
-            "Your output is a clinical, bullet-point log. It is not prose. "
-            "Format each entry as: CHARACTER NAME: <current_status> – <brief reason>. "
-            "Statuses: alive, injured, captured, escaped, deceased, missing, unconscious, "
-            "psychologically-broken, or recovered. "
-            "Include only characters who appear or are referenced in this chapter. "
-            "Be precise. Do not invent facts not supported by the chapter text."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' – Chapter {chapter_num}\n\n"
-                f"Character roster:\n{characters_text}\n\n"
-                f"Chapter summary:\n{chapter_summary}\n\n"
-                "Read the chapter below and record the definitive state of every named "
-                "character at the END of this chapter. Note any injuries, captures, "
-                "deaths, escapes, psychological shifts, or relationship changes that "
-                "occurred. Future chapters must not contradict these states.\n\n"
-                "Format each line as:\n"
-                "CHARACTER NAME: <status> – <one-sentence reason>\n\n"
-                "***CRITICAL: Return ONLY the character state log with NO introduction, "
-                "NO narrative prose, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
+    return render_prompt(
+        "character_state_updater",
+        title=title,
+        chapter_num=chapter_num,
+        characters_text=characters_text,
+        chapter_summary=chapter_summary,
+        chapter_text=chapter_text,
+    )
 
 
 def run_character_state_updater(
@@ -3592,74 +2854,22 @@ def build_chapter_revision_prompt(
     Revision prompt for incorporating editor instructions into an already-generated
     chapter before running the full agent pipeline again.
     """
-    architecture_section = (
-        f"Story Architecture Planner guidance:\n{chapter_architecture_context}\n\n"
-        if chapter_architecture_context.strip()
-        else ""
+    return render_prompt(
+        "chapter_revision",
+        title=title,
+        chapter_num=chapter_num,
+        chapter_outline_summary=chapter_outline_summary,
+        revision_instructions=revision_instructions,
+        chapter_architecture_context=chapter_architecture_context or "",
+        chapter_timeline_context=chapter_timeline_context or "",
+        chapter_fate_context=chapter_fate_context or "",
+        chapter_arc_context=chapter_arc_context or "",
+        chapter_antagonist_context=chapter_antagonist_context or "",
+        chapter_technology_context=chapter_technology_context or "",
+        chapter_theme_context=chapter_theme_context or "",
+        gatekeeper_brief=gatekeeper_brief or "",
+        chapter_text=chapter_text,
     )
-    timeline_section = (
-        f"Master Timeline Builder guidance:\n{chapter_timeline_context}\n\n"
-        if chapter_timeline_context.strip()
-        else ""
-    )
-    fate_section = (
-        f"Character Fate Registry guidance:\n{chapter_fate_context}\n\n"
-        if chapter_fate_context.strip()
-        else ""
-    )
-    arc_section = (
-        f"Character Arc Planner guidance:\n{chapter_arc_context}\n\n"
-        if chapter_arc_context.strip()
-        else ""
-    )
-    antagonist_section = (
-        f"Antagonist Motivation Architect guidance:\n{chapter_antagonist_context}\n\n"
-        if chapter_antagonist_context.strip()
-        else ""
-    )
-    technology_section = (
-        f"Technology Rules Designer guidance:\n{chapter_technology_context}\n\n"
-        if chapter_technology_context.strip()
-        else ""
-    )
-    theme_section = (
-        f"Theme Reinforcement Planner guidance:\n{chapter_theme_context}\n\n"
-        if chapter_theme_context.strip()
-        else ""
-    )
-    gatekeeper_section = (
-        f"Continuity Gatekeeper brief (HARD CONSTRAINTS – do not violate):\n{gatekeeper_brief}\n\n"
-        if gatekeeper_brief.strip()
-        else ""
-    )
-    return [
-        _build_system_prompt(
-            "You are a senior developmental editor revising an existing chapter. "
-            "Apply requested changes precisely while preserving coherence, voice, "
-            "and continuity with the larger novel. Return the full revised chapter text only."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' - Chapter {chapter_num}\n\n"
-                f"Chapter outline summary (must remain aligned):\n{chapter_outline_summary}\n\n"
-                f"{architecture_section}"
-                f"{timeline_section}"
-                f"{fate_section}"
-                f"{arc_section}"
-                f"{antagonist_section}"
-                f"{technology_section}"
-                f"{theme_section}"
-                f"{gatekeeper_section}"
-                f"Editor instructions to weave into this chapter:\n{revision_instructions}\n\n"
-                "Revise the chapter to incorporate these instructions naturally into plot, "
-                "character behavior, scene flow, and prose. Keep what already works; only "
-                "change what is necessary to satisfy the instructions.\n\n"
-                "***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***\n\n"
-                f"{chapter_text}"
-            ),
-        },
-    ]
 
 
 def build_consistency_pass_prompt(
@@ -3668,24 +2878,12 @@ def build_consistency_pass_prompt(
     summaries_text = "\n\n".join(
         f"Chapter {i+1}:\n{s}" for i, s in enumerate(all_summaries)
     )
-    return [
-        _build_system_prompt(
-            "You are a senior editor reviewing the full arc of a novel for consistency."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel title: {title}\n\n"
-                f"Chapter summaries:\n{summaries_text}\n\n"
-                "Review for: plot holes, character arc completion, unresolved threads, "
-                "world-building inconsistencies, thematic payoff.\n"
-                f"Special instructions: {special_instructions}\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"issues": ["..."], "overall_assessment": "..."}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "consistency_pass",
+        title=title,
+        summaries_text=summaries_text,
+        special_instructions=special_instructions,
+    )
 
 
 def build_global_continuity_auditor_prompt(
@@ -3741,49 +2939,14 @@ def build_global_continuity_auditor_prompt(
         "\n".join(registry_lines) if registry_lines else "No fate registry available."
     )
 
-    return [
-        _build_system_prompt(
-            "You are the Global Continuity Auditor for a completed novel manuscript. "
-            "Your task is to cross-reference all chapter summaries, the live character "
-            "state log, the master timeline ledger, and the character fate registry to "
-            "identify every factual contradiction in the manuscript. "
-            "A contradiction is any case where: a character is alive after a confirmed "
-            "death; an event is reversed without explanation; a character is in two "
-            "locations simultaneously; a rescue contradicts a still-active capture; "
-            "a technology rule is violated; or a stated outcome is repeated or undone. "
-            "For each contradiction, record the chapter numbers involved, the nature of "
-            "the conflict, and a suggested resolution. Be exhaustive and precise. "
-            "Return only a valid JSON audit report."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}'\n\n"
-                f"=== CHAPTER SUMMARIES ===\n{summaries_text}\n\n"
-                f"=== CHARACTER STATE LOG (post-chapter updates) ===\n{state_log_text}\n\n"
-                f"=== MASTER TIMELINE LEDGER ===\n{timeline_text}\n\n"
-                f"=== CHARACTER FATE REGISTRY ===\n{registry_text}\n\n"
-                "Audit the full manuscript for continuity contradictions. "
-                "Check specifically for:\n"
-                "- characters alive after a recorded death\n"
-                "- rescues or escapes that contradict an active capture state\n"
-                "- the same event staged twice (duplicate operations or scenes)\n"
-                "- characters in contradictory locations across consecutive chapters\n"
-                "- an outcome that was locked by the fate registry but not honoured\n"
-                "- timeline events that appear out of chronological order\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown, "
-                "NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"contradictions": [{"chapters": [1, 3], "description": "...", '
-                '"suggested_resolution": "..."}], '
-                '"character_state_errors": ["..."], '
-                '"timeline_errors": ["..."], '
-                '"location_errors": ["..."], '
-                '"overall_integrity": "high|medium|low", '
-                '"overall_assessment": "="}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "global_continuity_auditor",
+        title=title,
+        summaries_text=summaries_text,
+        state_log_text=state_log_text,
+        timeline_text=timeline_text,
+        registry_text=registry_text,
+    )
 
 
 def build_narrative_compression_editor_prompt(
@@ -3818,50 +2981,12 @@ def build_narrative_compression_editor_prompt(
                     + "\n"
                 )
 
-    return [
-        _build_system_prompt(
-            "You are the Narrative Compression Editor for a completed novel manuscript. "
-            "Your task is to read all chapter summaries and identify sequences that are "
-            "repetitive, redundant, or structurally weaker than they could be. "
-            "You are looking for patterns across the full manuscript: operations that use "
-            "the same method twice, sacrificial moments that occur more than once without "
-            "escalation, emotional beats that repeat without deepening, and scenes whose "
-            "purpose is already served by an earlier chapter. "
-            "You do NOT rewrite chapters. You return a precise, actionable JSON report "
-            "identifying which chapters contain redundant sequences and what consolidation "
-            "would produce a stronger narrative. Be specific about chapter numbers."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}'\n\n"
-                f"=== CHAPTER SUMMARIES ===\n{summaries_text}\n"
-                f"{audit_section}\n"
-                "Analyse the full manuscript for narrative compression opportunities. "
-                "Look specifically for:\n"
-                "- the same type of operation (infiltration, interrogation, extraction, "
-                "ambush) appearing more than once with no meaningful change in method or stakes\n"
-                "- a sacrifice or betrayal beat that occurs multiple times without escalation\n"
-                "- two or more chapters that deliver the same emotional revelation "
-                "(e.g. protagonist doubts loyalty twice before the midpoint)\n"
-                "- a setup chapter whose purpose is rendered redundant by a later chapter\n"
-                "- any sequence of two consecutive chapters where neither advances "
-                "plot, stakes, or character state\n\n"
-                "For each identified redundancy, specify which chapters are involved, "
-                "describe the repetition precisely, and recommend how the sequence "
-                "should be consolidated or cut.\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown, "
-                "NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"redundant_sequences": [{"chapters": [1, 4], '
-                '"pattern": "...", "recommendation": "..."}], '
-                '"emotional_beat_repetitions": [{"chapters": [2, 6], '
-                '"beat": "...", "recommendation": "..."}], '
-                '"compression_priority": "high|medium|low", '
-                '"overall_assessment": "..."}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "narrative_compression_editor",
+        title=title,
+        summaries_text=summaries_text,
+        audit_section=audit_section,
+    )
 
 
 def build_character_resolution_validator_prompt(
@@ -3919,47 +3044,14 @@ def build_character_resolution_validator_prompt(
         else "No character state log available."
     )
 
-    return [
-        _build_system_prompt(
-            "You are the Character Resolution Validator for a completed novel manuscript. "
-            "Your task is to confirm that every major character receives clear, deliberate "
-            "narrative closure by the end of the manuscript. Closure does not require a happy "
-            "ending – death, exile, transformation, and open-but-intentional ambiguity all "
-            "qualify as closure. What does NOT qualify is a character who disappears, is "
-            "forgotten without comment, or whose arc trajectory is simply never completed. "
-            "Cross-reference the character arc plan (which specifies each character's "
-            "intended start state, midpoint, crisis, and final moral choice) against the "
-            "chapter summaries and the live character state log. For each major character, "
-            "report whether their arc concludes, whether the required outcome was honoured, "
-            "and flag any character whose arc is incomplete or whose final state is unknown."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}'\n\n"
-                f"=== CHARACTER ARC PLAN ===\n{arc_text}\n\n"
-                f"=== CHARACTER FATE REGISTRY ===\n{registry_text}\n\n"
-                f"=== CHARACTER STATE LOG (final states) ===\n{state_log_text}\n\n"
-                f"=== CHAPTER SUMMARIES ===\n{summaries_text}\n\n"
-                "For each major character, confirm:\n"
-                "- Did their arc reach its planned final moral choice or an intentional variation?\n"
-                "- Was their required definitive outcome honoured?\n"
-                "- Is their final state (alive, dead, captured, escaped, transformed) "
-                "clearly established in the last chapters they appear in?\n"
-                "- Did they simply disappear without closure?\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown, "
-                "NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"character_resolutions": [{"character": "...", '
-                '"arc_complete": true, "outcome_honoured": true, '
-                '"final_state_clear": true, "closure_type": "death|survival|transformation|exile|open|missing", '
-                '"notes": "..."}], '
-                '"unresolved_characters": ["..."], '
-                '"resolution_integrity": "high|medium|low", '
-                '"overall_assessment": "..."}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "character_resolution_validator",
+        title=title,
+        arc_text=arc_text,
+        registry_text=registry_text,
+        state_log_text=state_log_text,
+        summaries_text=summaries_text,
+    )
 
 
 def build_thematic_payoff_analyzer_prompt(
@@ -4008,46 +3100,14 @@ def build_thematic_payoff_analyzer_prompt(
 
     final_quarter_start = max(1, round(total_chapters * 0.75))
 
-    return [
-        _build_system_prompt(
-            "You are the Thematic Payoff Analyzer for a completed novel manuscript. "
-            "Your task is to verify that every major thematic pillar established in the "
-            "Theme Reinforcement Plan receives a meaningful culmination in the final "
-            "quarter of the manuscript. A theme that appears in early chapters must echo, "
-            "deepen, or resolve in the final chapters – it cannot simply stop appearing. "
-            "Read all chapter summaries and cross-reference each theme's planned chapter "
-            "appearances against what actually occurs. Flag themes that peak too early, "
-            "themes that are introduced but never returned to, and themes whose final-act "
-            "expression is absent or superficial. Return a JSON audit report."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' ({total_chapters} chapters)\n"
-                f"Final quarter begins at Chapter {final_quarter_start}.\n\n"
-                f"=== THEME REINFORCEMENT PLAN ===\n{theme_text}\n\n"
-                f"=== CHAPTER SUMMARIES ===\n{summaries_text}\n\n"
-                "For each major theme, assess:\n"
-                "- Is the theme present in the final quarter of the manuscript?\n"
-                "- Does it receive a culminating moment (resolution, inversion, or "
-                "deliberate ambiguity) rather than simply stopping?\n"
-                "- Was the theme introduced strongly but then abandoned before the climax?\n"
-                "- Did the theme appear only superficially in the climax chapters "
-                "without earning its narrative weight?\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown, "
-                "NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"theme_payoffs": [{"theme": "...", '
-                '"introduced": true, "present_in_final_quarter": true, '
-                '"culminates": true, "culmination_type": "resolution|inversion|ambiguity|absent", '
-                '"notes": "..."}], '
-                '"abandoned_themes": ["..."], '
-                '"weak_payoffs": ["..."], '
-                '"thematic_integrity": "high|medium|low", '
-                '"overall_assessment": "..."}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "thematic_payoff_analyzer",
+        title=title,
+        total_chapters=total_chapters,
+        final_quarter_start=final_quarter_start,
+        theme_text=theme_text,
+        summaries_text=summaries_text,
+    )
 
 
 def build_climax_integrity_checker_prompt(
@@ -4091,55 +3151,14 @@ def build_climax_integrity_checker_prompt(
 
     climax_start = max(1, round(total_chapters * 0.85))
 
-    return [
-        _build_system_prompt(
-            "You are the Climax Integrity Checker for a completed novel manuscript. "
-            "Your task is to verify that the protagonist makes a definitive, "
-            "active, and morally meaningful final decision in the climax that "
-            "genuinely resolves their character arc. "
-            "A climax fails integrity if the protagonist is passive (things happen "
-            "to them rather than through them), if the resolution is purely physical "
-            "without a moral dimension, if the protagonist is saved by another "
-            "character without making their own decisive choice, or if the decision "
-            "made in the climax does not connect to the arc trajectory established "
-            "in the opening chapters. "
-            "Read the final chapters and the arc plan. Report whether the climax "
-            "contains a clear protagonist decision, whether that decision resolves "
-            "the planned final moral choice, and flag any integrity failures. "
-            "Return a JSON report."
-        ),
-        {
-            "role": "user",
-            "content": (
-                f"Novel: '{title}' ({total_chapters} chapters)\n"
-                f"Climax region: Chapters {climax_start}-{total_chapters}.\n\n"
-                f"=== PROTAGONIST ARC PLAN ===\n{arc_text}\n\n"
-                f"=== CHAPTER SUMMARIES ===\n{summaries_text}\n\n"
-                "Evaluate the climax for integrity. Check:\n"
-                "- Does the protagonist make an active, deliberate decision in the "
-                "climax (not just react or survive)?\n"
-                "- Does that decision carry a genuine moral dimension or cost?\n"
-                "- Does it connect to and resolve the planned final moral choice "
-                "from their arc?\n"
-                "- Is the protagonist the agent of their own resolution, or are they "
-                "rescued or resolved by external forces?\n"
-                "- Does the climax feel earned by the arc trajectory, or does it "
-                "arrive without sufficient character preparation?\n\n"
-                "***CRITICAL: Return ONLY a valid JSON object with NO markdown, "
-                "NO introduction, NO explanation.***\n"
-                "Required structure:\n"
-                '{"climax_decision_present": true, '
-                '"decision_is_active": true, '
-                '"moral_dimension_present": true, '
-                '"arc_resolved": true, '
-                '"protagonist_is_agent": true, '
-                '"climax_chapter": 8, '
-                '"integrity_failures": ["..."], '
-                '"climax_integrity": "high|medium|low", '
-                '"overall_assessment": "..."}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "climax_integrity_checker",
+        title=title,
+        total_chapters=total_chapters,
+        climax_start=climax_start,
+        arc_text=arc_text,
+        summaries_text=summaries_text,
+    )
 
 
 def build_loose_thread_resolver_prompt(
@@ -4192,55 +3211,14 @@ def build_loose_thread_resolver_prompt(
         else "No unresolved characters flagged."
     )
 
-    return [
-        {
-            "role": "system",
-            "content": (
-                "You are the Loose Thread Resolver, a specialist narrative editor. "
-                "Your task is to audit a completed novel manuscript for every "
-                "unresolved narrative question, abandoned subplot, foreshadowing that "
-                "never paid off, and unkept story promise. For each thread you identify, "
-                "classify it and recommend a corrective action. "
-                "Respond ONLY with a valid JSON object."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f'Novel title: "{title}"\n\n'
-                "=== CHAPTER SUMMARIES ===\n"
-                f"{summaries_block}\n\n"
-                "=== CHARACTER STATE LOG ===\n"
-                f"{state_block}\n\n"
-                "=== CONTINUITY AUDIT FLAGS ===\n"
-                f"{audit_block}\n\n"
-                "=== UNRESOLVED CHARACTERS (from Character Resolution Validator) ===\n"
-                f"{unresolved_block}\n\n"
-                "Task:\n"
-                "Return a JSON object with this exact schema:\n"
-                '{\n'
-                '  "unresolved_threads": [\n'
-                '    {\n'
-                '      "thread": "<brief description>",\n'
-                '      "introduced_chapter": <int>,\n'
-                '      "last_referenced_chapter": <int>,\n'
-                '      "status": "open|dangling|intentionally_open",\n'
-                '      "recommendation": "<actionable fix or note>"\n'
-                '    }\n'
-                '  ],\n'
-                '  "dangling_setup_elements": ["<list of foreshadowing or setups that never paid off>"],\n'
-                '  "intentionally_open_threads": ["<list of deliberate ambiguities or sequel hooks>"],\n'
-                '  "thread_integrity": "high|medium|low",\n'
-                '  "overall_assessment": "<one-paragraph narrative summary>"\n'
-                '}\n\n'
-                "Example of a thread entry:\n"
-                '{"thread": "The stolen locket subplot", "introduced_chapter": 3, '
-                '"last_referenced_chapter": 6, "status": "dangling", '
-                '"recommendation": "Either resolve the locket\'s significance in the final act or '
-                'remove the setup from chapter 3."}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "loose_thread_resolver",
+        title=title,
+        summaries_block=summaries_block,
+        state_block=state_block,
+        audit_block=audit_block,
+        unresolved_block=unresolved_block,
+    )
 
 
 def build_reader_immersion_tester_prompt(
@@ -4279,50 +3257,13 @@ def build_reader_immersion_tester_prompt(
                 theme_lines.append(f"- {item}")
     theme_block = "\n".join(theme_lines) if theme_lines else "No thematic payoff data available."
 
-    return [
-        {
-            "role": "system",
-            "content": (
-                "You are the Reader Immersion Tester, a senior developmental editor who reads "
-                "manuscripts purely from a reader's perspective. Your job is to evaluate pacing, "
-                "tension, clarity of stakes, and engagement across every chapter. You identify "
-                "chapters that drag, confuse, or break immersion, and you rate the manuscript's "
-                "overall readability. Respond ONLY with a valid JSON object."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f'Novel title: "{title}"\n\n'
-                "=== CHAPTER SUMMARIES ===\n"
-                f"{summaries_block}\n\n"
-                "=== CHARACTER ARC OVERVIEW ===\n"
-                f"{arc_block}\n\n"
-                "=== THEMATIC PAYOFF STATUS ===\n"
-                f"{theme_block}\n\n"
-                "Task:\n"
-                "Evaluate the manuscript as a reader and return a JSON object with this exact schema:\n"
-                '{\n'
-                '  "pacing_assessment": "fast|varied|slow|uneven",\n'
-                '  "tension_curve": "escalating|flat|erratic|peaks_then_drops",\n'
-                '  "stakes_clarity": "high|medium|low",\n'
-                '  "engagement_score": <1-10 integer>,\n'
-                '  "weak_chapters": [\n'
-                '    {"chapter": <int>, "issue": "<brief description of pacing or clarity problem>"}\n'
-                '  ],\n'
-                '  "immersion_breaks": [\n'
-                '    {"chapter": <int>, "description": "<what breaks immersion and why>"}\n'
-                '  ],\n'
-                '  "reader_experience_highlights": ["<moments of strong engagement or emotion>"],\n'
-                '  "overall_rating": "excellent|good|needs_work|poor",\n'
-                '  "recommendations": ["<actionable improvement for the revision pass>"]\n'
-                '}\n\n'
-                "Example weak_chapters entry:\n"
-                '{"chapter": 4, "issue": "Extended exposition slows momentum after the chapter 3 '
-                'action sequence, losing reader interest."}'
-            ),
-        },
-    ]
+    return render_prompt(
+        "reader_immersion_tester",
+        title=title,
+        summaries_block=summaries_block,
+        arc_block=arc_block,
+        theme_block=theme_block,
+    )
 
 
 # ---------------------------------------------------------------------------
