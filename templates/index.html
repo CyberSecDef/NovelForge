@@ -382,17 +382,51 @@
                     </div>
                   </div>
 
-                  <button class="btn btn-success btn-lg me-2" id="btn-export">
-                    <span class="spinner-border spinner-border-sm d-none me-2" id="export-spinner"></span>
-                    <i class="bi bi-download me-2"></i>Download as Markdown
-                  </button>
-                  <button class="btn btn-outline-success btn-lg me-2" id="btn-export-editors-notes">
-                    <span class="spinner-border spinner-border-sm d-none me-2" id="export-editors-notes-spinner"></span>
-                    <i class="bi bi-clipboard-check me-2"></i>Download Editor's Notes
-                  </button>
-                  <button class="btn btn-outline-secondary btn-lg" id="btn-start-over">
-                    <i class="bi bi-arrow-counterclockwise me-2"></i>Start Over
-                  </button>
+                  <div class="mb-3">
+                    <h6 class="text-muted mb-2">Export Manuscript</h6>
+                    <div class="btn-group-vertical d-flex flex-wrap flex-sm-row gap-2" role="group">
+                      <button class="btn btn-success btn-export-variant" data-variant="clean">
+                        <span class="spinner-border spinner-border-sm d-none me-2 export-spinner"></span>
+                        <i class="bi bi-file-earmark-text me-1"></i>Clean Manuscript
+                      </button>
+                      <button class="btn btn-outline-success btn-export-variant" data-variant="annotated">
+                        <span class="spinner-border spinner-border-sm d-none me-2 export-spinner"></span>
+                        <i class="bi bi-chat-square-text me-1"></i>With Inline Notes
+                      </button>
+                      <button class="btn btn-outline-success btn-export-variant" data-variant="publishing">
+                        <span class="spinner-border spinner-border-sm d-none me-2 export-spinner"></span>
+                        <i class="bi bi-book me-1"></i>Publishing-Ready
+                      </button>
+                      <button class="btn btn-outline-success btn-export-variant" data-variant="critique">
+                        <span class="spinner-border spinner-border-sm d-none me-2 export-spinner"></span>
+                        <i class="bi bi-bar-chart-line me-1"></i>Critique Copy
+                      </button>
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <div class="btn-group gap-2" role="group">
+                      <button class="btn btn-outline-info" id="btn-export-editors-notes">
+                        <span class="spinner-border spinner-border-sm d-none me-2" id="export-editors-notes-spinner"></span>
+                        <i class="bi bi-clipboard-check me-1"></i>Download Editor's Notes
+                      </button>
+                      <button class="btn btn-outline-secondary" id="btn-start-over">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Start Over
+                      </button>
+                    </div>
+                  </div>
+                  <div class="mb-3">
+                    <h6 class="text-muted mb-2">Illustrations</h6>
+                    <button class="btn btn-outline-primary" id="btn-generate-illustrations">
+                      <span class="spinner-border spinner-border-sm d-none me-2" id="illustrations-spinner"></span>
+                      <i class="bi bi-palette me-1"></i>Generate Cover &amp; Chapter Illustrations
+                    </button>
+                    <small class="text-muted d-block mt-1">Generates 5–10 images from key scenes (requires IMAGE_API_KEY)</small>
+                  </div>
+
+                  <!-- Illustration gallery -->
+                  <div class="row g-3 mt-2 d-none" id="illustrations-gallery">
+                    <!-- Populated by JS -->
+                  </div>
 
                   <!-- Preview accordion -->
                   <div class="accordion mt-4 text-start" id="chapters-preview-accordion">

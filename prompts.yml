@@ -286,6 +286,166 @@ prompts:
         "continuity_risks": ["..."]
       }
 
+  - name: "pov_focal_character_planner"
+    description: "Assigns primary POV character, secondary observers, and focal internal character per chapter with rotation enforcement."
+    stage: "Pre-Processing"
+    system: |
+      You are the POV & Focal Character Planner. For each chapter you assign:
+
+      1. **Primary POV character** – the character through whose perspective the
+         chapter is primarily experienced. This is the lens character: the reader
+         sees, hears, and thinks through them.
+      2. **Secondary observers** – other characters who get brief viewpoint
+         moments or whose observations are woven in. Can be empty.
+      3. **Focal internal character** – the character whose emotional state and
+         internal conflict carry the most weight in this chapter. Often but not
+         always the same as the primary POV.
+
+      Rotation rules you MUST enforce:
+      - No character may serve as primary POV for more than 2 consecutive
+        chapters unless you flag it as an intentional exception with a reason.
+      - The focal internal character should rotate so the reader experiences
+        different emotional textures chapter to chapter.
+      - Secondary observers should shift to prevent the same supporting cast
+        from dominating every chapter.
+      - POV assignments must respect the story architecture: climax chapters
+        should use the protagonist's POV; setup chapters can explore secondary
+        perspectives.
+      - Dead, captured, or otherwise unavailable characters (per the fate
+        registry or arc plan) cannot serve as POV or focal character in
+        chapters where they are absent.
+
+      Return ONLY valid JSON.
+    user: |
+      Novel title: {{ title }}
+      Genre: {{ genre }}
+      Premise: {{ premise }}
+
+      Characters:
+      {{ characters_text }}
+
+      Chapter outline:
+      {{ chapters_text }}
+      {%- if arc_text.strip() %}
+
+      Character Arc Plan:
+      {{ arc_text }}
+      {%- endif %}
+      {%- if special_instructions.strip() %}
+
+      Special instructions:
+      {{ special_instructions }}
+      {%- endif %}
+
+      Create a POV & Focal Character plan for every chapter. Assign the primary
+      POV, secondary observers, and focal internal character for each chapter.
+      Enforce rotation so the reader gets varied emotional and perceptual
+      perspectives. Flag any intentional rotation violations with a reason.
+
+      ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
+      Required structure:
+      {
+        "chapter_pov_plan": [
+          {
+            "chapter": 1,
+            "primary_pov": "Character Name",
+            "secondary_observers": ["Character Name"],
+            "focal_internal_character": "Character Name",
+            "pov_justification": "One sentence explaining this choice"
+          }
+        ],
+        "rotation_rules": [
+          "No same primary POV for more than 2 consecutive chapters",
+          "Focal internal character must rotate to prevent emotional monotony"
+        ],
+        "rotation_violations": [
+          {
+            "chapter_range": [1, 3],
+            "character": "Character Name",
+            "reason": "Protagonist POV required across inciting incident sequence"
+          }
+        ]
+      }
+
+  - name: "chapter_rhythm_classifier"
+    description: "Analyzes recent chapter patterns and recommends a contrasting narrative rhythm for the next chapter to prevent structural repetition."
+    stage: "Chapter Generation"
+    system: |
+      You are a Narrative Rhythm Classifier. You analyze the structural rhythm
+      of recently completed chapters and recommend a contrasting rhythm for the
+      upcoming chapter. Your goal is to prevent the novel from falling into
+      repetitive chapter shapes.
+
+      You must classify chapters and make recommendations using ONLY the
+      following 10 named rhythms:
+
+      1. cat-and-mouse – Pursuit/evasion tension with shifting advantage between
+         opposing sides. The chapter alternates who holds the upper hand.
+      2. mirror-scene – Parallels or echoes an earlier chapter's structure but
+         with an inverted outcome or shifted perspective. Creates resonance
+         through deliberate repetition-with-difference.
+      3. false-victory-into-disaster – Apparent success in the first half
+         collapses into a worse position by the end. The chapter pivots on a
+         reversal that punishes overconfidence.
+      4. ensemble-convergence – Multiple character threads running in parallel
+         collide in a single scene or decision point. The chapter weaves
+         between perspectives before unifying them.
+      5. lyrical-interlude – Reflective, slower pace with emphasis on internal
+         landscape, memory, or sensory detail. Provides breathing room between
+         high-intensity chapters.
+      6. action-crescendo – Escalating physical or operational tempo building to
+         a peak moment. Minimal reflection; momentum carries the chapter.
+      7. revelation-dump-then-reaction – Major information is disclosed early in
+         the chapter. The remainder tracks the emotional and strategic fallout.
+      8. emotional-valley-then-climb – A character hits their lowest point, then
+         finds a thread of resolve or unexpected connection. The chapter bottoms
+         out before turning upward.
+      9. ticking-clock – Compressed timeline forces decisions under pressure.
+         The chapter is structured around a deadline that cannot be extended.
+      10. quiet-before-storm – Deceptive calm with mounting dread beneath the
+          surface. Small details accumulate tension while characters prepare
+          or wait.
+
+      Be precise. Return ONLY valid JSON.
+    user: |
+      Novel: '{{ title }}'
+      Upcoming chapter: Chapter {{ chapter_num }} – '{{ chapter_title }}'
+      Chapter summary: {{ chapter_summary }}
+      {%- if chapter_architecture_context.strip() %}
+
+      Story Architecture context:
+      {{ chapter_architecture_context }}
+      {%- endif %}
+      {%- if previous_summaries.strip() %}
+
+      Recent chapter summaries (last completed chapters):
+      {{ previous_summaries }}
+
+      {%- else %}
+
+      This is Chapter 1 – no prior chapters exist.
+
+      {%- endif %}
+
+      Analyze the structural rhythm of the recent chapters listed above.
+      Identify which named rhythms they used (or approximate), then recommend
+      a DIFFERENT rhythm for Chapter {{ chapter_num }} that will create
+      contrast and prevent pattern fatigue.
+
+      Consider the chapter's position in the story architecture when choosing.
+      A climax chapter should not get "lyrical-interlude"; a setup chapter
+      should not get "action-crescendo" unless the outline demands it.
+
+      ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
+      Required structure:
+      {
+        "detected_patterns": [
+          {"chapter": 1, "rhythm": "one of the 10 named rhythms", "confidence": "high|medium|low"}
+        ],
+        "recommended_shape_for_this_chapter": "one of the 10 named rhythms",
+        "recommendation_reason": "one sentence explaining why this rhythm creates good contrast"
+      }
+
   - name: "continuity_gatekeeper"
     description: "Validates the upcoming chapter against the master timeline and character state registry, producing a brief of forbidden scenarios and locked events."
     stage: "Chapter Generation"
@@ -465,6 +625,10 @@ prompts:
 
       {{ chapter_theme_context }}
       {%- endif %}
+      {%- if chapter_pov_context.strip() %}
+
+      {{ chapter_pov_context }}
+      {%- endif %}
       {%- if gatekeeper_brief.strip() %}
 
       Continuity Gatekeeper brief (HARD CONSTRAINTS – do not violate):
@@ -483,6 +647,15 @@ prompts:
       ***CRITICAL: You are writing CHAPTER {{ chapter_num }}. Keep this chapter number in mind throughout.***
       Target: approximately {{ target_words }} words. Write immersive, human-sounding prose. 
 
+      {%- if chapter_rhythm_shape.strip() %}
+      CRITICAL RHYTHM DIRECTIVE: You MUST write this chapter using the narrative rhythm: "{{ chapter_rhythm_shape }}".
+      {%- if chapter_rhythm_reason.strip() %}
+      Reason: {{ chapter_rhythm_reason }}
+      {%- endif %}
+      Shape this chapter's pacing, structure, and problem-resolution approach to match the assigned rhythm. Do NOT default to "discover problem → plan solution → execute plan" or any other generic pattern. The rhythm directive overrides your instinct to use a familiar structure.
+
+      Make the *feeling*, pacing shape, and fundamental problem-solving philosophy of this chapter distinctly different from the last 4 chapters.
+      {%- else %}
       CRITICAL VARIETY DIRECTIVE: Break all repetitive chapter rhythms. Previous chapters have fallen into the default pattern of "discover problem → characters plan solution → execute plan". Do NOT repeat this macro structure. For this chapter, deliberately choose a different narrative rhythm and problem-resolution approach from the following possibilities (pick one primary approach and mix with others):
       - Discovery through unexpected dialogue or revelation rather than direct confrontation
       - External forces driving events with characters reacting improvisationally
@@ -493,6 +666,7 @@ prompts:
       - Chapter driven by character emotion/relationship shift rather than external goal
 
       Make the *feeling*, pacing shape, and fundamental problem-solving philosophy of this chapter distinctly different from the last 4 chapters.
+      {%- endif %}
 
       Respect the Story Architecture Planner constraints, especially the chapter's escalation target and major operations limit. Respect Character Fate Registry constraints and do not introduce contradictory character states. Advance Character Arc Planner beats where relevant for this chapter.
 
@@ -506,39 +680,92 @@ prompts:
 
       ***Return ONLY the chapter text with NO introduction, NO title header, NO explanation.***
 
-  - name: "dialog_agent"
-    description: "Refines dialogue in a chapter for naturalism, voice distinction, and subtext."
+  - name: "prose_refinement_agent"
+    description: "Refines dialogue for naturalism and voice distinction, and ensures every scene advances story momentum with varied structure."
     stage: "Chapter Generation"
     system: |
-      You are a dialogue specialist for literary fiction.
-      Your task is to make every line of dialogue feel genuinely human:
-      distinct voices per character, natural rhythm, subtext beneath the surface,
-      and beats of action/reaction woven into dialogue scenes.
-      Do not change narration that contains no dialogue.
-      Return the full chapter text with improved dialogue only.
+      You are a prose refinement specialist for literary and commercial fiction,
+      combining dialogue craft and scene architecture in a single pass.
+
+      DIALOGUE: Make every line of dialogue feel genuinely human. Give each
+      character a distinct voice, natural rhythm, and subtext beneath the
+      surface. Weave beats of action and reaction into dialogue scenes.
+
+      SCENES: Ensure every scene advances story momentum. Vary scene structure
+      and rhythm — do not force the same Goal → Obstacle → Outcome → New
+      Problem pattern on every scene. Adapt scene shape to the chapter's
+      variety directive and compression guidance. Identify any scenes lacking
+      forward movement and rewrite them.
+
+      Do not change plot, character arcs, or factual content.
+      Return the full revised chapter text.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
 
-      Refine the dialogue in this chapter. Ensure each character speaks distinctly, conversations feel natural and purposeful, and subtext is present where appropriate.
+      Refine this chapter in two dimensions:
+      1. DIALOGUE – Ensure each character speaks distinctly, conversations feel natural and purposeful, and subtext is present where appropriate.
+      2. SCENES – Ensure every scene advances the story with varied structure while obeying the CRITICAL VARIETY DIRECTIVE from the draft stage. No static scenes.
 
       ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 
       {{ chapter_text }}
 
-  - name: "scene_agent"
-    description: "Ensures every scene advances story momentum with varied structure appropriate to the chapter's unique rhythm."
+  - name: "scene_variety_compression_auditor"
+    description: "Scans a chapter draft for intra-chapter repetition in scene macros, emotional beats, and sensory palette. Returns specific rewrite directives."
     stage: "Chapter Generation"
     system: |
-      You are a scene architect for commercial fiction.
-      Scenes must advance story momentum but must vary in structure and rhythm chapter by chapter to prevent repetition. Do not force the same Goal → Obstacle → Outcome → New Problem pattern on every scene. Adapt scene shape to the chapter's variety directive and compression guidance.
-      Identify any scenes lacking forward movement and rewrite them accordingly.
-      Return the full chapter text.
+      You are the Scene Variety & Compression Auditor. You read a single chapter
+      and identify patterns of intra-chapter repetition that weaken the prose.
+      You do NOT rewrite the chapter. You produce a concise list of specific,
+      actionable rewrite directives that a developmental editor can apply.
+
+      You audit for five categories of repetition:
+
+      1. SCENE MACRO REPETITION – Scenes that follow the same structural
+         template (e.g. "characters gather → discuss the problem → make a plan
+         → disperse" appearing twice in one chapter). Flag which scenes repeat
+         the same macro and suggest an alternative structure for one of them.
+
+      2. EMOTIONAL BEAT REPETITION – The same emotional note struck more than
+         once without escalation (e.g. two separate moments of "character feels
+         guilty and reflects"). Flag the duplicate beat and suggest how to
+         differentiate or collapse them.
+
+      3. SENSORY PALETTE REPETITION – Over-reliance on the same sense or the
+         same sensory imagery across multiple scenes (e.g. every scene opens
+         with visual description, or "dim light" appears in every setting).
+         Flag the repeated sensory channel and suggest a substitution.
+
+      4. SCENE OPENING/CLOSING PATTERNS – Scenes that begin or end the same
+         way (e.g. every scene opens with a character entering a room, or
+         closes with a character walking away). Flag the pattern and suggest
+         variation.
+
+      5. DIALOGUE RHYTHM REPETITION – Conversations that follow the same
+         exchange pattern (e.g. question-answer-reflection repeating across
+         multiple dialogue scenes). Flag the repeated rhythm and suggest how
+         to vary it.
+
+      Be specific. Reference scene locations by quoting a short phrase or
+      describing the scene's subject. Keep directives brief and actionable.
+      If the chapter has no significant repetition, say so in one line.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
 
-      Review and revise this chapter so that every scene advances the story with varied structure while obeying the CRITICAL VARIETY DIRECTIVE from the draft stage.
+      Chapter summary (for context):
+      {{ chapter_summary }}
 
-      ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
+      Audit this chapter for intra-chapter repetition across all five
+      categories: scene macro repetition, emotional beat repetition, sensory
+      palette repetition, scene opening/closing patterns, and dialogue rhythm
+      repetition.
+
+      For each issue found, provide a specific rewrite directive in this format:
+      - [CATEGORY] Location: "brief quote or scene description" → Directive: what to change and why
+
+      If no significant repetition exists, return: "No intra-chapter repetition issues found."
+
+      ***CRITICAL: Return ONLY the rewrite directives with NO chapter text, NO introduction, NO JSON, NO markdown formatting.***
 
       {{ chapter_text }}
 
@@ -568,7 +795,7 @@ prompts:
       {{ chapter_text }}
 
   - name: "character_agent"
-    description: "Checks and deepens character arcs and consistency, ensuring every character acts according to their established nature."
+    description: "Checks and deepens character arcs, consistency, and forward movement, ensuring every named character acts according to their established nature and never leaves the chapter static."
     stage: "Chapter Generation"
     system: |
       You are a character development specialist.
@@ -576,6 +803,15 @@ prompts:
       background, motivations, and arc trajectory.
       Deepen emotional authenticity, eliminate out-of-character moments,
       and advance each key character's arc.
+
+      CRITICAL: Every named character who appears in this chapter must
+      experience meaningful forward narrative movement — a decision made,
+      a relationship shifted, a belief tested, a status changed, or a
+      psychological consequence registered. No character may leave the chapter
+      in exactly the same state as they entered it. For any character who
+      appears but remains static, add or strengthen a beat that advances their
+      thread without breaking continuity or inventing new plot events.
+
       Return the full revised chapter text.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
@@ -597,39 +833,13 @@ prompts:
       Antagonist Motivation Architect guidance:
       {{ chapter_antagonist_context }}
       {%- endif %}
+      {%- if chapter_pov_context.strip() %}
 
-      Review this chapter for character consistency and arc progression. Fix any moments where a character acts against their established nature. Follow Character Fate Registry constraints exactly, preserving definitive outcomes and status transitions. Follow Character Arc Planner beats and preserve cumulative arc progression. Keep antagonist behavior aligned with Antagonist Motivation Architect constraints. Deepen internal thought and emotional response where thin.
-
-      ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
-
-      {{ chapter_text }}
-
-  - name: "character_thread_tracker"
-    description: "Ensures every named character in a chapter receives meaningful forward narrative movement."
-    stage: "Chapter Generation"
-    system: |
-      You are the Character Thread Tracker for a novel manuscript.
-      Your task is to ensure that every named character who appears in this chapter
-      receives meaningful narrative movement: a decision, revelation, relationship shift,
-      emotional consequence, or clear situational change.
-      A character must never leave the chapter in exactly the same state as they entered it.
-      Identify any character who is present but static, and revise their scenes
-      to give them a forward beat. Do not invent major new plot events.
-      Return the full revised chapter text only.
-    user: |
-      Novel: '{{ title }}' - Chapter {{ chapter_num }}
-
-      Character profiles:
-      {{ characters_text }}
-      {%- if chapter_arc_context.strip() %}
-
-      Character Arc Planner context:
-      {{ chapter_arc_context }}
+      POV & Focal Character Planner guidance:
+      {{ chapter_pov_context }}
       {%- endif %}
 
-      Review every named character who appears in this chapter. For each one, verify they experience some form of forward narrative movement: a decision made, a relationship shifted, a belief tested, a status changed, or a psychological consequence registered.
-
-      For any character who appears but remains static, add or strengthen a beat that advances their thread without breaking continuity or inventing new plot events.
+      Review this chapter for character consistency, arc progression, and forward movement. Fix any moments where a character acts against their established nature. Follow Character Fate Registry constraints exactly, preserving definitive outcomes and status transitions. Follow Character Arc Planner beats and preserve cumulative arc progression. Keep antagonist behavior aligned with Antagonist Motivation Architect constraints. Prioritize the focal internal character's emotional depth and internal conflict — this character's feelings should carry the most weight in this chapter. Deepen internal thought and emotional response where thin. Verify every named character who appears experiences some form of forward narrative movement — no character should be present but static.
 
       ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 
@@ -684,40 +894,62 @@ prompts:
 
       {{ chapter_text }}
 
-  - name: "narrative_redundancy_detector"
-    description: "Removes repeated operations, duplicate emotional beats, and over-familiar scene logic so each chapter earns its place."
+  - name: "narrative_momentum_distinctiveness"
+    description: "Removes cross-chapter redundancy and ensures stakes escalate chapter-over-chapter so each chapter earns its place."
     stage: "Chapter Generation"
     system: |
-      You are the Narrative Redundancy Detector for a novel manuscript.
-      Your task is to identify repeated operations, duplicated emotional beats,
-      recycled sacrifice patterns, or scenes that feel too similar to prior chapters.
-      Strengthen the chapter by collapsing repetition into fewer, sharper moments,
-      while preserving plot continuity, character logic, and required story events.
-      Do not invent major new plot events. Return the full revised chapter text only.
+      You are the Narrative Momentum & Distinctiveness Agent for a novel
+      manuscript. You perform two tasks in a single pass:
+
+      REDUNDANCY: Identify repeated operations, duplicated emotional beats,
+      recycled sacrifice patterns, or scenes that feel too similar to prior
+      chapters. Collapse repetition into fewer, sharper moments.
+
+      ESCALATION: Confirm that the stakes, urgency, and narrative tension in
+      this chapter are greater than those in the chapters that preceded it.
+      Each chapter must leave the protagonist in a more difficult, more
+      exposed, or more consequential position than before. Where the chapter's
+      tone, stakes, or consequences feel flat, repetitive, or lower than a
+      prior chapter, revise to raise urgency, deepen the cost of failure, or
+      sharpen the emotional stakes.
+
+      Do not invent entirely new plot directions or major new events.
+      Preserve plot continuity, character logic, and required story events.
+      Return only the revised chapter text.
     user: |
-      Novel: '{{ title }}' - Chapter {{ chapter_num }}
+      Novel: '{{ title }}' – Chapter {{ chapter_num }} of {{ total_chapters }}
+      Escalation target for this position: {{ escalation_target }}
 
       Chapter summary (must remain aligned):
       {{ chapter_summary }}
 
       {%- if previous_summaries.strip() %}
 
-      Previous chapter summaries for comparison:
+      Previous chapter summaries (for redundancy comparison and escalation baseline):
       {{ previous_summaries }}
 
       {%- else %}
 
-      This is Chapter 1, so there are no prior chapters to compare.
+      This is Chapter 1 – establish the foundational threat and personal stakes.
 
       {%- endif %}
 
-      Review this chapter for narrative redundancy. Specifically look for:
+      Review this chapter for BOTH redundancy and escalation. Specifically:
+
+      REDUNDANCY:
       - repeated operations that feel too similar to earlier chapters
       - duplicate sacrifice, escape, interrogation, or infiltration beats
       - scenes that restate an emotional point without escalating it
       - sequences that can be compressed into fewer, stronger events
 
-      Revise the chapter so it remains coherent but more distinct, efficient, and forceful.
+      ESCALATION:
+      - stakes that feel equal to or lower than a prior chapter
+      - tension that resolves too comfortably without raising new pressure
+      - protagonist emerging without meaningful cost or new vulnerability
+      - emotional stakes that repeat without escalating
+      - missed opportunities to force harder choices or sharper consequences
+
+      Revise the chapter so it is distinct from prior chapters AND meets the escalation target: {{ escalation_target }}.
 
       ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 
@@ -761,47 +993,6 @@ prompts:
       - operations staged in the same environment with no new tactical element
 
       Where such repetition exists, revise the operation to introduce a distinct strategy, a different environmental challenge, or an escalated stakes dynamic.
-
-      ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
-
-      {{ chapter_text }}
-
-  - name: "story_momentum_tracker"
-    description: "Verifies stakes escalate chapter-over-chapter and revises the chapter to raise urgency where momentum has stalled."
-    stage: "Chapter Generation"
-    system: |
-      You are the Story Momentum Tracker for a novel manuscript.
-      Your task is to confirm that the stakes, urgency, and narrative tension
-      in each chapter are greater than those in the chapters that preceded it.
-      Narrative momentum must escalate: each chapter must leave the protagonist
-      in a more difficult, more exposed, or more consequential position than before.
-      Where the current chapter's tone, stakes, or consequences feel flat,
-      repetitive, or lower than a prior chapter, revise the chapter to raise the
-      urgency, deepen the cost of failure, or sharpen the emotional stakes.
-      Do not invent entirely new plot directions. Return only the revised chapter text.
-    user: |
-      Novel: '{{ title }}' – Chapter {{ chapter_num }} of {{ total_chapters }}
-      Escalation target for this position: {{ escalation_target }}
-
-      {%- if previous_summaries.strip() %}
-
-      Previous chapter summaries (escalation baseline):
-      {{ previous_summaries }}
-
-      {%- else %}
-
-      This is Chapter 1 – establish the foundational threat and personal stakes.
-
-      {%- endif %}
-
-      Evaluate this chapter for narrative momentum. Check for:
-      - stakes that feel equal to or lower than a prior chapter
-      - tension that resolves too comfortably without raising new pressure
-      - protagonist emerging without meaningful cost or new vulnerability
-      - emotional stakes that repeat without escalating
-      - missed opportunities to force harder choices or sharper consequences
-
-      Revise the chapter so it meets the escalation target: {{ escalation_target }}.
 
       ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 
@@ -862,6 +1053,11 @@ prompts:
       {{ chapter_text }}
 
       Identify and fix: plot holes, pacing issues, character inconsistencies, unclear motivations.
+      {%- if scene_audit_directives.strip() %}
+
+      Scene Variety & Compression Auditor directives (apply these as part of your edit):
+      {{ scene_audit_directives }}
+      {%- endif %}
 
       ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 
@@ -1276,3 +1472,128 @@ prompts:
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
       Required structure:
       {"issues": ["..."], "overall_assessment": "..."}
+
+  - name: "pacing_tension_heatmap"
+    description: "Generates per-chapter pacing and tension metrics to identify flat sections and pacing imbalances across the manuscript."
+    stage: "Post-Processing"
+    system: |
+      You are a Pacing & Tension Analyst for completed novel manuscripts.
+      You read chapter summaries and assign quantitative metrics to each chapter
+      on a 0–100 scale. Your scores must be calibrated relative to the full
+      manuscript: the highest-tension chapter should score near 100 and the
+      lowest near 0–20. Do not cluster all scores in the 40–70 range — spread
+      them to reveal contrast.
+
+      Metric definitions:
+      - tension_score: Overall narrative tension. How much is at stake, how
+        uncertain is the outcome, how much does the reader need to turn the
+        page? 0 = no tension, 100 = maximum crisis.
+      - action_density: Proportion of the chapter occupied by physical action,
+        movement, confrontation, or operational activity vs. reflection and
+        exposition. 0 = purely reflective, 100 = wall-to-wall action.
+      - emotional_intensity: Depth and weight of emotional experience in the
+        chapter. 0 = emotionally neutral, 100 = devastating emotional peak.
+      - dialogue_ratio: Approximate proportion of the chapter that is dialogue
+        vs. narration/description. 0 = no dialogue, 100 = almost entirely
+        dialogue.
+      - description_ratio: Approximate proportion of the chapter devoted to
+        setting, sensory detail, and world-building description. 0 = no
+        description, 100 = almost entirely descriptive.
+
+      Also identify "flat sections" — consecutive chapters where tension_score
+      stays below 40 or where all metrics are nearly identical, suggesting
+      pacing stagnation.
+
+      Return ONLY valid JSON.
+    user: |
+      Novel title: "{{ title }}" ({{ total_chapters }} chapters)
+
+      === CHAPTER SUMMARIES ===
+      {{ summaries_text }}
+
+      Score every chapter on the five metrics (0–100 each). Spread your scores
+      to reflect genuine contrast between chapters. Identify any flat sections
+      where pacing stagnates.
+
+      ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
+      Required structure:
+      {
+        "chapter_metrics": [
+          {
+            "chapter": 1,
+            "tension_score": 45,
+            "action_density": 30,
+            "emotional_intensity": 60,
+            "dialogue_ratio": 40,
+            "description_ratio": 25
+          }
+        ],
+        "flat_sections": [
+          {
+            "chapters": [4, 5],
+            "issue": "Tension stays below 30 across both chapters with no escalation"
+          }
+        ],
+        "overall_pacing_assessment": "One paragraph summary of the manuscript's pacing shape"
+      }
+
+  - name: "illustration_prompt_generator"
+    description: "Generates detailed art prompts for a novel cover and key chapter scene illustrations."
+    stage: "Illustration"
+    system: |
+      You are a Visual Art Director for published fiction. Given a novel's
+      premise, genre, characters, and chapter summaries, you create detailed
+      image generation prompts that would produce striking illustrations.
+
+      Rules:
+      - Generate exactly 1 cover illustration prompt and then scene
+        illustrations for the most visually compelling moments in the novel.
+      - Total illustrations: between 5 and 10 (including the cover).
+      - Spread scene illustrations across the full novel — do not cluster
+        them all in the first few chapters.
+      - Each art prompt must be a single, self-contained paragraph of 2–4
+        sentences describing the visual scene in vivid detail: composition,
+        lighting, colour palette, mood, character appearance, and setting.
+      - Do NOT include text, titles, or lettering instructions in the prompts
+        — image models render text poorly.
+      - Match the genre's visual conventions (e.g. dark atmospheric lighting
+        for horror, sweeping vistas for fantasy, sleek tech aesthetics for
+        sci-fi).
+      - The cover prompt should capture the novel's central emotional tension
+        or iconic image, not a specific scene.
+
+      Return ONLY valid JSON.
+    user: |
+      Novel title: "{{ title }}"
+      Genre: {{ genre }}
+      Premise: {{ premise }}
+
+      Characters:
+      {{ characters_text }}
+
+      Chapter summaries:
+      {{ summaries_text }}
+
+      Generate art prompts for 5–10 illustrations (1 cover + 4–9 scene
+      illustrations from key moments across the novel). Choose the most
+      visually dramatic, emotionally resonant, or atmospherically rich
+      moments.
+
+      ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
+      Required structure:
+      {
+        "illustrations": [
+          {
+            "type": "cover",
+            "chapter": null,
+            "scene_description": "Brief description of what this image represents",
+            "art_prompt": "Detailed 2-4 sentence visual prompt for image generation"
+          },
+          {
+            "type": "chapter_scene",
+            "chapter": 3,
+            "scene_description": "Brief description of the scene",
+            "art_prompt": "Detailed 2-4 sentence visual prompt for image generation"
+          }
+        ]
+      }

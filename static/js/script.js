@@ -733,16 +733,18 @@ $(function () {
   // -------------------------------------------------------------------
   // Export
   // -------------------------------------------------------------------
-  $("#btn-export").on("click", function () {
+  $(".btn-export-variant").on("click", function () {
     clearAlerts();
-    $("#export-spinner").removeClass("d-none");
-    $("#btn-export").prop("disabled", true);
+    var $btn = $(this);
+    var variant = $btn.data("variant") || "clean";
+    $btn.find(".export-spinner").removeClass("d-none");
+    $btn.prop("disabled", true);
 
     $.ajax({
       url: "/export",
       method: "POST",
       contentType: "application/json",
-      data: JSON.stringify({ token: _progressToken }),
+      data: JSON.stringify({ token: _progressToken, variant: variant }),
       success: function (resp) {
         if (resp.download_url) {
           // Create a temporary link and trigger download
@@ -759,8 +761,8 @@ $(function () {
         showAlert(msg);
       },
       complete: function () {
-        $("#export-spinner").addClass("d-none");
-        $("#btn-export").prop("disabled", false);
+        $btn.find(".export-spinner").addClass("d-none");
+        $btn.prop("disabled", false);
       },
     });
   });
@@ -794,6 +796,71 @@ $(function () {
       complete: function () {
         $("#export-editors-notes-spinner").addClass("d-none");
         $("#btn-export-editors-notes").prop("disabled", false);
+      },
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Illustrations
+  // -------------------------------------------------------------------
+  $("#btn-generate-illustrations").on("click", function () {
+    clearAlerts();
+    var $btn = $(this);
+    $("#illustrations-spinner").removeClass("d-none");
+    $btn.prop("disabled", true);
+
+    $.ajax({
+      url: "/generate_illustrations",
+      method: "POST",
+      contentType: "application/json",
+      data: JSON.stringify({ token: _progressToken }),
+      timeout: 300000, // 5 min timeout for multiple image generations
+      success: function (resp) {
+        var illustrations = resp.illustrations || [];
+        var $gallery = $("#illustrations-gallery");
+        $gallery.empty();
+
+        if (illustrations.length === 0) {
+          $gallery.append(
+            '<div class="col-12"><p class="text-muted">No illustrations were generated.</p></div>'
+          );
+        } else {
+          $.each(illustrations, function (i, illust) {
+            var label =
+              illust.type === "cover"
+                ? "Cover"
+                : "Chapter " + (illust.chapter || "?");
+            var $card = $(
+              '<div class="col-6 col-md-4 col-lg-3">' +
+                '<div class="card h-100 shadow-sm">' +
+                  '<a href="' + illust.image_url + '" target="_blank" rel="noopener">' +
+                    '<img src="' + illust.image_url + '" class="card-img-top" ' +
+                      'alt="' + label + '" style="cursor:zoom-in;" loading="lazy">' +
+                  "</a>" +
+                  '<div class="card-body p-2">' +
+                    '<p class="card-title fw-bold mb-1 small">' + label + "</p>" +
+                    '<p class="card-text text-muted small mb-0">' +
+                      (illust.scene_description || "") +
+                    "</p>" +
+                  "</div>" +
+                "</div>" +
+              "</div>"
+            );
+            $gallery.append($card);
+          });
+        }
+
+        $gallery.removeClass("d-none");
+      },
+      error: function (xhr) {
+        var msg =
+          (xhr.responseJSON && xhr.responseJSON.error) ||
+          "Illustration generation failed.";
+        showAlert(msg);
+      },
+      complete: function () {
+        $("#illustrations-spinner").addClass("d-none");
+        $btn.prop("disabled", false);
       },
     });
   });

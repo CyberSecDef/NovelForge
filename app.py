@@ -11,6 +11,7 @@ Requires environment variables (see .env.example / config.py):
 """
 
 # Standard library
+import base64
 import json
 import logging
 import os
@@ -49,6 +50,7 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 # Ensure directories exist BEFORE initializing sessions
 Path(config.SESSION_FILE_DIR).mkdir(parents=True, exist_ok=True)
 Path(config.EXPORT_DIR).mkdir(parents=True, exist_ok=True)
+Path(config.EXPORT_DIR, "illustrations").mkdir(parents=True, exist_ok=True)
 Path("./logs").mkdir(parents=True, exist_ok=True)
 Path("./sessions").mkdir(parents=True, exist_ok=True)
 
@@ -118,6 +120,7 @@ def save_session_state() -> None:
             "antagonist_motivation_plan": session.get("antagonist_motivation_plan", {}),
             "technology_rules": session.get("technology_rules", {}),
             "theme_reinforcement": session.get("theme_reinforcement", {}),
+            "pov_focal_character_plan": session.get("pov_focal_character_plan", {}),
             "progress_token": session.get("progress_token", ""),
         }
         
@@ -174,6 +177,7 @@ def restore_session_from_state(state: dict) -> None:
     session["antagonist_motivation_plan"] = state.get("antagonist_motivation_plan", {})
     session["technology_rules"] = state.get("technology_rules", {})
     session["theme_reinforcement"] = state.get("theme_reinforcement", {})
+    session["pov_focal_character_plan"] = state.get("pov_focal_character_plan", {})
     session["progress_token"] = state.get("progress_token", "")
     
     # Restore progress store if available
@@ -411,6 +415,99 @@ def parse_llm_json(response: str) -> dict:
         response = response[start:end + 1]
     
     return json.loads(response)
+
+
+# ---------------------------------------------------------------------------
+# Image generation helper
+# ---------------------------------------------------------------------------
+
+def call_image_api(prompt: str, *, filename_prefix: str = "illustration") -> str | None:
+    """
+    Call the configured image generation API and save the result to disk.
+
+    Supports OpenAI-compatible image generation endpoints that return either
+    a URL or base64-encoded image data.
+
+    Returns the saved filename (relative to illustrations dir) or None on failure.
+    """
+    if not config.IMAGE_API_KEY:
+        logger.warning("IMAGE_API_KEY not set — skipping image generation")
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {config.IMAGE_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": config.IMAGE_MODEL,
+        "prompt": prompt,
+        "n": 1,
+        "size": config.IMAGE_SIZE,
+    }
+
+    # Log the request
+    request_log = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "type": "image_request",
+        "url": config.IMAGE_API_URL,
+        "model": config.IMAGE_MODEL,
+        "prompt": prompt[:200] + "..." if len(prompt) > 200 else prompt,
+    }
+    llm_logger.info(json.dumps(request_log, indent=2))
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            resp = requests.post(
+                config.IMAGE_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=120,
+            )
+            if resp.status_code == 429 or resp.status_code >= 500:
+                wait = RETRY_DELAY * attempt
+                logger.warning(
+                    "Image API returned %s – retry %d/%d in %ds",
+                    resp.status_code, attempt, MAX_RETRIES, wait,
+                )
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Generate unique filename
+            unique_id = uuid.uuid4().hex[:8]
+            filename = f"{filename_prefix}_{unique_id}.png"
+            save_path = Path(config.EXPORT_DIR) / "illustrations" / filename
+
+            # Extract image data — OpenAI returns either url or b64_json
+            image_data = data.get("data", [{}])[0]
+
+            if "b64_json" in image_data:
+                # Decode base64 and save
+                img_bytes = base64.b64decode(image_data["b64_json"])
+                save_path.write_bytes(img_bytes)
+            elif "url" in image_data:
+                # Download from URL
+                img_resp = requests.get(image_data["url"], timeout=60)
+                img_resp.raise_for_status()
+                save_path.write_bytes(img_resp.content)
+            else:
+                logger.error("Image API returned no url or b64_json: %s", data)
+                return None
+
+            logger.info("Saved illustration to %s", save_path)
+            return filename
+
+        except requests.exceptions.Timeout:
+            logger.warning("Image API timed out (attempt %d/%d)", attempt, MAX_RETRIES)
+            if attempt == MAX_RETRIES:
+                return None
+            time.sleep(RETRY_DELAY * attempt)
+        except requests.exceptions.RequestException as exc:
+            logger.error("Image API request failed: %s", exc)
+            return None
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -2326,6 +2423,259 @@ def get_chapter_theme_context(theme_reinforcement: dict, chapter_num: int) -> st
 
 
 # ---------------------------------------------------------------------------
+# POV & Focal Character Planner
+# ---------------------------------------------------------------------------
+
+def build_pov_focal_character_planner_prompt(
+    title: str,
+    premise: str,
+    genre: str,
+    character_list: list[dict],
+    chapter_list: list[dict],
+    character_arc_plan: dict | None = None,
+    special_instructions: str = "",
+) -> list[dict]:
+    """
+    POV & Focal Character Planner: assigns primary POV, secondary observers,
+    and focal internal character per chapter with rotation enforcement.
+    """
+    characters_text = "\n".join(
+        f"- {c.get('name', '?')}: role={c.get('role', '')}; arc={c.get('arc', '')}; background={c.get('background', '')}"
+        for c in character_list
+    )
+    if not characters_text.strip():
+        characters_text = "- No explicit characters provided. Infer conservatively from outline."
+
+    chapters_text = "\n".join(
+        f"Chapter {ch.get('number', i + 1)}: {ch.get('title', f'Chapter {i + 1}')} – {ch.get('summary', '')}"
+        for i, ch in enumerate(chapter_list)
+    )
+
+    arc_lines: list[str] = []
+    if isinstance(character_arc_plan, dict):
+        for arc in character_arc_plan.get("arcs", []):
+            if isinstance(arc, dict):
+                arc_lines.append(
+                    f"- {arc.get('character', '?')}: start='{arc.get('start_state', '')}' → "
+                    f"midpoint='{arc.get('midpoint_transformation', '')}' → "
+                    f"crisis='{arc.get('crisis_point', '')}' → "
+                    f"final_choice='{arc.get('final_moral_choice', '')}'"
+                )
+    arc_text = "\n".join(arc_lines)
+
+    return render_prompt(
+        "pov_focal_character_planner",
+        title=title,
+        premise=premise,
+        genre=genre,
+        characters_text=characters_text,
+        chapters_text=chapters_text,
+        arc_text=arc_text,
+        special_instructions=special_instructions or "",
+    )
+
+
+def _build_fallback_pov_focal_character_plan(
+    character_list: list[dict],
+    chapter_list: list[dict],
+) -> dict:
+    """Deterministic fallback POV plan: round-robin primary POV across characters."""
+    safe_characters = [
+        c for c in (character_list or [])
+        if str(c.get("name", "")).strip()
+    ]
+    if not safe_characters:
+        safe_characters = [{"name": "Protagonist", "role": "protagonist"}]
+
+    # Identify protagonist(s) for climax chapters
+    protagonist_names = []
+    for c in safe_characters:
+        role = str(c.get("role", "")).lower()
+        if any(tag in role for tag in ("protagonist", "lead", "main", "hero")):
+            protagonist_names.append(str(c.get("name", "")).strip())
+    if not protagonist_names:
+        protagonist_names = [str(safe_characters[0].get("name", "Protagonist")).strip()]
+
+    total_chapters = max(1, len(chapter_list or []))
+    chapter_pov_plan = []
+    for idx, ch in enumerate(chapter_list or [{"number": 1, "title": "Chapter 1"}]):
+        chapter_num = _coerce_positive_int(ch.get("number", idx + 1), idx + 1)
+
+        # Round-robin through characters for primary POV
+        pov_char = safe_characters[idx % len(safe_characters)]
+        pov_name = str(pov_char.get("name", "")).strip()
+
+        # Override: last 2 chapters use protagonist POV
+        if chapter_num > total_chapters - 2:
+            pov_name = protagonist_names[0]
+
+        chapter_pov_plan.append({
+            "chapter": chapter_num,
+            "primary_pov": pov_name,
+            "secondary_observers": [],
+            "focal_internal_character": pov_name,
+            "pov_justification": "Fallback round-robin assignment.",
+        })
+
+    return {
+        "chapter_pov_plan": chapter_pov_plan,
+        "rotation_rules": [
+            "No same primary POV for more than 2 consecutive chapters.",
+            "Focal internal character should rotate to prevent emotional monotony.",
+        ],
+        "rotation_violations": [],
+    }
+
+
+def normalise_pov_focal_character_plan(
+    plan_data: dict,
+    character_list: list[dict],
+    chapter_list: list[dict],
+) -> dict:
+    """Normalize POV planner output into stable schema."""
+    fallback = _build_fallback_pov_focal_character_plan(character_list, chapter_list)
+    if not isinstance(plan_data, dict):
+        return fallback
+
+    raw_plan = plan_data.get("chapter_pov_plan", [])
+    if not isinstance(raw_plan, list) or not raw_plan:
+        raw_plan = []
+
+    total_chapters = max(1, len(chapter_list or []))
+    known_names = {str(c.get("name", "")).strip().lower() for c in (character_list or []) if str(c.get("name", "")).strip()}
+
+    normalised_plan = []
+    seen_chapters = set()
+    for item in raw_plan:
+        if not isinstance(item, dict):
+            continue
+        chapter_num = _coerce_positive_int(item.get("chapter"), 0)
+        if chapter_num < 1 or chapter_num > total_chapters or chapter_num in seen_chapters:
+            continue
+        seen_chapters.add(chapter_num)
+
+        primary_pov = str(item.get("primary_pov", "")).strip()
+        focal = str(item.get("focal_internal_character", "")).strip()
+        secondary = item.get("secondary_observers", [])
+        if not isinstance(secondary, list):
+            secondary = []
+        secondary = [str(s).strip() for s in secondary if str(s).strip()]
+
+        normalised_plan.append({
+            "chapter": chapter_num,
+            "primary_pov": primary_pov or "Unknown",
+            "secondary_observers": secondary,
+            "focal_internal_character": focal or primary_pov or "Unknown",
+            "pov_justification": str(item.get("pov_justification", "")).strip(),
+        })
+
+    # Fill any missing chapters from fallback
+    fallback_map = {item["chapter"]: item for item in fallback["chapter_pov_plan"]}
+    normalised_map = {item["chapter"]: item for item in normalised_plan}
+    for ch_num in range(1, total_chapters + 1):
+        if ch_num not in normalised_map and ch_num in fallback_map:
+            normalised_plan.append(fallback_map[ch_num])
+
+    normalised_plan.sort(key=lambda x: x["chapter"])
+
+    rotation_rules = plan_data.get("rotation_rules", [])
+    if not isinstance(rotation_rules, list):
+        rotation_rules = fallback["rotation_rules"]
+
+    rotation_violations = plan_data.get("rotation_violations", [])
+    if not isinstance(rotation_violations, list):
+        rotation_violations = []
+    normalised_violations = []
+    for v in rotation_violations:
+        if not isinstance(v, dict):
+            continue
+        normalised_violations.append({
+            "chapter_range": v.get("chapter_range", []),
+            "character": str(v.get("character", "")).strip(),
+            "reason": str(v.get("reason", "")).strip(),
+        })
+
+    return {
+        "chapter_pov_plan": normalised_plan or fallback["chapter_pov_plan"],
+        "rotation_rules": [str(r) for r in rotation_rules if str(r).strip()] or fallback["rotation_rules"],
+        "rotation_violations": normalised_violations,
+    }
+
+
+def plan_pov_focal_character(
+    title: str,
+    premise: str,
+    genre: str,
+    character_list: list[dict],
+    chapter_list: list[dict],
+    character_arc_plan: dict | None = None,
+    special_instructions: str = "",
+) -> dict:
+    """Run POV & Focal Character Planner and return normalized output."""
+    try:
+        raw = call_llm(
+            build_pov_focal_character_planner_prompt(
+                title=title,
+                premise=premise,
+                genre=genre,
+                character_list=character_list,
+                chapter_list=chapter_list,
+                character_arc_plan=character_arc_plan,
+                special_instructions=special_instructions,
+            ),
+            action="Planning POV & Focal Characters",
+            json_mode=True,
+        )
+        parsed = parse_llm_json(raw)
+        return normalise_pov_focal_character_plan(parsed, character_list, chapter_list)
+    except (RuntimeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        logger.warning("POV & Focal Character Planner failed, using fallback: %s", exc)
+        return _build_fallback_pov_focal_character_plan(character_list, chapter_list)
+
+
+def get_chapter_pov_context(pov_plan: dict, chapter_num: int) -> str:
+    """Format chapter-relevant POV and focal character assignments for prompt injection."""
+    if not isinstance(pov_plan, dict):
+        return ""
+
+    chapter_pov_plan = pov_plan.get("chapter_pov_plan", [])
+    if not isinstance(chapter_pov_plan, list):
+        return ""
+
+    entry = next(
+        (
+            item for item in chapter_pov_plan
+            if isinstance(item, dict) and _coerce_positive_int(item.get("chapter"), 0) == chapter_num
+        ),
+        None,
+    )
+    if not entry:
+        return ""
+
+    lines = ["POV & Focal Character Planner output for this chapter:"]
+    lines.append(f"- Primary POV character: {entry.get('primary_pov', 'Unknown')}")
+
+    secondary = entry.get("secondary_observers", [])
+    if isinstance(secondary, list) and secondary:
+        lines.append(f"- Secondary observers: {', '.join(str(s) for s in secondary)}")
+    else:
+        lines.append("- Secondary observers: none")
+
+    focal = entry.get("focal_internal_character", "")
+    if focal:
+        lines.append(f"- Focal internal character (emotions drive scene weight): {focal}")
+
+    justification = entry.get("pov_justification", "")
+    if justification:
+        lines.append(f"- Justification: {justification}")
+
+    lines.append("- Write this chapter primarily through the primary POV character's perspective.")
+    lines.append("- The focal internal character's emotional state and internal conflict should carry the most weight.")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Continuity Gatekeeper
 # ---------------------------------------------------------------------------
 
@@ -2390,6 +2740,66 @@ def run_continuity_gatekeeper(
         return ""
 
 
+# ---------------------------------------------------------------------------
+# Chapter Rhythm Classifier
+# ---------------------------------------------------------------------------
+
+def build_chapter_rhythm_classifier_prompt(
+    chapter_num: int,
+    chapter_title: str,
+    chapter_summary: str,
+    previous_summaries: str,
+    title: str,
+    chapter_architecture_context: str = "",
+) -> list[dict]:
+    """
+    Chapter Rhythm Classifier: analyzes the structural rhythm of recent
+    chapters and recommends a contrasting narrative rhythm for the upcoming
+    chapter to prevent structural repetition.
+    Runs immediately before the Draft agent, after the Continuity Gatekeeper.
+    """
+    return render_prompt(
+        "chapter_rhythm_classifier",
+        title=title,
+        chapter_num=chapter_num,
+        chapter_title=chapter_title,
+        chapter_summary=chapter_summary,
+        previous_summaries=previous_summaries or "",
+        chapter_architecture_context=chapter_architecture_context or "",
+    )
+
+
+def run_chapter_rhythm_classifier(
+    chapter_num: int,
+    chapter_title: str,
+    chapter_summary: str,
+    previous_summaries: str,
+    title: str,
+    chapter_architecture_context: str = "",
+) -> dict:
+    """
+    Run the Chapter Rhythm Classifier and return a dict with
+    'recommended_shape_for_this_chapter' and 'recommendation_reason'.
+    Falls back to empty dict on error so generation is never blocked.
+    """
+    try:
+        raw = call_llm(
+            build_chapter_rhythm_classifier_prompt(
+                chapter_num=chapter_num,
+                chapter_title=chapter_title,
+                chapter_summary=chapter_summary,
+                previous_summaries=previous_summaries,
+                title=title,
+                chapter_architecture_context=chapter_architecture_context,
+            ),
+            action=f"Classifying chapter rhythm for Chapter {chapter_num}",
+            json_mode=True,
+        )
+        return parse_llm_json(raw)
+    except Exception:
+        return {}
+
+
 def build_title_prompt(premise: str, genre: str) -> list[dict]:
     return render_prompt("title", premise=premise, genre=genre)
 
@@ -2439,6 +2849,9 @@ def build_chapter_draft_prompt(
     chapter_theme_context: str = "",
     gatekeeper_brief: str = "",
     compression_guidance: str = "",
+    chapter_rhythm_shape: str = "",
+    chapter_rhythm_reason: str = "",
+    chapter_pov_context: str = "",
 ) -> list[dict]:
     return render_prompt(
         "chapter_draft",
@@ -2459,26 +2872,66 @@ def build_chapter_draft_prompt(
         chapter_antagonist_context=chapter_antagonist_context or "",
         chapter_technology_context=chapter_technology_context or "",
         chapter_theme_context=chapter_theme_context or "",
+        chapter_pov_context=chapter_pov_context or "",
         gatekeeper_brief=gatekeeper_brief or "",
         compression_guidance=compression_guidance or "",
+        chapter_rhythm_shape=chapter_rhythm_shape or "",
+        chapter_rhythm_reason=chapter_rhythm_reason or "",
         forbidden_words=", ".join(_FORBIDDEN_WORDS),
     )
 
 
-def build_dialog_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
+def build_prose_refinement_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
     """
-    Dialog agent: refines all dialogue in the chapter for naturalism, voice
-    distinction, and subtext.  Returns only the revised chapter text.
+    Prose Refinement Agent: combined pass that refines dialogue for naturalism
+    and voice distinction, and ensures every scene advances story momentum
+    with varied structure.  Returns only the revised chapter text.
     """
-    return render_prompt("dialog_agent", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
+    return render_prompt("prose_refinement_agent", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
-def build_scene_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict]:
+def build_scene_variety_compression_auditor_prompt(
+    chapter_text: str,
+    chapter_summary: str,
+    chapter_num: int,
+    title: str,
+) -> list[dict]:
     """
-    Scene agent: ensures every scene follows the Goal → Obstacle → Outcome →
-    New Problem pattern.  Returns only the revised chapter text.
+    Scene Variety & Compression Auditor: scans a chapter draft for intra-chapter
+    repetition in scene macros, emotional beats, and sensory palette.
+    Returns specific rewrite directives (not prose) for the Editing Agent.
     """
-    return render_prompt("scene_agent", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
+    return render_prompt(
+        "scene_variety_compression_auditor",
+        title=title,
+        chapter_num=chapter_num,
+        chapter_summary=chapter_summary,
+        chapter_text=chapter_text,
+    )
+
+
+def run_scene_variety_compression_auditor(
+    chapter_text: str,
+    chapter_summary: str,
+    chapter_num: int,
+    title: str,
+) -> str:
+    """
+    Run the Scene Variety & Compression Auditor and return rewrite directives.
+    Falls back to empty string on error so generation is never blocked.
+    """
+    try:
+        return call_llm(
+            build_scene_variety_compression_auditor_prompt(
+                chapter_text=chapter_text,
+                chapter_summary=chapter_summary,
+                chapter_num=chapter_num,
+                title=title,
+            ),
+            action=f"Chapter {chapter_num}: scene variety & compression audit",
+        )
+    except Exception:
+        return ""
 
 
 def build_structure_agent_prompt(
@@ -2520,6 +2973,7 @@ def build_character_agent_prompt(
     chapter_fate_context: str = "",
     chapter_arc_context: str = "",
     chapter_antagonist_context: str = "",
+    chapter_pov_context: str = "",
 ) -> list[dict]:
     """
     Character agent: checks and deepens character arcs and consistency.
@@ -2533,30 +2987,7 @@ def build_character_agent_prompt(
         chapter_fate_context=chapter_fate_context or "",
         chapter_arc_context=chapter_arc_context or "",
         chapter_antagonist_context=chapter_antagonist_context or "",
-        chapter_text=chapter_text,
-    )
-
-
-def build_character_thread_tracker_prompt(
-    chapter_text: str,
-    characters_text: str,
-    chapter_num: int,
-    title: str,
-    chapter_arc_context: str = "",
-) -> list[dict]:
-    """
-    Character Thread Tracker: ensures every named character who appears in this
-    chapter receives meaningful forward movement in their arc, relationship, or
-    situation. Flags and repairs any character who is dropped, sidelined without
-    purpose, or left in narrative stasis.
-    Returns only the revised chapter text.
-    """
-    return render_prompt(
-        "character_thread_tracker",
-        title=title,
-        chapter_num=chapter_num,
-        characters_text=characters_text,
-        chapter_arc_context=chapter_arc_context or "",
+        chapter_pov_context=chapter_pov_context or "",
         chapter_text=chapter_text,
     )
 
@@ -2612,7 +3043,13 @@ def build_quality_controller_prompt(chapter_text: str, chapter_num: int, title: 
     return render_prompt("quality_controller", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
-def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_num: int, title: str) -> list[dict]:
+def build_editing_agent_prompt(
+    chapter_text: str,
+    chapter_summary: str,
+    chapter_num: int,
+    title: str,
+    scene_audit_directives: str = "",
+) -> list[dict]:
     """
     Editing agent: refines draft for plot holes, pacing, and character
     consistency.  Returns only the revised chapter text.
@@ -2622,26 +3059,40 @@ def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_
         title=title,
         chapter_num=chapter_num,
         chapter_summary=chapter_summary,
+        scene_audit_directives=scene_audit_directives or "",
         chapter_text=chapter_text,
     )
 
 
-def build_narrative_redundancy_detector_prompt(
+def build_narrative_momentum_distinctiveness_prompt(
     chapter_text: str,
     previous_summaries: str,
     chapter_summary: str,
     chapter_num: int,
     title: str,
+    total_chapters: int,
 ) -> list[dict]:
     """
-    Narrative Redundancy Detector: removes repeated operations, duplicate
-    sacrificial beats, and over-familiar scene logic so each chapter earns its
-    place with distinct narrative movement. Returns only the revised chapter.
+    Narrative Momentum & Distinctiveness Agent: combined pass that removes
+    cross-chapter redundancy and ensures stakes escalate chapter-over-chapter.
+    Returns only the revised chapter text.
     """
+    position_pct = (chapter_num / total_chapters * 100) if total_chapters > 0 else 50
+    if position_pct <= 25:
+        escalation_target = "establish foundational threat and personal stakes"
+    elif position_pct <= 50:
+        escalation_target = "deepen the cost of failure and raise the personal price"
+    elif position_pct <= 75:
+        escalation_target = "force irreversible decisions and close off safe options"
+    else:
+        escalation_target = "push stakes to maximum – survival, identity, or irreversible loss"
+
     return render_prompt(
-        "narrative_redundancy_detector",
+        "narrative_momentum_distinctiveness",
         title=title,
         chapter_num=chapter_num,
+        total_chapters=total_chapters,
+        escalation_target=escalation_target,
         chapter_summary=chapter_summary,
         previous_summaries=previous_summaries or "",
         chapter_text=chapter_text,
@@ -2694,41 +3145,6 @@ def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str)
         chapter_num=chapter_num,
         chapter_text=chapter_text,
         forbidden_words=", ".join(_FORBIDDEN_WORDS),
-    )
-
-
-def build_story_momentum_tracker_prompt(
-    chapter_text: str,
-    previous_summaries: str,
-    chapter_num: int,
-    title: str,
-    total_chapters: int,
-) -> list[dict]:
-    """
-    Story Momentum Tracker: verifies that the stakes in this chapter are higher
-    than those in previous chapters and that the narrative is escalating toward
-    the climax. Revises the chapter to raise urgency, deepen consequence, or
-    tighten tension wherever the momentum has stalled or regressed.
-    Returns only the revised chapter text.
-    """
-    position_pct = (chapter_num / total_chapters * 100) if total_chapters > 0 else 50
-    if position_pct <= 25:
-        escalation_target = "establish foundational threat and personal stakes"
-    elif position_pct <= 50:
-        escalation_target = "deepen the cost of failure and raise the personal price"
-    elif position_pct <= 75:
-        escalation_target = "force irreversible decisions and close off safe options"
-    else:
-        escalation_target = "push stakes to maximum – survival, identity, or irreversible loss"
-
-    return render_prompt(
-        "story_momentum_tracker",
-        title=title,
-        chapter_num=chapter_num,
-        total_chapters=total_chapters,
-        escalation_target=escalation_target,
-        previous_summaries=previous_summaries or "",
-        chapter_text=chapter_text,
     )
 
 
@@ -3266,6 +3682,58 @@ def build_reader_immersion_tester_prompt(
     )
 
 
+def build_pacing_tension_heatmap_prompt(
+    title: str,
+    all_summaries: list[str],
+    total_chapters: int,
+) -> list[dict]:
+    """
+    Pacing & Tension Heatmap Generator: scores each chapter on tension,
+    action density, emotional intensity, dialogue ratio, and description
+    ratio. Identifies flat sections where pacing stagnates.
+    Returns a JSON report.
+    """
+    summaries_text = "\n\n".join(
+        f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries)
+    )
+    return render_prompt(
+        "pacing_tension_heatmap",
+        title=title,
+        total_chapters=total_chapters,
+        summaries_text=summaries_text,
+    )
+
+
+def build_illustration_prompt_generator_prompt(
+    title: str,
+    genre: str,
+    premise: str,
+    character_list: list[dict],
+    all_summaries: list[str],
+) -> list[dict]:
+    """
+    Illustration Prompt Generator: creates detailed art prompts for a novel
+    cover and key chapter scene illustrations using the image generation API.
+    """
+    characters_text = "\n".join(
+        f"- {c.get('name', '?')}: role={c.get('role', '')}; background={c.get('background', '')}"
+        for c in character_list
+    )
+    if not characters_text.strip():
+        characters_text = "- No explicit characters provided."
+    summaries_text = "\n\n".join(
+        f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries)
+    )
+    return render_prompt(
+        "illustration_prompt_generator",
+        title=title,
+        genre=genre,
+        premise=premise,
+        characters_text=characters_text,
+        summaries_text=summaries_text,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Input validation helpers
 # ---------------------------------------------------------------------------
@@ -3449,6 +3917,17 @@ def generate_outline():
             special_instructions=special_instructions,
         )
 
+        # 8. Generate POV & focal character plan (after arc plan, before drafting)
+        pov_focal_character_plan = plan_pov_focal_character(
+            title=title,
+            premise=str(premise),
+            genre=genre,
+            character_list=character_list,
+            chapter_list=chapter_list,
+            character_arc_plan=character_arc_plan,
+            special_instructions=special_instructions,
+        )
+
         # Store outline data in session
         session["title"] = title
         session["chapter_list"] = chapter_list
@@ -3460,6 +3939,7 @@ def generate_outline():
         session["antagonist_motivation_plan"] = antagonist_motivation_plan
         session["technology_rules"] = technology_rules
         session["theme_reinforcement"] = theme_reinforcement
+        session["pov_focal_character_plan"] = pov_focal_character_plan
 
         return jsonify(
             {
@@ -3473,6 +3953,7 @@ def generate_outline():
                 "antagonist_motivation_plan": antagonist_motivation_plan,
                 "technology_rules": technology_rules,
                 "theme_reinforcement": theme_reinforcement,
+                "pov_focal_character_plan": pov_focal_character_plan,
             }
         )
 
@@ -3565,6 +4046,15 @@ def approve_outline():
         chapter_list=session["chapter_list"],
         special_instructions=session.get("special_instructions", ""),
     )
+    session["pov_focal_character_plan"] = plan_pov_focal_character(
+        title=session["title"],
+        premise=session.get("premise", ""),
+        genre=session.get("genre", ""),
+        character_list=session["character_list"],
+        chapter_list=session["chapter_list"],
+        character_arc_plan=session.get("character_arc_plan", {}),
+        special_instructions=session.get("special_instructions", ""),
+    )
 
     # Auto-save session state after outline approval
     save_session_state()
@@ -3579,6 +4069,7 @@ def approve_outline():
             "antagonist_motivation_plan": session["antagonist_motivation_plan"],
             "technology_rules": session["technology_rules"],
             "theme_reinforcement": session["theme_reinforcement"],
+            "pov_focal_character_plan": session["pov_focal_character_plan"],
         }
     )
 
@@ -3622,6 +4113,7 @@ def generate_chapters():
         "antagonist_motivation_plan": session.get("antagonist_motivation_plan", {}),
         "technology_rules": session.get("technology_rules", {}),
         "theme_reinforcement": session.get("theme_reinforcement", {}),
+        "pov_focal_character_plan": session.get("pov_focal_character_plan", {}),
     }
 
     thread = threading.Thread(
@@ -3660,22 +4152,22 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
     twelve-step agent pipeline.
 
     Per-chapter pipeline:
-        1. Draft           – initial prose (Novelist)
-        2. Dialog agent    – naturalise dialogue
-        3. Scene agent     – enforce Goal→Obstacle→Outcome→New Problem
-        4. Context analyzer– fix world-building continuity errors
-        5. Editing agent   – plot holes, pacing, character consistency
-        6. Redundancy detector – collapse repeated beats into stronger events
-        7. Structure agent – confirm chapter fits story architecture
-        8. Operational distinctiveness – ensure each op differs in strategy and stakes
-        9. Character agent – deepen arcs and fix out-of-character moments
-       10. Character thread tracker – ensure no named character left static
-       11. Synthesizer     – unify voice and theme after multi-pass edits
-       12. Polish agent    – grammar, style, vivid language
-       13. Anti-LLM agent  – strip robotic patterns and forbidden words
-       14. Quality control – engagement, tension, pacing check
-       15. Story momentum tracker – ensure stakes escalate vs prior chapters
-       16. Summary         – 100-200 word continuity summary
+        0a. Continuity Gatekeeper – validate chapter constraints
+        0b. Chapter Rhythm Classifier – recommend contrasting narrative rhythm
+        1. Draft              – initial prose (Novelist)
+        2. Prose Refinement   – dialogue naturalism + scene momentum (merged)
+        3. Scene Variety Audit – detect intra-chapter repetition (directives only)
+        4. Context Analyzer   – fix world-building continuity errors
+        5. Editing Agent      – plot holes, pacing, character consistency + scene audit directives
+        6. Momentum & Distinctiveness – cross-chapter redundancy + escalation (merged)
+        7. Structure Agent    – confirm chapter fits story architecture
+        8. Operational Distinctiveness – ensure each op differs in strategy and stakes
+        9. Character Agent    – deepen arcs, consistency, and forward movement (absorbs thread tracking)
+       10. Synthesizer        – unify voice and theme after multi-pass edits
+       11. Polish Agent       – grammar, style, vivid language
+       12. Anti-LLM Agent     – strip robotic patterns and forbidden words
+       13. Quality Controller – engagement, tension, pacing check
+       14. Summary            – 100-200 word continuity summary
 
     Post-chapter (after summary, before next chapter):
         A. Character State Updater – log definitive character states into running registry
@@ -3689,6 +4181,7 @@ def _run_chapter_generation(token: str, snap: dict) -> None:
         VI.  Climax Integrity Checker – verify protagonist makes definitive final moral decision (JSON)
         VII. Loose Thread Resolver – identify and close unresolved narrative questions (JSON)
         VIII.Reader Immersion Tester – evaluate pacing, tension, and engagement from reader POV (JSON)
+        IX.  Pacing & Tension Heatmap – per-chapter metrics for tension, action, emotion, dialogue, description
     """
     _run_chapter_generation_internal(token, snap, [], [], 0)
 
@@ -3709,6 +4202,7 @@ def _run_all_chapter_agents(
     chapter_antagonist_context: str = "",
     chapter_technology_context: str = "",
     chapter_theme_context: str = "",
+    chapter_pov_context: str = "",
     gatekeeper_brief: str = "",
     step_callback=None,
 ) -> tuple[str, str]:
@@ -3717,12 +4211,17 @@ def _run_all_chapter_agents(
     (final_chapter_text, continuity_summary)
     """
     if step_callback:
-        step_callback(f"Chapter {chapter_num}: refining dialogue")
-    text = call_llm(build_dialog_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: refining dialogue")
+        step_callback(f"Chapter {chapter_num}: prose refinement (dialogue + scenes)")
+    text = call_llm(build_prose_refinement_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: prose refinement")
 
     if step_callback:
-        step_callback(f"Chapter {chapter_num}: structuring scenes")
-    text = call_llm(build_scene_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: structuring scenes")
+        step_callback(f"Chapter {chapter_num}: scene variety & compression audit")
+    scene_audit_directives = run_scene_variety_compression_auditor(
+        chapter_text=text,
+        chapter_summary=chapter_outline_summary,
+        chapter_num=chapter_num,
+        title=title,
+    )
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: verifying continuity")
@@ -3741,19 +4240,20 @@ def _run_all_chapter_agents(
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: editing")
-    text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title), action=f"Chapter {chapter_num}: editing")
+    text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title, scene_audit_directives), action=f"Chapter {chapter_num}: editing")
 
     if step_callback:
-        step_callback(f"Chapter {chapter_num}: removing redundancy")
+        step_callback(f"Chapter {chapter_num}: momentum & distinctiveness check")
     text = call_llm(
-        build_narrative_redundancy_detector_prompt(
+        build_narrative_momentum_distinctiveness_prompt(
             text,
             previous_summaries,
             chapter_outline_summary,
             chapter_num,
             title,
+            total_chapters,
         ),
-        action=f"Chapter {chapter_num}: removing redundancy"
+        action=f"Chapter {chapter_num}: momentum & distinctiveness"
     )
 
     if step_callback:
@@ -3794,21 +4294,9 @@ def _run_all_chapter_agents(
             chapter_fate_context,
             chapter_arc_context,
             chapter_antagonist_context,
+            chapter_pov_context,
         ),
         action=f"Chapter {chapter_num}: deepening characters"
-    )
-
-    if step_callback:
-        step_callback(f"Chapter {chapter_num}: tracking character threads")
-    text = call_llm(
-        build_character_thread_tracker_prompt(
-            text,
-            characters_text,
-            chapter_num,
-            title,
-            chapter_arc_context,
-        ),
-        action=f"Chapter {chapter_num}: tracking character threads"
     )
 
     if step_callback:
@@ -3826,19 +4314,6 @@ def _run_all_chapter_agents(
     if step_callback:
         step_callback(f"Chapter {chapter_num}: quality control")
     text = call_llm(build_quality_controller_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: quality control")
-
-    if step_callback:
-        step_callback(f"Chapter {chapter_num}: tracking story momentum")
-    text = call_llm(
-        build_story_momentum_tracker_prompt(
-            text,
-            previous_summaries,
-            chapter_num,
-            title,
-            total_chapters,
-        ),
-        action=f"Chapter {chapter_num}: tracking story momentum"
-    )
 
     if step_callback:
         step_callback(f"Chapter {chapter_num}: summarising")
@@ -3897,6 +4372,11 @@ def _run_chapter_generation_internal(
     )
     theme_reinforcement = normalise_theme_reinforcement(
         snap.get("theme_reinforcement", {}),
+        chapter_list,
+    )
+    pov_focal_character_plan = normalise_pov_focal_character_plan(
+        snap.get("pov_focal_character_plan", {}),
+        character_list,
         chapter_list,
     )
 
@@ -3960,6 +4440,10 @@ def _run_chapter_generation_internal(
                 theme_reinforcement,
                 chapter_num,
             )
+            chapter_pov_context = get_chapter_pov_context(
+                pov_focal_character_plan,
+                chapter_num,
+            )
 
             previous_summaries = "\n\n".join(
                 f"Chapter {i+1}: {s}" for i, s in enumerate(summaries)
@@ -3978,6 +4462,19 @@ def _run_chapter_generation_internal(
                 character_state_log="\n\n".join(character_state_log),
             )
 
+            # Chapter Rhythm Classifier – recommend a contrasting rhythm before Draft
+            _set_step(f"Chapter {chapter_num}: classifying rhythm")
+            rhythm_result = run_chapter_rhythm_classifier(
+                chapter_num=chapter_num,
+                chapter_title=chapter_title,
+                chapter_summary=chapter_outline_summary,
+                previous_summaries=previous_summaries,
+                title=title,
+                chapter_architecture_context=chapter_architecture_context,
+            )
+            chapter_rhythm_shape = str(rhythm_result.get("recommended_shape_for_this_chapter", "")).strip()
+            chapter_rhythm_reason = str(rhythm_result.get("recommendation_reason", "")).strip()
+
             # 1. Draft
             _set_step(f"Chapter {chapter_num}: drafting")
             text = call_llm(
@@ -3994,6 +4491,9 @@ def _run_chapter_generation_internal(
                     chapter_theme_context,
                     gatekeeper_brief,
                     compression_guidance,
+                    chapter_rhythm_shape,
+                    chapter_rhythm_reason,
+                    chapter_pov_context,
                 ),
                 action=f"Chapter {chapter_num}: drafting"
             )
@@ -4014,6 +4514,7 @@ def _run_chapter_generation_internal(
                 chapter_antagonist_context=chapter_antagonist_context,
                 chapter_technology_context=chapter_technology_context,
                 chapter_theme_context=chapter_theme_context,
+                chapter_pov_context=chapter_pov_context,
                 gatekeeper_brief=gatekeeper_brief,
                 step_callback=_set_step,
             )
@@ -4267,6 +4768,30 @@ def _run_chapter_generation_internal(
         with _progress_lock:
             _progress_store[token]["reader_immersion_report"] = immersion_report
 
+        # --- Pacing & Tension Heatmap ---
+        with _progress_lock:
+            _progress_store[token]["step"] = "Pacing & tension heatmap"
+        heatmap_raw = call_llm(
+            build_pacing_tension_heatmap_prompt(
+                title=title,
+                all_summaries=summaries,
+                total_chapters=total_chapters,
+            ),
+            action="Pacing & tension heatmap",
+            json_mode=True,
+        )
+        try:
+            pacing_heatmap = parse_llm_json(heatmap_raw)
+        except json.JSONDecodeError:
+            pacing_heatmap = {
+                "chapter_metrics": [],
+                "flat_sections": [],
+                "overall_pacing_assessment": "",
+            }
+
+        with _progress_lock:
+            _progress_store[token]["pacing_heatmap"] = pacing_heatmap
+
         # Auto-save final state
         _set_step("Complete")
 
@@ -4364,6 +4889,11 @@ def revise_chapter():
         session.get("theme_reinforcement", {}),
         chapter_list,
     )
+    pov_focal_character_plan = normalise_pov_focal_character_plan(
+        session.get("pov_focal_character_plan", {}),
+        character_list,
+        chapter_list,
+    )
 
     chapter_outline_summary = ""
     for chapter_outline in chapter_list:
@@ -4406,6 +4936,10 @@ def revise_chapter():
     )
     chapter_theme_context = get_chapter_theme_context(
         theme_reinforcement,
+        chapter_number,
+    )
+    chapter_pov_context = get_chapter_pov_context(
+        pov_focal_character_plan,
         chapter_number,
     )
 
@@ -4455,6 +4989,7 @@ def revise_chapter():
             chapter_antagonist_context=chapter_antagonist_context,
             chapter_technology_context=chapter_technology_context,
             chapter_theme_context=chapter_theme_context,
+            chapter_pov_context=chapter_pov_context,
             gatekeeper_brief=gatekeeper_brief,
             step_callback=None,
         )
@@ -4642,14 +5177,228 @@ def new_session():
     return jsonify({"status": "success", "message": "New session started"})
 
 
+def _format_clean_manuscript(title: str, chapters_done: list[dict], **_kwargs) -> str:
+    """Clean manuscript: title + chapter text only. No summaries, no notes."""
+    lines = [f"# {title}\n"]
+    for ch in chapters_done:
+        lines.append(f"\n## Chapter {ch['number']}: {ch['title']}\n")
+        lines.append(f"\n{ch['content']}\n")
+    return "\n".join(lines)
+
+
+def _format_annotated_manuscript(
+    title: str,
+    chapters_done: list[dict],
+    progress_data: dict,
+    **_kwargs,
+) -> str:
+    """Manuscript with inline editor notes per chapter from audit data."""
+    consistency = progress_data.get("consistency", {})
+    global_audit = progress_data.get("global_continuity_audit", {})
+    compression = progress_data.get("narrative_compression_report", {})
+    resolution = progress_data.get("character_resolution_report", {})
+
+    # Build per-chapter annotation lookup from audit data
+    chapter_annotations: dict[int, list[str]] = {}
+
+    # Continuity contradictions
+    for c in global_audit.get("contradictions", []):
+        if not isinstance(c, dict):
+            continue
+        for ch_num in c.get("chapters", []):
+            chapter_annotations.setdefault(ch_num, []).append(
+                f"Continuity: {c.get('description', '')}"
+            )
+
+    # Redundant sequences
+    for r in compression.get("redundant_sequences", []):
+        if not isinstance(r, dict):
+            continue
+        for ch_num in r.get("chapters", []):
+            chapter_annotations.setdefault(ch_num, []).append(
+                f"Redundancy: {r.get('pattern', '')} — {r.get('recommendation', '')}"
+            )
+
+    # Unresolved characters
+    for ch_res in resolution.get("character_resolutions", []):
+        if not isinstance(ch_res, dict):
+            continue
+        if ch_res.get("arc_complete") is False or ch_res.get("final_state_clear") is False:
+            notes = ch_res.get("notes", "")
+            if notes:
+                # Attach to last chapter by default
+                last_ch = len(chapters_done)
+                chapter_annotations.setdefault(last_ch, []).append(
+                    f"Character: {ch_res.get('character', '?')} — {notes}"
+                )
+
+    lines = [f"# {title}\n"]
+    lines.append("*This copy includes inline editor annotations from post-generation audits.*\n")
+    for ch in chapters_done:
+        ch_num = ch["number"]
+        lines.append(f"\n## Chapter {ch_num}: {ch['title']}\n")
+        annotations = chapter_annotations.get(ch_num, [])
+        if annotations:
+            lines.append("> **Editor Notes for this chapter:**")
+            for note in annotations:
+                lines.append(f"> - {note}")
+            lines.append("")
+        lines.append(f"\n{ch['content']}\n")
+
+    if consistency.get("overall_assessment"):
+        lines.append("\n---\n")
+        lines.append("## Overall Editor's Assessment\n")
+        lines.append(f"{consistency['overall_assessment']}\n")
+
+    return "\n".join(lines)
+
+
+def _format_publishing_manuscript(title: str, chapters_done: list[dict], **_kwargs) -> str:
+    """Publishing-ready: front matter, TOC, page breaks for Kindle/Word conversion."""
+    lines = []
+
+    # Title page
+    lines.append(f"# {title}\n")
+    lines.append("*By [Author Name]*\n")
+    lines.append("---\n")
+
+    # Copyright page
+    lines.append("## Copyright\n")
+    lines.append(f"Copyright (c) [Year] [Author Name]. All rights reserved.\n")
+    lines.append("No part of this publication may be reproduced, distributed, or "
+                 "transmitted in any form without prior written permission.\n")
+    lines.append("---\n")
+
+    # Dedication
+    lines.append("## Dedication\n")
+    lines.append("*[Your dedication here]*\n")
+    lines.append("---\n")
+
+    # Table of Contents
+    lines.append("## Table of Contents\n")
+    for ch in chapters_done:
+        lines.append(f"- [Chapter {ch['number']}: {ch['title']}](#chapter-{ch['number']})\n")
+    lines.append("---\n")
+
+    # Chapters with page breaks
+    for ch in chapters_done:
+        # Page break marker (works in Pandoc → Word/Kindle conversion)
+        lines.append('<div style="page-break-after: always;"></div>\n')
+        lines.append(f'<a id="chapter-{ch["number"]}"></a>\n')
+        lines.append(f"## Chapter {ch['number']}\n")
+        lines.append(f"### {ch['title']}\n")
+        lines.append(f"\n{ch['content']}\n")
+
+    # End matter
+    lines.append('<div style="page-break-after: always;"></div>\n')
+    lines.append("## About the Author\n")
+    lines.append("*[Author bio here]*\n")
+
+    return "\n".join(lines)
+
+
+def _format_critique_manuscript(
+    title: str,
+    chapters_done: list[dict],
+    progress_data: dict,
+    **_kwargs,
+) -> str:
+    """Critique copy: chapter text with tension/pacing annotations from heatmap."""
+    pacing_heatmap = progress_data.get("pacing_heatmap", {})
+    metrics_map: dict[int, dict] = {}
+    for m in pacing_heatmap.get("chapter_metrics", []):
+        if isinstance(m, dict):
+            metrics_map[int(m.get("chapter", 0))] = m
+    flat_chapters: set[int] = set()
+    for fs in pacing_heatmap.get("flat_sections", []):
+        if isinstance(fs, dict):
+            for ch_num in fs.get("chapters", []):
+                flat_chapters.add(int(ch_num))
+
+    immersion = progress_data.get("reader_immersion_report", {})
+    weak_map: dict[int, str] = {}
+    for w in immersion.get("weak_chapters", []):
+        if isinstance(w, dict):
+            weak_map[int(w.get("chapter", 0))] = w.get("issue", w.get("reason", ""))
+    break_map: dict[int, str] = {}
+    for b in immersion.get("immersion_breaks", []):
+        if isinstance(b, dict):
+            break_map[int(b.get("chapter", 0))] = b.get("description", b.get("issue", ""))
+
+    def _bar(value: int) -> str:
+        clamped = max(0, min(100, int(value)))
+        filled = round(clamped / 10)
+        return "\u2588" * filled + "\u2591" * (10 - filled)
+
+    lines = [f"# {title} — Critique Copy\n"]
+    lines.append("*This copy includes pacing and tension annotations for revision guidance.*\n")
+
+    for ch in chapters_done:
+        ch_num = ch["number"]
+        lines.append(f"\n## Chapter {ch_num}: {ch['title']}\n")
+
+        m = metrics_map.get(ch_num)
+        if m:
+            lines.append("> **Pacing Metrics:**")
+            lines.append(f"> - Tension:    `{_bar(m.get('tension_score', 0))}` {m.get('tension_score', 0)}")
+            lines.append(f"> - Action:     `{_bar(m.get('action_density', 0))}` {m.get('action_density', 0)}")
+            lines.append(f"> - Emotion:    `{_bar(m.get('emotional_intensity', 0))}` {m.get('emotional_intensity', 0)}")
+            lines.append(f"> - Dialogue:   `{_bar(m.get('dialogue_ratio', 0))}` {m.get('dialogue_ratio', 0)}")
+            lines.append(f"> - Description:`{_bar(m.get('description_ratio', 0))}` {m.get('description_ratio', 0)}")
+
+        warnings: list[str] = []
+        if ch_num in flat_chapters:
+            warnings.append("FLAT SECTION — tension stagnates here; consider raising stakes or compressing")
+        if ch_num in weak_map:
+            warnings.append(f"WEAK CHAPTER — {weak_map[ch_num]}")
+        if ch_num in break_map:
+            warnings.append(f"IMMERSION BREAK — {break_map[ch_num]}")
+        if warnings:
+            lines.append(">")
+            for w in warnings:
+                lines.append(f"> **{w}**")
+        if m or warnings:
+            lines.append("")
+
+        lines.append(f"\n{ch['content']}\n")
+
+    # Overall pacing assessment at the end
+    overall = (pacing_heatmap.get("overall_pacing_assessment") or "").strip()
+    if overall:
+        lines.append("\n---\n")
+        lines.append("## Overall Pacing Assessment\n")
+        lines.append(f"{overall}\n")
+
+    return "\n".join(lines)
+
+
+_EXPORT_FORMATTERS = {
+    "clean": _format_clean_manuscript,
+    "annotated": _format_annotated_manuscript,
+    "publishing": _format_publishing_manuscript,
+    "critique": _format_critique_manuscript,
+}
+
+_EXPORT_SUFFIXES = {
+    "clean": "",
+    "annotated": "-Annotated",
+    "publishing": "-Publishing",
+    "critique": "-Critique",
+}
+
+
 @app.route("/export", methods=["POST"])
 def export_novel():
     """
     Compile the completed novel into a Markdown file and return a download URL.
-    Expects JSON: { "token": "<progress_token>" }
+    Expects JSON: { "token": "<progress_token>", "variant": "clean|annotated|publishing|critique" }
     """
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
+    variant = data.get("variant", "clean").strip().lower()
+
+    if variant not in _EXPORT_FORMATTERS:
+        return jsonify({"error": f"Unknown export variant '{variant}'. Use: {', '.join(sorted(_EXPORT_FORMATTERS))}"}), 400
 
     with _progress_lock:
         progress_data = _progress_store.get(token)
@@ -4659,25 +5408,18 @@ def export_novel():
 
     title = session.get("title", "Novel")
     chapters_done = progress_data.get("chapters_done", [])
-    consistency = progress_data.get("consistency", {})
 
-    # Build Markdown
-    lines = [f"# {title}\n"]
-    for ch in chapters_done:
-        lines.append(f"\n## Chapter {ch['number']}: {ch['title']}\n")
-        lines.append(f"*Summary: {ch['summary']}*\n")
-        lines.append(f"\n{ch['content']}\n")
-
-    if consistency.get("overall_assessment"):
-        lines.append("\n---\n")
-        lines.append("## Editor's Notes\n")
-        lines.append(f"{consistency['overall_assessment']}\n")
-
-    markdown_content = "\n".join(lines)
+    formatter = _EXPORT_FORMATTERS[variant]
+    markdown_content = formatter(
+        title=title,
+        chapters_done=chapters_done,
+        progress_data=progress_data,
+    )
 
     # Safe filename
     safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:80]
-    filename = f"{safe_title}.md"
+    suffix = _EXPORT_SUFFIXES.get(variant, "")
+    filename = f"{safe_title}{suffix}.md"
     export_path = Path(config.EXPORT_DIR) / filename
 
     export_path.write_text(markdown_content, encoding="utf-8")
@@ -4712,6 +5454,7 @@ def export_editors_notes():
     climax_integrity_report = progress_data.get("climax_integrity_report", {})
     loose_thread_report = progress_data.get("loose_thread_report", {})
     reader_immersion_report = progress_data.get("reader_immersion_report", {})
+    pacing_heatmap = progress_data.get("pacing_heatmap", {})
 
     # Check if any reports are available
     has_content = any([
@@ -4723,6 +5466,7 @@ def export_editors_notes():
         climax_integrity_report,
         loose_thread_report,
         reader_immersion_report,
+        pacing_heatmap,
     ])
 
     if not has_content:
@@ -5012,6 +5756,53 @@ def export_editors_notes():
                 lines.append(f"- {r}" if isinstance(r, str) else f"- {r}")
             lines.append("")
 
+    # 9. Pacing & Tension Heatmap
+    if pacing_heatmap:
+        lines.append("---\n")
+        lines.append("## 9. Pacing & Tension Heatmap\n")
+        overall = (pacing_heatmap.get("overall_pacing_assessment") or "").strip()
+        if overall:
+            lines.append(f"**Overall Pacing Assessment:** {overall}\n")
+        metrics = pacing_heatmap.get("chapter_metrics") or []
+        if metrics:
+            # Build ASCII bar helper: 10-char bar from 0–100
+            def _bar(value: int) -> str:
+                clamped = max(0, min(100, int(value)))
+                filled = round(clamped / 10)
+                return "\u2588" * filled + "\u2591" * (10 - filled)
+
+            lines.append("| Ch | Tension | Action | Emotion | Dialogue | Description |")
+            lines.append("|---:|---------|--------|---------|----------|-------------|")
+            for m in sorted(metrics, key=lambda x: x.get("chapter", 0)):
+                if not isinstance(m, dict):
+                    continue
+                ch = m.get("chapter", "?")
+                t = int(m.get("tension_score", 0))
+                a = int(m.get("action_density", 0))
+                e = int(m.get("emotional_intensity", 0))
+                d = int(m.get("dialogue_ratio", 0))
+                desc = int(m.get("description_ratio", 0))
+                lines.append(
+                    f"| {ch} "
+                    f"| `{_bar(t)}` {t:3d} "
+                    f"| `{_bar(a)}` {a:3d} "
+                    f"| `{_bar(e)}` {e:3d} "
+                    f"| `{_bar(d)}` {d:3d} "
+                    f"| `{_bar(desc)}` {desc:3d} |"
+                )
+            lines.append("")
+        flat_sections = pacing_heatmap.get("flat_sections") or []
+        if flat_sections:
+            lines.append("**Flat Sections (potential pacing issues):**\n")
+            for fs in flat_sections:
+                if isinstance(fs, dict):
+                    chapters = fs.get("chapters", [])
+                    issue = fs.get("issue", "")
+                    lines.append(f"- Chapters {chapters}: {issue}")
+                else:
+                    lines.append(f"- {fs}")
+            lines.append("")
+
     markdown_content = "\n".join(lines)
 
     safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:80]
@@ -5022,6 +5813,103 @@ def export_editors_notes():
     export_path.write_text(markdown_content, encoding="utf-8")
 
     return jsonify({"download_url": f"/download/{filename}"})
+
+
+@app.route("/generate_illustrations", methods=["POST"])
+def generate_illustrations():
+    """
+    Generate cover and chapter scene illustrations for the completed novel.
+
+    Uses the LLM to create art prompts, then calls the image generation API
+    for each prompt. Returns a list of illustration metadata with image URLs.
+
+    Expects JSON: { "token": "<progress_token>" }
+    """
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "")
+
+    with _progress_lock:
+        progress_data = _progress_store.get(token)
+
+    if not progress_data or progress_data.get("status") != "done":
+        return jsonify({"error": "Novel generation not complete."}), 400
+
+    if not config.IMAGE_API_KEY:
+        return jsonify({"error": "IMAGE_API_KEY not configured. Set it in your .env file."}), 400
+
+    title = session.get("title", "Novel")
+    genre = session.get("genre", "")
+    premise = session.get("premise", "")
+    character_list = session.get("character_list", [])
+    chapters_done = progress_data.get("chapters_done", [])
+    all_summaries = [str(ch.get("summary", "")) for ch in chapters_done]
+
+    try:
+        # Step 1: Generate art prompts via LLM
+        raw = call_llm(
+            build_illustration_prompt_generator_prompt(
+                title=title,
+                genre=genre,
+                premise=premise,
+                character_list=character_list,
+                all_summaries=all_summaries,
+            ),
+            action="Generating illustration prompts",
+            json_mode=True,
+        )
+        prompt_data = parse_llm_json(raw)
+        illustrations = prompt_data.get("illustrations", [])
+
+        if not isinstance(illustrations, list) or not illustrations:
+            return jsonify({"error": "LLM did not return valid illustration prompts."}), 502
+
+        # Step 2: Generate each image
+        results = []
+        for idx, illust in enumerate(illustrations[:10]):  # Cap at 10
+            if not isinstance(illust, dict):
+                continue
+            art_prompt = str(illust.get("art_prompt", "")).strip()
+            if not art_prompt:
+                continue
+
+            illust_type = str(illust.get("type", "chapter_scene"))
+            chapter = illust.get("chapter")
+            scene_desc = str(illust.get("scene_description", "")).strip()
+
+            prefix = "cover" if illust_type == "cover" else f"ch{chapter or idx}"
+            filename = call_image_api(art_prompt, filename_prefix=prefix)
+
+            if filename:
+                results.append({
+                    "type": illust_type,
+                    "chapter": chapter,
+                    "scene_description": scene_desc,
+                    "art_prompt": art_prompt,
+                    "image_url": f"/illustrations/{filename}",
+                })
+
+        if not results:
+            return jsonify({"error": "Image generation failed for all prompts."}), 502
+
+        # Store results in progress data for potential re-display
+        with _progress_lock:
+            _progress_store[token]["illustrations"] = results
+
+        return jsonify({"illustrations": results})
+
+    except RuntimeError as exc:
+        logger.error("Illustration generation failed: %s", exc)
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/illustrations/<path:filename>")
+def serve_illustration(filename: str):
+    """Serve a generated illustration image."""
+    safe_filename = Path(filename).name
+    img_path = Path(config.EXPORT_DIR) / "illustrations" / safe_filename
+    if not img_path.exists():
+        abort(404)
+    return send_file(str(img_path), mimetype="image/png")
 
 
 @app.route("/download/<path:filename>")

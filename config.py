@@ -19,6 +19,20 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 # LLM model name to request
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 
+# Image generation API endpoint (default: OpenAI image generations)
+IMAGE_API_URL = os.environ.get("IMAGE_API_URL", "https://api.openai.com/v1/images/generations")           
+
+# Image generation API key – REQUIRED in production. Set the IMAGE_API_KEY environment variable.
+IMAGE_API_KEY = os.environ.get("IMAGE_API_KEY", "")
+
+# Image generation model name to request
+IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1-mini")
+
+# Image generation size
+IMAGE_SIZE = os.environ.get("IMAGE_SIZE", "1024x1024")
+
+
+
 # Flask secret key – override via SECRET_KEY environment variable in production
 SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
 
