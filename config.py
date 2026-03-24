@@ -5,7 +5,9 @@ Settings are read from environment variables. Copy .env.example to .env
 and fill in your values before running the application.
 """
 
+import logging
 import os
+import sys
 
 
 # LLM API endpoint (default: OpenAI chat completions)
@@ -41,3 +43,53 @@ SESSION_FILE_DIR = os.environ.get("SESSION_FILE_DIR", "./flask_session")
 
 # Directory where exported novel files are stored temporarily
 EXPORT_DIR = os.environ.get("EXPORT_DIR", "./exports")
+
+
+def validate_config(*, debug: bool = False) -> None:
+    """Validate configuration at startup.
+
+    In production (debug=False), missing critical values cause a hard exit.
+    In development (debug=True), they produce warnings so the app can still
+    start for UI work or testing.
+    """
+    _logger = logging.getLogger(__name__)
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # LLM_API_KEY is required to do anything useful
+    if not LLM_API_KEY:
+        errors.append(
+            "LLM_API_KEY is not set. Set the LLM_API_KEY environment variable."
+        )
+
+    # LLM_API_URL must look like a URL
+    if not LLM_API_URL.startswith(("http://", "https://")):
+        errors.append(
+            f"LLM_API_URL is not a valid URL: {LLM_API_URL!r}"
+        )
+
+    # SECRET_KEY must be changed in production
+    if SECRET_KEY == "change-me-in-production":
+        if debug:
+            warnings.append(
+                "SECRET_KEY is using the default value. "
+                "Set the SECRET_KEY environment variable before deploying."
+            )
+        else:
+            errors.append(
+                "SECRET_KEY is using the insecure default. "
+                "Set the SECRET_KEY environment variable for production."
+            )
+
+    for msg in warnings:
+        _logger.warning("CONFIG WARNING: %s", msg)
+
+    if errors:
+        if debug:
+            # In development, warn but allow startup
+            for msg in errors:
+                _logger.warning("CONFIG WARNING: %s", msg)
+        else:
+            for msg in errors:
+                _logger.error("CONFIG ERROR: %s", msg)
+            sys.exit(1)

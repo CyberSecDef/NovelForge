@@ -28,6 +28,9 @@ import yaml
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, render_template, request, send_file, session
 from flask_session import Session
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 from jinja2 import Template
 
 # Load environment variables before local imports so config picks them up
@@ -60,6 +63,8 @@ app.config["SESSION_FILE_DIR"] = config.SESSION_FILE_DIR
 app.config["SESSION_PERMANENT"] = False
 
 Session(app)
+CSRFProtect(app)
+limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -71,6 +76,9 @@ llm_handler = logging.FileHandler("./logs/llm.log")
 llm_handler.setFormatter(logging.Formatter("%(message)s"))
 llm_logger.addHandler(llm_handler)
 llm_logger.propagate = False
+
+# Validate configuration – warns in debug, exits in production
+config.validate_config(debug=app.debug)
 
 # In-memory store for chapter-generation progress keyed by session token
 _progress_store: dict[str, dict] = {}
@@ -3757,6 +3765,8 @@ def validate_outline_input(data: dict) -> tuple[bool, str]:
         chapters = int(data.get("chapters", 0))
         if chapters < 3:
             return False, "Number of chapters must be at least 3."
+        if chapters > 100:
+            return False, "Number of chapters must be 100 or fewer."
     except (ValueError, TypeError):
         return False, "Chapters must be a valid number."
 
@@ -3764,8 +3774,18 @@ def validate_outline_input(data: dict) -> tuple[bool, str]:
         word_count = int(data.get("word_count", 0))
         if word_count < 1000:
             return False, "Word count must be at least 1000."
+        if word_count > 500000:
+            return False, "Word count must be 500,000 or fewer."
     except (ValueError, TypeError):
         return False, "Word count must be a valid number."
+
+    special_events = data.get("special_events", "")
+    if isinstance(special_events, str) and len(special_events) > 5000:
+        return False, "Special events must be 5,000 characters or fewer."
+
+    special_instructions = data.get("special_instructions", "")
+    if isinstance(special_instructions, str) and len(special_instructions) > 5000:
+        return False, "Special instructions must be 5,000 characters or fewer."
 
     return True, ""
 
@@ -3781,6 +3801,7 @@ def index():
 
 
 @app.route("/generate_outline", methods=["POST"])
+@limiter.limit("5 per minute")
 def generate_outline():
     """
     Phase 1: Generate title, chapter outline, and main characters.
@@ -3973,12 +3994,34 @@ def approve_outline():
     title = data.get("title", "").strip()
     if not title:
         return jsonify({"error": "Title is required."}), 400
+    if len(title) > 200:
+        return jsonify({"error": "Title must be 200 characters or fewer."}), 400
 
     chapter_list = data.get("chapters", [])
     if not isinstance(chapter_list, list) or len(chapter_list) == 0:
         return jsonify({"error": "Chapter list is required."}), 400
 
+    # Validate chapter field lengths
+    for i, ch in enumerate(chapter_list, 1):
+        ch_title = ch.get("title", "") if isinstance(ch, dict) else ""
+        ch_summary = ch.get("summary", "") if isinstance(ch, dict) else ""
+        if isinstance(ch_title, str) and len(ch_title) > 200:
+            return jsonify({"error": f"Chapter {i} title must be 200 characters or fewer."}), 400
+        if isinstance(ch_summary, str) and len(ch_summary) > 2000:
+            return jsonify({"error": f"Chapter {i} summary must be 2,000 characters or fewer."}), 400
+
     character_list = data.get("characters", [])
+
+    # Validate character field lengths
+    _char_limits = {"name": 100, "age": 50, "role": 200, "background": 2000, "arc": 2000}
+    for i, char in enumerate(character_list, 1):
+        if not isinstance(char, dict):
+            continue
+        for field, limit in _char_limits.items():
+            value = char.get(field, "")
+            if isinstance(value, str) and len(value) > limit:
+                label = char.get("name", f"Character {i}")
+                return jsonify({"error": f"{label}: {field} must be {limit:,} characters or fewer."}), 400
 
     # Sanitise string fields to prevent XSS leaking into stored session data
     def sanitise_str(v):
@@ -4075,6 +4118,7 @@ def approve_outline():
 
 
 @app.route("/generate_chapters", methods=["POST"])
+@limiter.limit("1 per 10 minutes")
 def generate_chapters():
     """
     Phase 2: Start async chapter generation.
@@ -4806,6 +4850,7 @@ def _run_chapter_generation_internal(
 
 
 @app.route("/revise_chapter", methods=["POST"])
+@limiter.limit("5 per minute")
 def revise_chapter():
     """
     Apply custom editor instructions to one generated chapter, then re-run all
@@ -5816,6 +5861,7 @@ def export_editors_notes():
 
 
 @app.route("/generate_illustrations", methods=["POST"])
+@limiter.limit("2 per 10 minutes")
 def generate_illustrations():
     """
     Generate cover and chapter scene illustrations for the completed novel.
@@ -5925,7 +5971,9 @@ def download_file(filename: str):
 
 @app.route("/llm_log")
 def get_llm_log():
-    """Return recent LLM log entries for the chat display."""
+    """Return recent LLM log entries for the chat display. Debug mode only."""
+    if not app.debug:
+        abort(404)
     # Use absolute path based on app location
     log_path = Path(__file__).parent / "logs" / "llm.log"
     

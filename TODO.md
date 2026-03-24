@@ -16,17 +16,20 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 ### High Priority
 
-- [ ] **Add CSRF Protection** - Implement Flask-WTF CSRF tokens on all POST routes. Currently, any malicious website could trick users into triggering novel generation, consuming expensive LLM API credits.
+- [X] **Add CSRF Protection** - Implement Flask-WTF CSRF tokens on all POST routes. Currently, any malicious website could trick users into triggering novel generation, consuming expensive LLM API credits.
   - Install `Flask-WTF`, call `CSRFProtect(app)`, add `{{ csrf_token() }}` to all AJAX headers in `script.js`
   - Location: All POST routes in `app.py`, all AJAX calls in `static/js/script.js`
 
-- [ ] **Implement Rate Limiting** - Add Flask-Limiter with per-IP rate limits (e.g., 5 outline generations per minute, 1 novel generation per 10 minutes) to prevent API abuse and DoS attacks.
+- [X] **Implement Rate Limiting** - Add Flask-Limiter with per-IP rate limits (e.g., 5 outline generations per minute, 1 novel generation per 10 minutes) to prevent API abuse and DoS attacks.
   - Install `Flask-Limiter`, apply `@limiter.limit()` decorators to expensive routes (`/generate_outline`, `/generate_chapters`, `/revise_chapter`)
   - Location: `app.py` (route decorators)
 
-- [ ] **Add Upper Bounds to Input Validation** - Enforce maximum values for chapters (cap at 100) and word count (cap at 500,000) to prevent memory exhaustion, runaway thread timeouts, and excessive API spend.
+- [X] **Add Upper Bounds to Input Validation** - Enforce maximum values for chapters (cap at 100) and word count (cap at 500,000) to prevent memory exhaustion, runaway thread timeouts, and excessive API spend.
   - Also add length limits to `special_events` and `special_instructions` fields (e.g., 5,000 chars each)
   - Location: `app.py:validate_outline_input()`
+
+- [X] **Protect `/llm_log` Endpoint** - The `/llm_log` route exposes full LLM request/response payloads (including user prompts and generated content) with no authentication. Restrict access to debug mode only (`app.debug == True`) or add authentication.
+  - Location: `app.py:/llm_log` route (approximately line 5926)
 
 ### Medium Priority
 
@@ -34,7 +37,7 @@ This document tracks planned improvements and enhancements for NovelForge.
   - Test that `markupsafe.escape()` is applied before LLM calls, that `/download/<filename>` rejects `../` traversal, that CSRF tokens are enforced
   - Location: `tests/test_security.py` (new file)
 
-- [ ] **Sanitize Contenteditable Fields** - Add character limits and server-side validation to inline-editable table cells (chapter titles, character names/backgrounds) to prevent malformed data reaching LLM prompts.
+- [X] **Sanitize Contenteditable Fields** - Add character limits and server-side validation to inline-editable table cells (chapter titles, character names/backgrounds) to prevent malformed data reaching LLM prompts.
   - Add `maxlength` enforcement via JS `input` event; validate lengths again in `/approve_outline`
   - Location: `static/js/script.js` (contenteditable handlers), `app.py:/approve_outline`
 
@@ -44,7 +47,7 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 ### High Priority
 
-- [ ] **Add Configuration Validation at Startup** - Validate all required environment variables (`LLM_API_KEY`, `LLM_API_URL`) before the server begins accepting requests. Print a clear error and exit if required values are missing or obviously wrong.
+- [X] **Add Configuration Validation at Startup** - Validate all required environment variables (`LLM_API_KEY`, `LLM_API_URL`) before the server begins accepting requests. Print a clear error and exit if required values are missing or obviously wrong.
   - Implement a `validate_config()` function called from `create_app()` (see Code Organization); use environment-based config classes (`DevelopmentConfig`, `ProductionConfig`) so `SECRET_KEY` is required in production but defaults gracefully in development
   - Location: `config.py`, `app.py` (startup)
 
@@ -78,6 +81,9 @@ This document tracks planned improvements and enhancements for NovelForge.
   - Location: `static/js/script.js:pollProgress()`
 
 ### Low Priority
+
+- [ ] **Replace `print()` and `console.log()` with Proper Logging** - Three `print()` statements in production Python code (lines 232, 243, 247 in `app.py`) and two `console.log()` calls in `script.js` (lines 95, 190) bypass structured logging. Replace with `logger.error()` / `logger.warning()` in Python and remove or guard console statements in JavaScript.
+  - Location: `app.py` (lines 232, 243, 247), `static/js/script.js` (lines 95, 190)
 
 - [ ] **Add Schema Validation for Session Persistence** - Use Pydantic or `dataclasses` with field validators to ensure all session keys are correctly typed when saving and restoring session state. Prevents silent data corruption from partial writes or format changes.
   - Location: `app.py` (session persistence functions, approximately lines 77–198)
@@ -167,6 +173,12 @@ This document tracks planned improvements and enhancements for NovelForge.
   - Location: `app.py` (throughout)
 
 ### Low Priority
+
+- [ ] **Consolidate Export Format Functions** - The 4 export formatters (`_format_clean_manuscript`, `_format_annotated_manuscript`, `_format_publishing_manuscript`, `_format_critique_manuscript`) share ~300 lines of duplicated header/chapter/footer logic. Extract a shared template with format-specific overrides.
+  - Location: `app.py` (approximately lines 5180–5391)
+
+- [ ] **Refactor `_run_all_chapter_agents` Signature** - This function takes 18 parameters (9 required + 9 with defaults), creating high cognitive load. Extract a `ChapterContext` dataclass to bundle the related context fields.
+  - Location: `app.py:_run_all_chapter_agents()` (approximately lines 4189–4208)
 
 - [ ] **Centralize Chapter Split Logic** - The percentage-based chapter position calculation (used to assign narrative phases to chapters) is duplicated in multiple locations. Create a single `ChapterPosition` utility with methods like `get_act()`, `get_phase()`, `is_climax_zone()`.
   - Location: Multiple sites in `app.py`
@@ -351,16 +363,16 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 | Category | High | Medium | Low | Total |
 |----------|------|--------|-----|-------|
-| Security | 3 | 2 | 0 | 5 |
-| Reliability | 2 | 6 | 1 | 9 |
-| Architecture & Code Organization | 2 | 4 | 2 | 8 |
+| Security | 4 | 2 | 0 | 6 |
+| Reliability | 2 | 6 | 2 | 10 |
+| Architecture & Code Organization | 2 | 5 | 4 | 11 |
 | Performance | 0 | 3 | 3 | 6 |
 | Testing | 2 | 4 | 0 | 6 |
 | User Experience | 0 | 3 | 6 | 9 |
 | Infrastructure | 0 | 4 | 1 | 5 |
 | Documentation | 0 | 0 | 4 | 4 |
 | Future Features | 0 | 3 | 5 | 8 |
-| **Total** | **9** | **29** | **22** | **60** |
+| **Total** | **10** | **30** | **25** | **65** |
 
 ---
 

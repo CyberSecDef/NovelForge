@@ -4,14 +4,18 @@ and specialized agent prompt builders.
 """
 
 import json
+import unittest
 import pytest
 
 
 @pytest.fixture
 def client():
-    from app import app as flask_app
+    from app import app as flask_app, limiter
     flask_app.config["TESTING"] = True
     flask_app.config["SECRET_KEY"] = "test-secret"
+    flask_app.config["WTF_CSRF_ENABLED"] = False
+    flask_app.config["RATELIMIT_ENABLED"] = False
+    limiter.enabled = False
     with flask_app.test_client() as c:
         yield c
 
@@ -273,7 +277,7 @@ class TestRoutes:
             sess["character_list"] = []
             sess["special_instructions"] = ""
 
-        def fake_call_llm(messages, json_mode=False):
+        def fake_call_llm(messages, json_mode=False, **kwargs):
             user_content = messages[-1]["content"]
             if "Write a 100-200 word summary" in user_content:
                 return "Updated summary"
@@ -328,23 +332,23 @@ class TestPromptBuilders:
         assert system_msg["content"].strip(), "System prompt must not be empty"
         assert user_msg["content"].strip(), "User prompt must not be empty"
 
-    def test_dialog_agent_prompt(self):
-        from app import build_dialog_agent_prompt
-        self._check_messages(build_dialog_agent_prompt("Some chapter text with dialogue."))
+    def test_prose_refinement_agent_prompt(self):
+        from app import build_prose_refinement_agent_prompt
+        self._check_messages(build_prose_refinement_agent_prompt("Some chapter text with dialogue.", 1, "Test Novel"))
 
-    def test_dialog_agent_prompt_contains_text(self):
-        from app import build_dialog_agent_prompt
+    def test_prose_refinement_agent_prompt_contains_text(self):
+        from app import build_prose_refinement_agent_prompt
         text = "He said hello. She replied."
-        msgs = build_dialog_agent_prompt(text)
+        msgs = build_prose_refinement_agent_prompt(text, 1, "Test Novel")
         assert text in msgs[1]["content"]
 
     def test_scene_agent_prompt(self):
-        from app import build_scene_agent_prompt
-        self._check_messages(build_scene_agent_prompt("A scene in the forest."))
+        from app import build_prose_refinement_agent_prompt
+        self._check_messages(build_prose_refinement_agent_prompt("A scene in the forest.", 1, "Test Novel"))
 
     def test_scene_agent_prompt_contains_pattern(self):
-        from app import build_scene_agent_prompt
-        msgs = build_scene_agent_prompt("text")
+        from app import build_prose_refinement_agent_prompt
+        msgs = build_prose_refinement_agent_prompt("text", 1, "Test Novel")
         combined = msgs[0]["content"] + msgs[1]["content"]
         assert "Goal" in combined and "Obstacle" in combined
 
@@ -372,24 +376,24 @@ class TestPromptBuilders:
     def test_character_agent_prompt(self):
         from app import build_character_agent_prompt
         self._check_messages(
-            build_character_agent_prompt("Chapter text.", "Alice: protagonist, brave.")
+            build_character_agent_prompt("Chapter text.", "Alice: protagonist, brave.", 1, "Test Novel")
         )
 
     def test_character_agent_prompt_contains_characters(self):
         from app import build_character_agent_prompt
         chars = "Alice: protagonist"
-        msgs = build_character_agent_prompt("text", chars)
+        msgs = build_character_agent_prompt("text", chars, 1, "Test Novel")
         assert chars in msgs[1]["content"]
 
     def test_context_analyzer_prompt_with_previous(self):
         from app import build_context_analyzer_prompt
-        msgs = build_context_analyzer_prompt("current chapter", "Chapter 1: something happened")
+        msgs = build_context_analyzer_prompt("current chapter", "Chapter 1: something happened", 2, "Test Novel")
         self._check_messages(msgs)
         assert "Chapter 1" in msgs[1]["content"]
 
     def test_context_analyzer_prompt_first_chapter(self):
         from app import build_context_analyzer_prompt
-        msgs = build_context_analyzer_prompt("current chapter", "")
+        msgs = build_context_analyzer_prompt("current chapter", "", 1, "Test Novel")
         self._check_messages(msgs)
         assert "first chapter" in msgs[1]["content"]
 
@@ -406,32 +410,32 @@ class TestPromptBuilders:
 
     def test_quality_controller_prompt(self):
         from app import build_quality_controller_prompt
-        self._check_messages(build_quality_controller_prompt("Chapter text."))
+        self._check_messages(build_quality_controller_prompt("Chapter text.", 1, "Test Novel"))
 
     def test_anti_llm_agent_prompt(self):
         from app import build_anti_llm_agent_prompt
-        self._check_messages(build_anti_llm_agent_prompt("Some text with embark delve."))
+        self._check_messages(build_anti_llm_agent_prompt("Some text with embark delve.", 1, "Test Novel"))
 
     def test_anti_llm_agent_prompt_contains_forbidden_words(self):
         from app import build_anti_llm_agent_prompt, _FORBIDDEN_WORDS
-        msgs = build_anti_llm_agent_prompt("text")
+        msgs = build_anti_llm_agent_prompt("text", 1, "Test Novel")
         # At least one forbidden word should appear in the system prompt
         forbidden_in_prompt = any(w in msgs[0]["content"] for w in _FORBIDDEN_WORDS)
         assert forbidden_in_prompt, "Anti-LLM system prompt should list forbidden words"
 
     def test_polish_agent_prompt(self):
         from app import build_polish_agent_prompt
-        self._check_messages(build_polish_agent_prompt("Draft chapter text."))
+        self._check_messages(build_polish_agent_prompt("Draft chapter text.", 1, "Test Novel", "Fantasy"))
 
     def test_editing_agent_prompt(self):
         from app import build_editing_agent_prompt
         self._check_messages(
-            build_editing_agent_prompt("Draft text.", "Chapter should end with a fight.")
+            build_editing_agent_prompt("Draft text.", "Chapter should end with a fight.", 1, "Test Novel")
         )
 
     def test_chapter_summary_prompt(self):
         from app import build_chapter_summary_prompt
-        self._check_messages(build_chapter_summary_prompt("Full chapter text here."))
+        self._check_messages(build_chapter_summary_prompt("Full chapter text here.", 1))
 
     def test_progress_token_includes_step(self, client):
         """After /generate_chapters, the initial progress record should include 'step'."""
@@ -818,14 +822,15 @@ class TestContinuityGatekeeper:
 
 class TestNarrativeRedundancyDetector:
     def test_build_prompt_mentions_redundancy_targets(self):
-        from app import build_narrative_redundancy_detector_prompt
+        from app import build_narrative_momentum_distinctiveness_prompt
 
-        messages = build_narrative_redundancy_detector_prompt(
+        messages = build_narrative_momentum_distinctiveness_prompt(
             chapter_text="Mara plans another extraction from the same prison convoy.",
             previous_summaries="Chapter 2: Mara already raided a convoy to free one witness.",
             chapter_summary="Mara attempts a second rescue under heavier surveillance.",
             chapter_num=4,
             title="Glass Province",
+            total_chapters=20,
         )
 
         assert isinstance(messages, list)
@@ -837,14 +842,15 @@ class TestNarrativeRedundancyDetector:
         assert "Return ONLY the complete revised chapter text" in content
 
     def test_build_prompt_handles_first_chapter(self):
-        from app import build_narrative_redundancy_detector_prompt
+        from app import build_narrative_momentum_distinctiveness_prompt
 
-        messages = build_narrative_redundancy_detector_prompt(
+        messages = build_narrative_momentum_distinctiveness_prompt(
             chapter_text="Opening chapter text.",
             previous_summaries="",
             chapter_summary="Introduce the protagonist and central threat.",
             chapter_num=1,
             title="Opening Signal",
+            total_chapters=20,
         )
 
         assert "no prior chapters to compare" in messages[1]["content"].lower()
@@ -852,9 +858,9 @@ class TestNarrativeRedundancyDetector:
 
 class TestCharacterThreadTracker:
     def test_build_prompt_mentions_forward_movement(self):
-        from app import build_character_thread_tracker_prompt
+        from app import build_character_agent_prompt
 
-        messages = build_character_thread_tracker_prompt(
+        messages = build_character_agent_prompt(
             chapter_text="Mara and Iven walk to the checkpoint. Kael watches.",
             characters_text=(
                 "- Mara: protagonist, determined.\n"
@@ -873,9 +879,9 @@ class TestCharacterThreadTracker:
         assert "Glass Province" in content
 
     def test_build_prompt_includes_arc_context(self):
-        from app import build_character_thread_tracker_prompt
+        from app import build_character_agent_prompt
 
-        messages = build_character_thread_tracker_prompt(
+        messages = build_character_agent_prompt(
             chapter_text="Chapter text here.",
             characters_text="- Mara: lead.",
             chapter_num=3,
@@ -924,14 +930,15 @@ class TestOperationalDistinctivenessAgent:
 
 class TestStoryMomentumTracker:
     def test_build_prompt_checks_escalation(self):
-        from app import build_story_momentum_tracker_prompt
+        from app import build_narrative_momentum_distinctiveness_prompt
 
-        messages = build_story_momentum_tracker_prompt(
+        messages = build_narrative_momentum_distinctiveness_prompt(
             chapter_text="Raya escapes again through the back channel unharmed.",
             previous_summaries=(
                 "Chapter 1: Raya loses her cover identity.\n"
                 "Chapter 2: Raya escapes a checkpoint, losing her partner."
             ),
+            chapter_summary="Raya attempts another escape through the back channel.",
             chapter_num=5,
             title="Pale Frequency",
             total_chapters=20,
@@ -946,11 +953,12 @@ class TestStoryMomentumTracker:
         assert "Return ONLY the complete revised chapter text" in content
 
     def test_build_prompt_handles_first_chapter(self):
-        from app import build_story_momentum_tracker_prompt
+        from app import build_narrative_momentum_distinctiveness_prompt
 
-        messages = build_story_momentum_tracker_prompt(
+        messages = build_narrative_momentum_distinctiveness_prompt(
             chapter_text="The story begins.",
             previous_summaries="",
+            chapter_summary="The story begins with the protagonist.",
             chapter_num=1,
             title="Pale Frequency",
             total_chapters=20,

@@ -930,7 +930,7 @@ prompts:
 
       {%- else %}
 
-      This is Chapter 1 – establish the foundational threat and personal stakes.
+      This is Chapter 1, so there are no prior chapters to compare. Establish the foundational threat and personal stakes.
 
       {%- endif %}
 

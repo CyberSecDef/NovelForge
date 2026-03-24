@@ -14,6 +14,18 @@ $(function () {
   "use strict";
 
   // -------------------------------------------------------------------
+  // CSRF token – attach to every AJAX request via X-CSRFToken header
+  // -------------------------------------------------------------------
+  var csrfToken = $('meta[name="csrf-token"]').attr("content");
+  $.ajaxSetup({
+    beforeSend: function (xhr, settings) {
+      if (!/^(GET|HEAD|OPTIONS)$/i.test(settings.type) && csrfToken) {
+        xhr.setRequestHeader("X-CSRFToken", csrfToken);
+      }
+    },
+  });
+
+  // -------------------------------------------------------------------
   // Bootstrap tooltip initialisation
   // -------------------------------------------------------------------
   $('[data-bs-toggle="tooltip"]').each(function () {
@@ -70,6 +82,41 @@ $(function () {
   function escapeHtml(str) {
     return $("<div>").text(String(str)).html();
   }
+
+  // -------------------------------------------------------------------
+  // Contenteditable field length limits
+  // -------------------------------------------------------------------
+  var FIELD_MAX_LENGTHS = {
+    name: 100,
+    age: 50,
+    role: 200,
+    title: 200,
+    summary: 2000,
+    background: 2000,
+    arc: 2000,
+  };
+
+  $(document).on("input", ".editable-cell[contenteditable]", function () {
+    var $el = $(this);
+    var field = $el.data("field");
+    var max = FIELD_MAX_LENGTHS[field];
+    if (max && $el.text().length > max) {
+      var sel = window.getSelection();
+      var offset = sel.rangeCount ? sel.getRangeAt(0).startOffset : 0;
+      $el.text($el.text().substring(0, max));
+      // Restore cursor position
+      try {
+        var range = document.createRange();
+        var node = $el[0].firstChild;
+        if (node) {
+          range.setStart(node, Math.min(offset, node.length));
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } catch (e) { /* ignore cursor restore errors */ }
+    }
+  });
 
   var DEFAULT_STICKY_STATUS = "AI-Powered Novel Generator";
   var _activeLLMRequests = 0;
