@@ -187,20 +187,7 @@ This document tracks planned improvements and enhancements for NovelForge.
 - [ ] **Add Caching for Planning Agent Outputs** - Extend selective regeneration with a session-level cache: store agent outputs alongside an input hash. On re-approval, compare hashes and reuse cached outputs for unchanged agents.
   - Location: `app.py:approve_outline()`
 
-- [ ] **Replace Progress Polling with Server-Sent Events** - The current 3-second HTTP polling (`/progress/<token>`) generates constant server load for the full duration of novel generation (20–40 minutes). Replace with SSE (`/progress/stream/<token>`) to push updates only when state actually changes, eliminating unnecessary requests.
-  - Use Flask's `Response` with `mimetype="text/event-stream"` and a generator that yields from the progress store; update the client to use the `EventSource` API
-  - Location: `app.py` (new `/progress/stream/<token>` route), `static/js/script.js:pollProgress()`
-
 ### Low Priority
-
-- [ ] **Implement Virtual Scrolling for Chapter Lists** - For novels with 50+ chapters, the DOM accumulates all chapter entries simultaneously, causing UI slowdown. Paginate or virtualize the chapter list to render only visible rows.
-  - Location: `static/js/script.js`, `templates/index.html`
-
-- [ ] **Compress Session Files** - Session persistence files in `./sessions/` can grow large for complex novels (many characters, long summaries). Apply gzip compression on write and decompress on read.
-  - Location: `app.py:save_session_state()` (approximately line 131)
-
-- [ ] **Return Incremental Progress Updates** - `/progress/<token>` currently returns the full chapter list on every poll. Return only chapters added or updated since the last poll (using a `since` query parameter) to reduce payload size for long novels.
-  - Location: `app.py:/progress/<token>` route
 
 ---
 
@@ -251,35 +238,29 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 ### Medium Priority
 
-- [ ] **Add Accessibility Labels** - Add ARIA attributes to step panels (`aria-hidden`, `role="main"`), `for` attributes on all form labels, and keyboard navigation support for the inline-editable chapter/character tables.
+- [X] **Add Accessibility Labels** - Add ARIA attributes to step panels (`aria-hidden`, `role="main"`), `for` attributes on all form labels, and keyboard navigation support for the inline-editable chapter/character tables.
   - Location: `templates/index.html`
 
-- [ ] **Implement Mobile Responsive Design** - Replace fixed-width tables in the chapter and character review panels with card-based layouts on small viewports using Bootstrap 5 responsive utilities.
-  - Location: `templates/index.html`, `static/css/style.css`
-
-- [ ] **Add User-Friendly Error Messages** - Replace generic HTTP error responses with specific, actionable messages. Examples:
+- [X] **Add User-Friendly Error Messages** - Replace generic HTTP error responses with specific, actionable messages. Examples:
   - LLM timeout → "The AI service is taking too long. Your progress is saved — you can resume when it recovers."
   - LLM auth failure → "API key rejected. Check your LLM_API_KEY setting."
   - Location: `app.py` (all route error handlers), `static/js/script.js` (error display)
 
 ### Low Priority
 
-- [ ] **Add Unsaved Changes Warning** - Track dirty state when the user edits the chapter or character tables and show a confirmation modal if they attempt to navigate away without approving.
+- [X] **Add Unsaved Changes Warning** - Track dirty state when the user edits the chapter or character tables and show a confirmation modal if they attempt to navigate away without approving.
   - Location: `static/js/script.js`
 
-- [ ] **Add Progress Time Estimation** - Record wall-clock time per completed chapter and display an estimated time remaining ("~12 minutes left") based on the rolling average.
+- [X] **Add Progress Time Estimation** - Record wall-clock time per completed chapter and display an estimated time remaining ("~12 minutes left") based on the rolling average.
   - Location: `static/js/script.js:pollProgress()`
 
-- [ ] **Implement Clear Log Button** - The "Clear log" button in the LLM log viewer panel exists in the UI but has no functionality. Wire it to clear the displayed entries and optionally POST to a `/clear_log` endpoint.
+- [X] **Implement Clear Log Button** - The "Clear log" button in the LLM log viewer panel exists in the UI but has no functionality. Wire it to clear the displayed entries and optionally POST to a `/clear_log` endpoint.
   - Location: `static/js/script.js`
 
-- [ ] **Disable Export Button During Processing** - Prevent duplicate file generation from rapid clicks on the Export button by disabling it immediately on click and re-enabling only after the download completes or an error occurs.
+- [X] **Disable Export Button During Processing** - Prevent duplicate file generation from rapid clicks on the Export button by disabling it immediately on click and re-enabling only after the download completes or an error occurs.
   - Location: `static/js/script.js` (export button handler)
 
-- [ ] **Add Dark Mode Support** - Implement `@media (prefers-color-scheme: dark)` CSS rules for the Bootstrap theme and custom styles.
-  - Location: `static/css/style.css`
-
-- [ ] **Add Print Styles** - Optimize the chapter preview panel for printing with `@media print` CSS rules (hide nav, expand collapsed chapters, set readable font sizes).
+- [X] **Add Dark Mode Support** - Implement `@media (prefers-color-scheme: dark)` CSS rules for the Bootstrap theme and custom styles.  Add a toggle button for light/dark modes in the sticky bar at the top.
   - Location: `static/css/style.css`
 
 ---
@@ -288,27 +269,13 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 ### Medium Priority
 
-- [ ] **Add Health Check Endpoint** - Create a `/health` route returning `{"status": "ok", "version": "..."}` for load balancer monitoring and uptime checks. Should return `503` if any critical dependency (e.g., Redis) is unreachable.
-  - Location: `app.py` (new route)
-
 - [ ] **Add Environment-Based Config Classes** - Replace the flat `config.py` with a class hierarchy that enforces environment-appropriate settings:
   - `DevelopmentConfig`: debug on, insecure `SECRET_KEY` default allowed, verbose logging
   - `ProductionConfig`: debug off, `SECRET_KEY` required (raises on missing), warnings for default LLM model
   - `TestingConfig`: uses mock LLM URL, in-memory session, no disk I/O
   - Location: `config.py`
 
-- [ ] **Add Database Support for Persistence** - Migrate from file-based sessions and in-memory progress store to SQLite (single-server) or PostgreSQL (multi-server). Store novel metadata, chapter content, and generation progress in normalized tables for better querying and audit trails.
-  - Use Flask-SQLAlchemy; implement with Alembic/Flask-Migrate for schema versioning
-  - Location: New `novelforge/models.py` and `novelforge/db.py` modules
-
-- [ ] **Add Structured Logging** - Replace ad-hoc `logging.info()` calls with JSON-structured log output (`python-json-logger`) for better aggregation in production log systems (Datadog, CloudWatch, ELK).
-  - Include fields: `timestamp`, `level`, `module`, `correlation_id`, `action`, `duration_ms`
-  - Location: `app.py` (logging configuration)
-
 ### Low Priority
-
-- [ ] **Add Docker Support** - Create a `Dockerfile` and `docker-compose.yml` (with a Redis service for the progress store) to simplify local development setup and production deployment.
-  - Location: Repository root (new files)
 
 ---
 
@@ -337,53 +304,12 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 ### Medium Priority
 
-- [ ] **Add User Accounts** - Implement optional user registration/login (Flask-Login + SQLAlchemy) to persist novels and generation history across browser sessions.
-
-- [ ] **Add Novel Templates** - Allow users to start from pre-defined story archetypes (e.g., "Hero's Journey", "Murder Mystery", "Romance Arc") that pre-populate premise, genre, and chapter structure suggestions.
-
-- [ ] **Add Export Formats** - Support EPUB, PDF, and DOCX export in addition to Markdown. Use `ebooklib` for EPUB, `WeasyPrint` or `reportlab` for PDF, `python-docx` for DOCX.
 
 ### Low Priority
 
-- [ ] **Add Collaboration Features** - Allow multiple users to co-edit the same outline in real-time using WebSockets (Flask-SocketIO).
-
-- [ ] **Add Version History** - Track every revision of each chapter and allow rollback to any prior version. Store diffs or full snapshots in the database.
-
 - [ ] **Add Chapter Drag-and-Drop Reordering** - Allow users to reorder chapters in the Step 2 outline table via drag-and-drop (using SortableJS) rather than only up/down arrow buttons.
-
-- [ ] **Add Character Relationship Mapping** - Generate and display a visual graph (using D3.js or Mermaid) showing character relationships as defined by the character agent.
 
 - [ ] **Add Writing Statistics Dashboard** - Show per-chapter word count, generation time, revision count, and LLM token usage in a summary panel after generation completes.
 
 ---
 
-## Summary
-
-| Category | High | Medium | Low | Total |
-|----------|------|--------|-----|-------|
-| Security | 4 | 2 | 0 | 6 |
-| Reliability | 2 | 6 | 2 | 10 |
-| Architecture & Code Organization | 2 | 5 | 4 | 11 |
-| Performance | 0 | 3 | 3 | 6 |
-| Testing | 2 | 4 | 0 | 6 |
-| User Experience | 0 | 3 | 6 | 9 |
-| Infrastructure | 0 | 4 | 1 | 5 |
-| Documentation | 0 | 0 | 4 | 4 |
-| Future Features | 0 | 3 | 5 | 8 |
-| **Total** | **10** | **30** | **25** | **65** |
-
----
-
-## Recommended Implementation Order
-
-1. **[Security]** CSRF protection + rate limiting — prevent API abuse before anything else
-2. **[Security/Reliability]** Input upper bounds + config validation at startup
-3. **[Reliability]** Replace in-memory progress store (Redis/SQLite) — required before multi-worker deployment
-4. **[Architecture]** App factory pattern + package modularization — unblocks all subsequent refactors
-5. **[Architecture]** `BaseAgent` class — eliminates the most duplicated code
-6. **[Testing]** Mock LLM fixture + app factory tests — lock in behavior before further refactoring
-7. **[Testing]** Route coverage + session persistence tests
-8. **[Architecture]** Parallelize independent planning agents — significant UX win (halves approval wait time)
-9. **[Performance]** Server-Sent Events (replace polling)
-10. **[Reliability]** Session file cleanup + circuit breaker
-11. **[UX + Docs]** Polish, accessibility, documentation

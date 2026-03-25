@@ -50,6 +50,10 @@
           title="Delete the current session">
           <i class="bi bi-trash me-1"></i>Delete Session
         </button>
+        <button class="btn btn-sm btn-outline-warning" id="btn-toggle-theme"
+          title="Toggle dark/light mode" aria-label="Toggle dark or light mode">
+          <i class="bi bi-moon-fill" id="theme-icon"></i>
+        </button>
       </div>
     </div>
   </nav>
@@ -57,12 +61,12 @@
   <!-- =====================================================================
      MAIN CONTENT
 ====================================================================== -->
-  <div class="container py-5" id="app-container">
+  <div class="container py-5" id="app-container" role="main">
 
     <!-- ----------------------------------------------------------------
        GLOBAL ALERT AREA
   ---------------------------------------------------------------- -->
-    <div id="global-alert-area"></div>
+    <div id="global-alert-area" aria-live="polite" role="status"></div>
 
 
     <ul class="nav nav-tabs" role="tablist">
@@ -103,7 +107,7 @@
 
     <div class="tab-content" id="myTabContent">
       <div class="tab-pane fade show active" id="step1-novel-setup-tab" role="tabpanel"
-        aria-labelledby="step1-novel-setup-tab" tabindex="0">
+        aria-labelledby="step1-novel-setup-btn" tabindex="0">
         <!-- ================================================================
        STEP 1 – Input Form
   ================================================================ -->
@@ -208,7 +212,7 @@
 
 
       </div>
-      <div class="tab-pane fade" id="step2-chapter-outline-tab" role="tabpanel" aria-labelledby="profile-tab"
+      <div class="tab-pane fade" id="step2-chapter-outline-tab" role="tabpanel" aria-labelledby="step2-chapter-outline-btn"
         tabindex="0">
 
         <div class="card shadow-sm">
@@ -222,20 +226,20 @@
 
             <!-- Title -->
             <div class="mb-4">
-              <label class="form-label fw-semibold fs-5">Novel Title</label>
+              <label for="outline-title" class="form-label fw-semibold fs-5">Novel Title</label>
               <input type="text" class="form-control form-control-lg" id="outline-title" />
             </div>
 
             <!-- Chapter Outline -->
             <h5 class="fw-semibold mb-2">Chapter Outline</h5>
             <div class="table-responsive mb-4">
-              <table class="table table-bordered table-hover align-top" id="chapter-table">
+              <table class="table table-bordered table-hover align-top" id="chapter-table" aria-label="Chapter outline">
                 <thead class="table-dark">
                   <tr>
-                    <th style="width:60px">#</th>
-                    <th style="width:220px">Title</th>
-                    <th>Summary</th>
-                    <th style="width:180px">Actions</th>
+                    <th scope="col" style="width:60px">#</th>
+                    <th scope="col" style="width:220px">Title</th>
+                    <th scope="col">Summary</th>
+                    <th scope="col" style="width:180px">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="chapter-tbody">
@@ -249,7 +253,7 @@
 
 
       </div>
-      <div class="tab-pane fade" id="step2-character-development-tab" role="tabpanel" aria-labelledby="contact-tab"
+      <div class="tab-pane fade" id="step2-character-development-tab" role="tabpanel" aria-labelledby="step2-character-development-btn"
         tabindex="0">
         <div class="card shadow-sm">
           <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
@@ -268,15 +272,15 @@
               </button>
             </div>
             <div class="table-responsive mb-4">
-              <table class="table table-bordered table-hover align-top" id="characters-table">
+              <table class="table table-bordered table-hover align-top" id="characters-table" aria-label="Character development">
                 <thead class="table-dark">
                   <tr>
-                    <th>Name</th>
-                    <th>Age</th>
-                    <th>Role</th>
-                    <th>Background</th>
-                    <th>Arc</th>
-                    <th style="width:80px">Actions</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Age</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Background</th>
+                    <th scope="col">Arc</th>
+                    <th scope="col" style="width:80px">Actions</th>
                   </tr>
                 </thead>
                 <tbody id="characters-tbody">
@@ -292,8 +296,8 @@
           </div>
         </div>
       </div>
-      <div class="tab-pane fade" id="step3-chapter-writing-tab" role="tabpanel" aria-labelledby="disabled-tab"
-        tabindex="2">
+      <div class="tab-pane fade" id="step3-chapter-writing-tab" role="tabpanel" aria-labelledby="step3-chapter-writing-btn"
+        tabindex="0">
 
         <div id="step-progress" class="step-panel ">
           <div class="row justify-content-center">
@@ -308,7 +312,7 @@
                     Please keep this window open.
                   </p>
                   <div class="d-flex justify-content-between mb-1">
-                    <span id="progress-label">Preparing…</span>
+                    <span id="progress-label" aria-live="polite">Preparing…</span>
                     <span id="progress-percent">0%</span>
                   </div>
                   <div class="progress mb-4" style="height: 24px;">
@@ -317,15 +321,17 @@
                     </div>
                   </div>
 
+                  <p class="text-muted small mb-3 d-none" id="progress-time-estimate" aria-live="polite"></p>
+
                   <!-- Live chapter list -->
-                  <ul class="list-group" id="chapter-progress-list"></ul>
+                  <ul class="list-group" id="chapter-progress-list" aria-live="polite" aria-label="Completed chapters"></ul>
                 </div>
               </div>
             </div>
           </div>
         </div><!-- /#step-progress -->
       </div>
-      <div class="tab-pane fade" id="step4-complete-export-tab" role="tabpanel" aria-labelledby="disabled-tab"
+      <div class="tab-pane fade" id="step4-complete-export-tab" role="tabpanel" aria-labelledby="step4-complete-export-btn"
         tabindex="0">
         <div id="step-done" class="step-panel">
           <div class="row justify-content-center">
@@ -412,7 +418,7 @@
                   </div>
 
                   <!-- Illustration gallery -->
-                  <div class="row g-3 mt-2 d-none" id="illustrations-gallery">
+                  <div class="row g-3 mt-2 d-none" id="illustrations-gallery" aria-label="Generated illustrations">
                     <!-- Populated by JS -->
                   </div>
 
@@ -426,7 +432,7 @@
           </div>
         </div><!-- /#step-done -->
       </div>
-      <div class="tab-pane fade" id="log-tab" role="tabpanel" aria-labelledby="disabled-tab" tabindex="4">
+      <div class="tab-pane fade" id="log-tab" role="tabpanel" aria-labelledby="log-btn" tabindex="0">
 
         
 

@@ -581,7 +581,7 @@ def call_llm(messages: list[dict], *, action: str = "", json_mode: bool = False)
         except requests.exceptions.Timeout:
             logger.warning("LLM request timed out (attempt %d/%d)", attempt, MAX_RETRIES)
             if attempt == MAX_RETRIES:
-                err = "LLM API timed out after multiple retries."
+                err = "LLM_TIMEOUT: The AI service is taking too long. Your progress is saved — you can resume when it recovers."
                 _llm_circuit_breaker.record_failure(err)
                 raise RuntimeError(err)
             time.sleep(RETRY_DELAY * attempt)
@@ -593,13 +593,45 @@ def call_llm(messages: list[dict], *, action: str = "", json_mode: bool = False)
                 "error": str(exc),
             }
             llm_logger.info(json.dumps(error_log))
-            err = f"LLM API request failed: {exc}"
+
+            # Map HTTP status codes to user-friendly messages
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status in (401, 403):
+                err = "LLM_AUTH_FAILURE: API key rejected. Check your LLM_API_KEY setting."
+            elif status == 400:
+                err = "LLM_BAD_REQUEST: The AI service rejected the request. The prompt may be too long or contain unsupported content."
+            elif status == 404:
+                err = "LLM_ENDPOINT_NOT_FOUND: The API endpoint was not found. Check your LLM_API_URL setting."
+            else:
+                err = f"LLM_REQUEST_FAILED: {exc}"
             _llm_circuit_breaker.record_failure(err)
             raise RuntimeError(err) from exc
 
-    err = "LLM API failed after maximum retries."
+    err = "LLM_RATE_LIMITED: The AI service is overloaded. Your progress is saved — please wait a few minutes and try again."
     _llm_circuit_breaker.record_failure(err)
     raise RuntimeError(err)
+
+
+def _friendly_llm_error(exc: Exception) -> str:
+    """
+    Convert a RuntimeError from call_llm into a user-friendly message.
+
+    The error string from call_llm is prefixed with a tag like LLM_TIMEOUT:
+    which is stripped here. If no known tag is found, a generic message is used.
+    """
+    msg = str(exc)
+    # Strip the machine tag prefix and return the human-readable part
+    for tag in (
+        "LLM_TIMEOUT:", "LLM_AUTH_FAILURE:", "LLM_BAD_REQUEST:",
+        "LLM_ENDPOINT_NOT_FOUND:", "LLM_RATE_LIMITED:", "LLM_REQUEST_FAILED:",
+    ):
+        if msg.startswith(tag):
+            return msg[len(tag):].strip()
+    # CircuitBreakerError or ChapterTimeoutError — already friendly
+    if isinstance(exc, (CircuitBreakerError, ChapterTimeoutError)):
+        return msg
+    # Fallback
+    return "Something went wrong with the AI service. Your progress is saved — please try again."
 
 
 def parse_llm_json(response: str) -> dict:
@@ -4332,7 +4364,7 @@ def generate_outline():
 
     except RuntimeError as exc:
         logger.error("Outline generation failed: %s", exc)
-        return jsonify({"error": str(exc)}), 502
+        return jsonify({"error": _friendly_llm_error(exc)}), 502
 
 
 @app.route("/approve_outline", methods=["POST"])
@@ -5297,7 +5329,7 @@ def _run_chapter_generation_internal(
         logger.error("Chapter generation failed for token %s: %s", token, exc)
         with _progress_lock:
             _progress_store[token]["status"] = "error"
-            _progress_store[token]["error"] = str(exc)
+            _progress_store[token]["error"] = _friendly_llm_error(exc)
 
         # Persist any chapters completed before the failure
         session_id = snap.get("session_id")
@@ -5523,7 +5555,7 @@ def revise_chapter():
 
     except RuntimeError as exc:
         logger.error("Chapter revision failed for token %s: %s", token, exc)
-        return jsonify({"error": str(exc)}), 502
+        return jsonify({"error": _friendly_llm_error(exc)}), 502
 
 
 def _format_characters(character_list: list[dict]) -> str:
@@ -6406,7 +6438,7 @@ def generate_illustrations():
 
     except RuntimeError as exc:
         logger.error("Illustration generation failed: %s", exc)
-        return jsonify({"error": str(exc)}), 502
+        return jsonify({"error": _friendly_llm_error(exc)}), 502
 
 
 @app.route("/illustrations/<path:filename>")
@@ -6488,6 +6520,21 @@ def get_llm_log():
     except Exception as e:
         logger.error(f"Error reading LLM log: {e}")
         return jsonify({"entries": [], "error": str(e)})
+
+
+@app.route("/clear_log", methods=["POST"])
+def clear_log():
+    """Clear the LLM log file. Debug mode only."""
+    if not app.debug:
+        abort(404)
+    log_path = Path(__file__).parent / "logs" / "llm.log"
+    try:
+        log_path.write_text("", encoding="utf-8")
+        logger.info("LLM log cleared by user")
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.error("Failed to clear LLM log: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------

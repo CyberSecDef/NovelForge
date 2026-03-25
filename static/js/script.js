@@ -10,8 +10,40 @@
  *   - Export via /export
  */
 
+// -------------------------------------------------------------------
+// Theme toggle – runs before DOM ready to prevent flash of wrong theme
+// -------------------------------------------------------------------
+(function () {
+  var saved = localStorage.getItem("nf-theme");
+  var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  var theme = saved || (prefersDark ? "dark" : "light");
+  document.documentElement.setAttribute("data-bs-theme", theme);
+})();
+
 $(function () {
   "use strict";
+
+  // -------------------------------------------------------------------
+  // Theme toggle button
+  // -------------------------------------------------------------------
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-bs-theme", theme);
+    localStorage.setItem("nf-theme", theme);
+    var $icon = $("#theme-icon");
+    if (theme === "dark") {
+      $icon.removeClass("bi-moon-fill").addClass("bi-sun-fill");
+    } else {
+      $icon.removeClass("bi-sun-fill").addClass("bi-moon-fill");
+    }
+  }
+
+  // Set icon to match current theme on load
+  applyTheme(document.documentElement.getAttribute("data-bs-theme") || "light");
+
+  $("#btn-toggle-theme").on("click", function () {
+    var current = document.documentElement.getAttribute("data-bs-theme");
+    applyTheme(current === "dark" ? "light" : "dark");
+  });
 
   // -------------------------------------------------------------------
   // CSRF token – attach to every AJAX request via X-CSRFToken header
@@ -123,6 +155,32 @@ $(function () {
           sel.addRange(range);
         }
       } catch (e) { /* ignore cursor restore errors */ }
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Unsaved changes tracking for Step 2 outline/character edits
+  // -------------------------------------------------------------------
+  var _outlineDirty = false;
+
+  function markOutlineDirty() {
+    _outlineDirty = true;
+  }
+
+  function clearOutlineDirty() {
+    _outlineDirty = false;
+  }
+
+  // Contenteditable cell edits
+  $(document).on("input", "#chapter-tbody .editable-cell, #characters-tbody .editable-cell", markOutlineDirty);
+
+  // Outline title edits
+  $(document).on("input", "#outline-title", markOutlineDirty);
+
+  // Browser/tab close warning
+  $(window).on("beforeunload", function () {
+    if (_outlineDirty) {
+      return "You have unsaved changes to the outline. Leave without approving?";
     }
   });
 
@@ -245,6 +303,10 @@ $(function () {
 
   // Load a specific session by ID
   function loadSession(sessionId) {
+    if (_outlineDirty && !confirm("You have unsaved outline changes. Discard and load a different session?")) {
+      return;
+    }
+    clearOutlineDirty(); // prevent beforeunload firing during reload
     $.ajax({
       url: "/load_session",
       method: "POST",
@@ -267,9 +329,13 @@ $(function () {
 
   // New Session button click
   $("#btn-new-session").on("click", function () {
-    if (!confirm("Start a new session? This will archive the current progress and clear all data.")) {
+    var msg = _outlineDirty
+      ? "You have unsaved outline changes. Start a new session anyway? This will archive current progress and clear all data."
+      : "Start a new session? This will archive the current progress and clear all data.";
+    if (!confirm(msg)) {
       return;
     }
+    clearOutlineDirty();
 
     var $btn = $(this);
     $btn.prop("disabled", true);
@@ -284,9 +350,13 @@ $(function () {
 
   // Delete Session button click
   $("#btn-delete-session").on("click", function () {
-    if (!confirm("Delete the current session? This cannot be undone.")) {
+    var msg = _outlineDirty
+      ? "You have unsaved outline changes. Delete the current session anyway? This cannot be undone."
+      : "Delete the current session? This cannot be undone.";
+    if (!confirm(msg)) {
       return;
     }
+    clearOutlineDirty();
 
     var $btn = $(this);
     $btn.prop("disabled", true);
@@ -402,7 +472,6 @@ $(function () {
   // -------------------------------------------------------------------
   function renderOutline(data) {
     $("#outline-title").val(data.title || "");
-    
 
     // Chapters table
     var $tbody = $("#chapter-tbody").empty();
@@ -415,21 +484,25 @@ $(function () {
     $.each(data.characters || [], function (_, c) {
       addCharacterRow(c.name || "", c.age || "", c.role || "", c.background || "", c.arc || "");
     });
+
+    // Freshly rendered outline is clean — no unsaved changes
+    clearOutlineDirty();
   }
 
   // -------------------------------------------------------------------
   // Add/Delete Character Functions
   // -------------------------------------------------------------------
   function addCharacterRow(name, age, role, background, arc) {
+    var safeName = escapeHtml(name);
     var row =
       "<tr>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='name'>" + escapeHtml(name) + "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='age'>" + escapeHtml(age) + "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='role'>" + escapeHtml(role) + "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='background'>" + escapeHtml(background) + "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='arc'>" + escapeHtml(arc) + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='name' role='textbox' aria-label='Character name'>" + safeName + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='age' role='textbox' aria-label='Age for " + safeName + "'>" + escapeHtml(age) + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='role' role='textbox' aria-label='Role for " + safeName + "'>" + escapeHtml(role) + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='background' role='textbox' aria-label='Background for " + safeName + "'>" + escapeHtml(background) + "</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='arc' role='textbox' aria-label='Arc for " + safeName + "'>" + escapeHtml(arc) + "</div></td>" +
       "<td class='text-center'>" +
-      "<button class='btn btn-sm btn-outline-danger btn-delete-character' title='Delete Character'><i class='bi bi-trash'></i></button>" +
+      "<button class='btn btn-sm btn-outline-danger btn-delete-character' title='Delete Character' aria-label='Delete " + safeName + "'><i class='bi bi-trash'></i></button>" +
       "</td>" +
       "</tr>";
     $("#characters-tbody").append(row);
@@ -438,6 +511,7 @@ $(function () {
   // Add Character button
   $("#btn-add-character").on("click", function () {
     addCharacterRow("New Character", "", "Protagonist/Antagonist/Supporting", "Enter background...", "Enter character arc...");
+    markOutlineDirty();
   });
 
   // Delete Character button (delegated event)
@@ -452,6 +526,7 @@ $(function () {
     
     if (confirm("Delete character '" + characterName + "'?")) {
       $row.remove();
+      markOutlineDirty();
     }
   });
 
@@ -459,25 +534,26 @@ $(function () {
   // Add/Delete Chapter Functions
   // -------------------------------------------------------------------
   function addChapterRow(number, title, summary) {
+    var chLabel = "Chapter " + escapeHtml(number);
     var row =
       "<tr>" +
       "<td class='chapter-number'>" + escapeHtml(number) + "</td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='title'>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='title' role='textbox' aria-label='" + chLabel + " title'>" +
       escapeHtml(title) +
       "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='summary'>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='summary' role='textbox' aria-label='" + chLabel + " summary'>" +
       escapeHtml(summary) +
       "</div></td>" +
       "<td class='text-center'>" +
-      "<div class='btn-group btn-group-sm me-1' role='group'>" +
-      "<button class='btn btn-outline-secondary btn-move-up' title='Move Up'><i class='bi bi-arrow-up'></i></button>" +
-      "<button class='btn btn-outline-secondary btn-move-down' title='Move Down'><i class='bi bi-arrow-down'></i></button>" +
+      "<div class='btn-group btn-group-sm me-1' role='group' aria-label='Reorder " + chLabel + "'>" +
+      "<button class='btn btn-outline-secondary btn-move-up' title='Move Up' aria-label='Move " + chLabel + " up'><i class='bi bi-arrow-up'></i></button>" +
+      "<button class='btn btn-outline-secondary btn-move-down' title='Move Down' aria-label='Move " + chLabel + " down'><i class='bi bi-arrow-down'></i></button>" +
       "</div>" +
-      "<div class='btn-group btn-group-sm me-1' role='group'>" +
-      "<button class='btn btn-outline-success btn-add-before' title='Add Before'><i class='bi bi-plus-circle'></i></button>" +
-      "<button class='btn btn-outline-success btn-add-after' title='Add After'><i class='bi bi-plus-circle'></i></button>" +
+      "<div class='btn-group btn-group-sm me-1' role='group' aria-label='Insert around " + chLabel + "'>" +
+      "<button class='btn btn-outline-success btn-add-before' title='Add Before' aria-label='Add chapter before " + chLabel + "'><i class='bi bi-plus-circle'></i></button>" +
+      "<button class='btn btn-outline-success btn-add-after' title='Add After' aria-label='Add chapter after " + chLabel + "'><i class='bi bi-plus-circle'></i></button>" +
       "</div>" +
-      "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter'><i class='bi bi-trash'></i></button>" +
+      "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter' aria-label='Delete " + chLabel + "'><i class='bi bi-trash'></i></button>" +
       "</td>" +
       "</tr>";
     $("#chapter-tbody").append(row);
@@ -497,6 +573,7 @@ $(function () {
     if ($prev.length) {
       $row.insertBefore($prev);
       renumberChapters();
+      markOutlineDirty();
     }
   });
 
@@ -507,6 +584,7 @@ $(function () {
     if ($next.length) {
       $row.insertAfter($next);
       renumberChapters();
+      markOutlineDirty();
     }
   });
 
@@ -532,6 +610,7 @@ $(function () {
       "</tr>";
     $row.before(newRow);
     renumberChapters();
+    markOutlineDirty();
   });
 
   // Add chapter after
@@ -556,6 +635,7 @@ $(function () {
       "</tr>";
     $row.after(newRow);
     renumberChapters();
+    markOutlineDirty();
   });
 
   // Delete Chapter button (delegated event)
@@ -571,6 +651,7 @@ $(function () {
     if (confirm("Delete Chapter " + chapterNum + "?")) {
       $row.remove();
       renumberChapters();
+      markOutlineDirty();
     }
   });
 
@@ -629,10 +710,11 @@ $(function () {
       contentType: "application/json",
       data: JSON.stringify({ title: title, chapters: chapters, characters: characters }),
       success: function () {
+        clearOutlineDirty();
         startChapterGeneration();
       },
       error: function (xhr) {
-        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to save outline.";
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to save outline. The AI service may be unavailable — your edits are preserved.";
         showAlert(msg);
       },
       complete: function () {
@@ -662,10 +744,14 @@ $(function () {
         _pollDelay = _pollDelayMin;
         _lastPollStep = "";
         _pollFailures = 0;
+        _lastCompletedCount = 0;
+        _chapterCompletionTimes = [];
+        _generationStartTime = Date.now();
+        $("#progress-time-estimate").addClass("d-none").text("");
         _schedulePoll();
       },
       error: function (xhr) {
-        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to start generation.";
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to start chapter generation. Please check your connection and try again.";
         showAlert(msg);
         showStep("#step-outline");
       },
@@ -677,6 +763,11 @@ $(function () {
   var _pollDelayMin = 15000;    // 15s floor
   var _pollDelayMax = 60000;    // 60s ceiling
   var _lastPollStep = "";       // last observed step label
+
+  // Time estimation state
+  var _lastCompletedCount = 0;           // chapters completed at last poll
+  var _chapterCompletionTimes = [];      // timestamps (ms) when each chapter finished
+  var _generationStartTime = 0;          // when generation began
 
   function _schedulePoll() {
     _pollInterval = setTimeout(pollProgress, _pollDelay);
@@ -700,6 +791,17 @@ $(function () {
         var step = data.step || "";
 
         updateProgressBar(current, total, step || null);
+
+        // Track chapter completion times for ETA estimation
+        if (current > _lastCompletedCount && current <= total) {
+          var now = Date.now();
+          // Record one timestamp per newly completed chapter
+          for (var c = _lastCompletedCount; c < current; c++) {
+            _chapterCompletionTimes.push(now);
+          }
+          _lastCompletedCount = current;
+        }
+        _updateTimeEstimate(current, total);
 
         // Adaptive backoff: reset delay when progress changes, else double it
         if (step !== _lastPollStep) {
@@ -766,6 +868,48 @@ $(function () {
     } else {
       $("#progress-label").text("Finalising…");
     }
+  }
+
+  function _updateTimeEstimate(current, total) {
+    var $el = $("#progress-time-estimate");
+    var remaining = total - current;
+
+    // Need at least 1 completed chapter to estimate
+    if (_chapterCompletionTimes.length < 1 || remaining <= 0) {
+      $el.addClass("d-none").text("");
+      return;
+    }
+
+    // Calculate average time per chapter from wall-clock data
+    var startRef = _generationStartTime || _chapterCompletionTimes[0];
+    var lastTime = _chapterCompletionTimes[_chapterCompletionTimes.length - 1];
+    var elapsed = lastTime - startRef;
+    var completed = _chapterCompletionTimes.length;
+    var avgMs = elapsed / completed;
+
+    var estRemainingMs = avgMs * remaining;
+    var estMinutes = Math.round(estRemainingMs / 60000);
+
+    var text;
+    if (estMinutes < 1) {
+      text = "Less than a minute remaining";
+    } else if (estMinutes === 1) {
+      text = "~1 minute remaining";
+    } else if (estMinutes < 60) {
+      text = "~" + estMinutes + " minutes remaining";
+    } else {
+      var hrs = Math.floor(estMinutes / 60);
+      var mins = estMinutes % 60;
+      text = "~" + hrs + "h " + mins + "m remaining";
+    }
+
+    // Also show avg time per chapter
+    var avgMin = Math.round(avgMs / 60000);
+    if (avgMin >= 1) {
+      text += " (avg ~" + avgMin + " min/chapter)";
+    }
+
+    $el.text(text).removeClass("d-none");
   }
 
   // -------------------------------------------------------------------
@@ -838,12 +982,23 @@ $(function () {
   // -------------------------------------------------------------------
   // Export
   // -------------------------------------------------------------------
+  // Selects all export-related buttons to disable/enable as a group
+  var _$exportButtons = $(".btn-export-variant, #btn-export-editors-notes, #btn-generate-illustrations");
+
+  function _disableExportButtons() {
+    _$exportButtons.prop("disabled", true);
+  }
+
+  function _enableExportButtons() {
+    _$exportButtons.prop("disabled", false);
+  }
+
   $(".btn-export-variant").on("click", function () {
     clearAlerts();
     var $btn = $(this);
     var variant = $btn.data("variant") || "clean";
     $btn.find(".export-spinner").removeClass("d-none");
-    $btn.prop("disabled", true);
+    _disableExportButtons();
 
     $.ajax({
       url: "/export",
@@ -852,7 +1007,6 @@ $(function () {
       data: JSON.stringify({ token: _progressToken, variant: variant }),
       success: function (resp) {
         if (resp.download_url) {
-          // Create a temporary link and trigger download
           var $a = $("<a>")
             .attr("href", resp.download_url)
             .attr("download", "")
@@ -862,12 +1016,12 @@ $(function () {
         }
       },
       error: function (xhr) {
-        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Export failed.";
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Export failed. The novel data may be incomplete — try again.";
         showAlert(msg);
       },
       complete: function () {
         $btn.find(".export-spinner").addClass("d-none");
-        $btn.prop("disabled", false);
+        _enableExportButtons();
       },
     });
   });
@@ -875,7 +1029,7 @@ $(function () {
   $("#btn-export-editors-notes").on("click", function () {
     clearAlerts();
     $("#export-editors-notes-spinner").removeClass("d-none");
-    $("#btn-export-editors-notes").prop("disabled", true);
+    _disableExportButtons();
 
     $.ajax({
       url: "/export_editors_notes",
@@ -895,12 +1049,12 @@ $(function () {
       error: function (xhr) {
         var msg =
           (xhr.responseJSON && xhr.responseJSON.error) ||
-          "Editor's notes export failed.";
+          "Editor's notes export failed. No diagnostic reports may be available for this novel.";
         showAlert(msg);
       },
       complete: function () {
         $("#export-editors-notes-spinner").addClass("d-none");
-        $("#btn-export-editors-notes").prop("disabled", false);
+        _enableExportButtons();
       },
     });
   });
@@ -951,7 +1105,7 @@ $(function () {
     clearAlerts();
     var $btn = $(this);
     $("#illustrations-spinner").removeClass("d-none");
-    $btn.prop("disabled", true);
+    _disableExportButtons();
 
     $.ajax({
       url: "/generate_illustrations",
@@ -965,12 +1119,12 @@ $(function () {
       error: function (xhr) {
         var msg =
           (xhr.responseJSON && xhr.responseJSON.error) ||
-          "Illustration generation failed.";
+          "Illustration generation failed. The AI service may be rate-limited — wait a few minutes and try again.";
         showAlert(msg);
       },
       complete: function () {
         $("#illustrations-spinner").addClass("d-none");
-        $btn.prop("disabled", false);
+        _enableExportButtons();
       },
     });
   });
@@ -1017,7 +1171,7 @@ $(function () {
       error: function (xhr) {
         var msg =
           (xhr.responseJSON && xhr.responseJSON.error) ||
-          "Chapter revision failed.";
+          "Chapter revision failed. The AI service may be unavailable — your original chapter is unchanged.";
         showAlert(msg);
       },
       complete: function () {
@@ -1171,7 +1325,7 @@ $(function () {
   _logPollInterval = setInterval(pollLLMLog, 15000); // Poll every 15 seconds
   pollLLMLog(); // Initial poll
 
-  // Clear log button
+  // Clear log button — clears display and server-side log file
   $("#btn-clear-log").on("click", function() {
     $("#llm-chat-messages").html(
       '<div class="text-center text-muted small py-3">' +
@@ -1182,6 +1336,11 @@ $(function () {
     _activeLLMRequests = 0;
     _hasInitializedLogSnapshot = false;
     setStickyStatus(DEFAULT_STICKY_STATUS, { force: true });
+
+    // Clear the server-side log file
+    $.post("/clear_log").fail(function () {
+      // Non-fatal — display was already cleared
+    });
   });
 
   // -------------------------------------------------------------------
@@ -1248,9 +1407,12 @@ $(function () {
           _totalChapters = sd.chapters || 20;
           showStep("#step-progress");
           _pollDelay = _pollDelayMin;
-        _lastPollStep = "";
-        _pollFailures = 0;
-        _schedulePoll();
+          _lastPollStep = "";
+          _pollFailures = 0;
+          _lastCompletedCount = pd.current || 0;
+          _chapterCompletionTimes = [];
+          _generationStartTime = Date.now();
+          _schedulePoll();
           pollProgress();
         } else if (pd.chapters_done && pd.chapters_done.length) {
           // Has some chapters (e.g. errored mid-run) — show what we have
