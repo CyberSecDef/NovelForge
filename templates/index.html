@@ -473,6 +473,13 @@
       integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous">
       </script>
 
+    <!-- Restore session state on page load (set by Flask index route) -->
+    {% if session_data %}
+    <script>
+      window._savedSessionData = {{ session_data | tojson }};
+    </script>
+    {% endif %}
+
     <!-- App logic -->
     <script src="/static/js/script.js"></script>
 </body>

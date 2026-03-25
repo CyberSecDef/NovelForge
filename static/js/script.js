@@ -769,7 +769,7 @@ $(function () {
     $.each(data.chapters_done || [], function (i, ch) {
       var id = "ch-accordion-" + i;
       var heading = "ch-heading-" + i;
-      $acc.append(
+      var $item = $(
         '<div class="accordion-item">' +
         '<h2 class="accordion-header" id="' + heading + '">' +
         '<button class="accordion-button collapsed" type="button" ' +
@@ -778,9 +778,12 @@ $(function () {
         "Chapter " + escapeHtml(ch.number) + ": " + escapeHtml(ch.title) +
         "</button></h2>" +
         '<div id="' + id + '" class="accordion-collapse collapse" aria-labelledby="' + heading + '">' +
-        '<div class="accordion-body"><pre class="mb-0 text-wrap">' + escapeHtml(ch.content || "") + "</pre></div>" +
+        '<div class="accordion-body"><pre class="mb-0 text-wrap"></pre></div>' +
         "</div></div>"
       );
+      // Use .text() on the <pre> element to safely insert content with newlines preserved
+      $item.find("pre").text(ch.content || "");
+      $acc.append($item);
     });
 
     showStep("#step-done");
@@ -859,6 +862,45 @@ $(function () {
   // -------------------------------------------------------------------
   // Illustrations
   // -------------------------------------------------------------------
+  // Render illustration cards into the gallery
+  function renderIllustrations(illustrations) {
+    var $gallery = $("#illustrations-gallery");
+    $gallery.empty();
+
+    if (!illustrations || illustrations.length === 0) {
+      $gallery.append(
+        '<div class="col-12"><p class="text-muted">No illustrations were generated.</p></div>'
+      );
+    } else {
+      $.each(illustrations, function (i, illust) {
+        var label =
+          illust.type === "cover"
+            ? "Cover"
+            : "Chapter " + (illust.chapter || "?");
+        var safeUrl = escapeHtml(illust.image_url || "");
+        var $card = $(
+          '<div class="col-6 col-md-4 col-lg-3">' +
+            '<div class="card h-100 shadow-sm">' +
+              '<a href="' + safeUrl + '" target="_blank" rel="noopener">' +
+                '<img src="' + safeUrl + '" class="card-img-top" ' +
+                  'alt="' + escapeHtml(label) + '" style="cursor:zoom-in;" loading="lazy">' +
+              "</a>" +
+              '<div class="card-body p-2">' +
+                '<p class="card-title fw-bold mb-1 small"></p>' +
+                '<p class="card-text text-muted small mb-0"></p>' +
+              "</div>" +
+            "</div>" +
+          "</div>"
+        );
+        $card.find(".card-title").text(label);
+        $card.find(".card-text").text(illust.scene_description || "");
+        $gallery.append($card);
+      });
+    }
+
+    $gallery.removeClass("d-none");
+  }
+
   $("#btn-generate-illustrations").on("click", function () {
     clearAlerts();
     var $btn = $(this);
@@ -870,43 +912,9 @@ $(function () {
       method: "POST",
       contentType: "application/json",
       data: JSON.stringify({ token: _progressToken }),
-      timeout: 300000, // 5 min timeout for multiple image generations
+      timeout: 600000, // 10 min timeout for image generations
       success: function (resp) {
-        var illustrations = resp.illustrations || [];
-        var $gallery = $("#illustrations-gallery");
-        $gallery.empty();
-
-        if (illustrations.length === 0) {
-          $gallery.append(
-            '<div class="col-12"><p class="text-muted">No illustrations were generated.</p></div>'
-          );
-        } else {
-          $.each(illustrations, function (i, illust) {
-            var label =
-              illust.type === "cover"
-                ? "Cover"
-                : "Chapter " + (illust.chapter || "?");
-            var $card = $(
-              '<div class="col-6 col-md-4 col-lg-3">' +
-                '<div class="card h-100 shadow-sm">' +
-                  '<a href="' + illust.image_url + '" target="_blank" rel="noopener">' +
-                    '<img src="' + illust.image_url + '" class="card-img-top" ' +
-                      'alt="' + label + '" style="cursor:zoom-in;" loading="lazy">' +
-                  "</a>" +
-                  '<div class="card-body p-2">' +
-                    '<p class="card-title fw-bold mb-1 small">' + label + "</p>" +
-                    '<p class="card-text text-muted small mb-0">' +
-                      (illust.scene_description || "") +
-                    "</p>" +
-                  "</div>" +
-                "</div>" +
-              "</div>"
-            );
-            $gallery.append($card);
-          });
-        }
-
-        $gallery.removeClass("d-none");
+        renderIllustrations(resp.illustrations || []);
       },
       error: function (xhr) {
         var msg =
@@ -1114,7 +1122,7 @@ $(function () {
   }
 
   // Start polling for LLM log updates
-  _logPollInterval = setInterval(pollLLMLog, 5000); // Poll every 5 seconds
+  _logPollInterval = setInterval(pollLLMLog, 15000); // Poll every 15 seconds
   pollLLMLog(); // Initial poll
 
   // Clear log button
@@ -1155,4 +1163,74 @@ $(function () {
 
     showStep("#step-input");
   });
+
+  // -------------------------------------------------------------------
+  // Restore session state on page load (if data was injected by Flask)
+  // -------------------------------------------------------------------
+  if (window._savedSessionData) {
+    (function () {
+      var sd = window._savedSessionData;
+
+      // Step 1 form fields
+      if (sd.premise) $("#premise").val(sd.premise);
+      if (sd.genre) $("#genre").val(sd.genre);
+      if (sd.chapters) $("#chapters").val(sd.chapters);
+      if (sd.word_count) $("#word_count").val(sd.word_count);
+      if (sd.special_events) $("#special_events").val(sd.special_events);
+      if (sd.special_instructions) $("#special_instructions").val(sd.special_instructions);
+      $("#premise-count").text((sd.premise || "").length);
+
+      // Step 2 outline + characters
+      if (sd.chapter_list && sd.chapter_list.length) {
+        renderOutline({
+          title: sd.title || "",
+          chapters: sd.chapter_list,
+          characters: sd.character_list || [],
+        });
+      }
+
+      // Step 4 completion data — restore progress token and show done step
+      var pd = sd.progress_data;
+      var cc = sd.completed_chapters;
+      if (sd.progress_token && pd) {
+        _progressToken = sd.progress_token;
+
+        if (pd.status === "done") {
+          showDoneStep(pd);
+        } else if (pd.status === "running") {
+          // Generation still in progress — show progress tab and start polling
+          _totalChapters = sd.chapters || 20;
+          showStep("#step-progress");
+          _pollInterval = setInterval(pollProgress, 3000);
+          pollProgress();
+        } else if (pd.chapters_done && pd.chapters_done.length) {
+          // Has some chapters (e.g. errored mid-run) — show what we have
+          showDoneStep(pd);
+        } else {
+          // Has outline but no generation yet — show outline tab
+          showStep("#step-outline");
+        }
+      } else if (cc && cc.length) {
+        // No progress_data in memory but completed chapters saved in session file
+        // (e.g. after server restart) — rebuild and show done step
+        _progressToken = sd.progress_token || "";
+        showDoneStep({
+          status: "done",
+          chapters_done: cc,
+          current: cc.length,
+          total: sd.chapters || cc.length,
+        });
+      } else if (sd.chapter_list && sd.chapter_list.length) {
+        // Has outline but no progress — show outline tab
+        showStep("#step-outline");
+      }
+
+      // Restore saved illustrations if available
+      if (sd.illustrations && sd.illustrations.length) {
+        renderIllustrations(sd.illustrations);
+      }
+
+      delete window._savedSessionData;
+    })();
+  }
 });

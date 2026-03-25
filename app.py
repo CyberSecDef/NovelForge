@@ -147,14 +147,20 @@ def save_session_state() -> None:
             "theme_reinforcement": session.get("theme_reinforcement", {}),
             "pov_focal_character_plan": session.get("pov_focal_character_plan", {}),
             "progress_token": session.get("progress_token", ""),
+            "completed_chapters": session.get("completed_chapters", []),
+            "illustrations": session.get("illustrations", []),
         }
-        
+
         # Add progress store data if available
         token = session.get("progress_token")
         if token:
             with _progress_lock:
                 if token in _progress_store:
                     state["progress_data"] = _progress_store[token]
+                    # Keep completed_chapters in sync with progress data
+                    done = _progress_store[token].get("chapters_done", [])
+                    if done:
+                        state["completed_chapters"] = list(done)
         
         # Write to file
         session_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
@@ -204,7 +210,9 @@ def restore_session_from_state(state: dict) -> None:
     session["theme_reinforcement"] = state.get("theme_reinforcement", {})
     session["pov_focal_character_plan"] = state.get("pov_focal_character_plan", {})
     session["progress_token"] = state.get("progress_token", "")
-    
+    session["completed_chapters"] = state.get("completed_chapters", [])
+    session["illustrations"] = state.get("illustrations", [])
+
     # Restore progress store if available
     if "progress_data" in state and state.get("progress_token"):
         token = state["progress_token"]
@@ -212,6 +220,22 @@ def restore_session_from_state(state: dict) -> None:
             _progress_store[token] = state["progress_data"]
     
     logger.info("Restored session from saved state")
+
+
+def _persist_completed_chapters(session_id: str, chapters_done: list[dict]) -> None:
+    """
+    Persist completed chapters to the session JSON file from a background thread.
+    This runs outside a Flask request context, so it writes directly to the file.
+    """
+    try:
+        session_file = Path("./sessions") / f"{session_id}.json"
+        if not session_file.exists():
+            return
+        state = json.loads(session_file.read_text(encoding="utf-8"))
+        state["completed_chapters"] = list(chapters_done)
+        session_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.error(f"Failed to persist completed chapters: {e}")
 
 
 def clear_session_state() -> None:
@@ -3814,7 +3838,65 @@ def validate_outline_input(data: dict) -> tuple[bool, str]:
 @app.route("/")
 def index():
     """Main single-page application view."""
-    return render_template("index.html")
+    # Build session snapshot so the JS client can restore state on page load
+    session_data = None
+    if session.get("title"):
+        session_data = {
+            "premise": session.get("premise", ""),
+            "genre": session.get("genre", ""),
+            "chapters": session.get("chapters", 0),
+            "word_count": session.get("word_count", 0),
+            "special_events": session.get("special_events", ""),
+            "special_instructions": session.get("special_instructions", ""),
+            "title": session.get("title", ""),
+            "chapter_list": session.get("chapter_list", []),
+            "character_list": session.get("character_list", []),
+        }
+        # Include progress/completion data if available
+        token = session.get("progress_token", "")
+        if token:
+            session_data["progress_token"] = token
+            with _progress_lock:
+                progress = _progress_store.get(token)
+            if progress:
+                session_data["progress_data"] = progress
+
+        # Resolve completed chapters: prefer dedicated field, fall back to
+        # progress_data.chapters_done for sessions saved before this field existed
+        completed_chapters = session.get("completed_chapters", [])
+        if not completed_chapters:
+            pd = session_data.get("progress_data") or session.get("progress_data") or {}
+            completed_chapters = pd.get("chapters_done", [])
+        if completed_chapters:
+            session_data["completed_chapters"] = completed_chapters
+
+        # Rebuild progress_data when it's missing from memory or when it has
+        # a stale "running" status from a session that was interrupted
+        existing_pd = session_data.get("progress_data")
+        if completed_chapters and (
+            not existing_pd
+            or (existing_pd.get("status") == "running" and not existing_pd.get("_live"))
+        ):
+            rebuilt = {
+                "status": "done",
+                "current": len(completed_chapters),
+                "total": session.get("chapters", len(completed_chapters)),
+                "step": "Complete",
+                "chapters_done": completed_chapters,
+                "error": None,
+            }
+            session_data["progress_data"] = rebuilt
+            # Also update _progress_store so /export and /export_editors_notes work
+            if token:
+                with _progress_lock:
+                    _progress_store[token] = rebuilt
+
+        # Include saved illustrations if available
+        illustrations = session.get("illustrations", [])
+        if illustrations:
+            session_data["illustrations"] = illustrations
+
+    return render_template("index.html", session_data=session_data)
 
 
 @app.route("/generate_outline", methods=["POST"])
@@ -4155,10 +4237,12 @@ def generate_chapters():
             "step": "Preparing…",
             "chapters_done": [],
             "error": None,
+            "_live": True,
         }
 
     # Snapshot session data for the background thread
     snapshot = {
+        "session_id": get_session_id(),
         "premise": session["premise"],
         "genre": session["genre"],
         "chapters": session["chapters"],
@@ -4616,6 +4700,11 @@ def _run_chapter_generation_internal(
                 _progress_store[token]["step"] = f"Chapter {chapter_num}: complete"
                 _progress_store[token]["chapters_done"] = list(chapters_done)
 
+            # Persist completed chapters to session file after each chapter
+            session_id = snap.get("session_id")
+            if session_id:
+                _persist_completed_chapters(session_id, chapters_done)
+
         # --- Final consistency pass (context analyzer at novel level) ---
         with _progress_lock:
             _progress_store[token]["step"] = "Final consistency pass"
@@ -4855,6 +4944,11 @@ def _run_chapter_generation_internal(
 
         # Auto-save final state
         _set_step("Complete")
+
+        # Final persist of completed chapters to session file
+        session_id = snap.get("session_id")
+        if session_id:
+            _persist_completed_chapters(session_id, chapters_done)
 
     except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.error("Chapter generation failed for token %s: %s", token, exc)
@@ -5893,27 +5987,42 @@ def generate_illustrations():
     all_summaries = [str(ch.get("summary", "")) for ch in chapters_done]
 
     try:
-        # Step 1: Generate art prompts via LLM
-        raw = call_llm(
-            build_illustration_prompt_generator_prompt(
-                title=title,
-                genre=genre,
-                premise=premise,
-                character_list=character_list,
-                all_summaries=all_summaries,
-            ),
-            action="Generating illustration prompts",
-            json_mode=True,
+        # Step 1: Generate art prompts via LLM (with extra resilience)
+        llm_prompt = build_illustration_prompt_generator_prompt(
+            title=title,
+            genre=genre,
+            premise=premise,
+            character_list=character_list,
+            all_summaries=all_summaries,
         )
+        raw = None
+        for llm_attempt in range(1, 4):
+            try:
+                raw = call_llm(
+                    llm_prompt,
+                    action="Generating illustration prompts",
+                    json_mode=True,
+                )
+                break
+            except RuntimeError:
+                if llm_attempt == 3:
+                    raise
+                wait = 30 * llm_attempt
+                logger.warning(
+                    "Illustration LLM prompt failed (attempt %d/3) – "
+                    "retrying in %ds", llm_attempt, wait,
+                )
+                time.sleep(wait)
+
         prompt_data = parse_llm_json(raw)
         illustrations = prompt_data.get("illustrations", [])
 
         if not isinstance(illustrations, list) or not illustrations:
             return jsonify({"error": "LLM did not return valid illustration prompts."}), 502
 
-        # Step 2: Generate each image
+        # Step 2: Generate each image (cap at 2: 1 cover + 1 scene)
         results = []
-        for idx, illust in enumerate(illustrations[:10]):  # Cap at 10
+        for idx, illust in enumerate(illustrations[:2]):
             if not isinstance(illust, dict):
                 continue
             art_prompt = str(illust.get("art_prompt", "")).strip()
@@ -5939,9 +6048,11 @@ def generate_illustrations():
         if not results:
             return jsonify({"error": "Image generation failed for all prompts."}), 502
 
-        # Store results in progress data for potential re-display
+        # Store results in progress data and persist to session file
         with _progress_lock:
             _progress_store[token]["illustrations"] = results
+        session["illustrations"] = results
+        save_session_state()
 
         return jsonify({"illustrations": results})
 

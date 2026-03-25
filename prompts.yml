@@ -1546,11 +1546,11 @@ prompts:
       image generation prompts that would produce striking illustrations.
 
       Rules:
-      - Generate exactly 1 cover illustration prompt and then scene
-        illustrations for the most visually compelling moments in the novel.
-      - Total illustrations: between 5 and 10 (including the cover).
-      - Spread scene illustrations across the full novel — do not cluster
-        them all in the first few chapters.
+      - Generate exactly 1 cover illustration prompt and exactly 1 chapter
+        scene illustration for the single most visually compelling moment
+        in the novel.
+      - Total illustrations: exactly 2 (1 cover + 1 scene).
+      - Choose a scene from the dramatic climax or most iconic moment.
       - Each art prompt must be a single, self-contained paragraph of 2–4
         sentences describing the visual scene in vivid detail: composition,
         lighting, colour palette, mood, character appearance, and setting.
@@ -1574,10 +1574,8 @@ prompts:
       Chapter summaries:
       {{ summaries_text }}
 
-      Generate art prompts for 5–10 illustrations (1 cover + 4–9 scene
-      illustrations from key moments across the novel). Choose the most
-      visually dramatic, emotionally resonant, or atmospherically rich
-      moments.
+      Generate art prompts for exactly 2 illustrations: 1 cover and 1 scene
+      illustration from the single most visually dramatic moment in the novel.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
       Required structure:
