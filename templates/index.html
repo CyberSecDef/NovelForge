@@ -30,10 +30,27 @@
         <i class="bi bi-book-half me-2"></i>NovelForge
       </a>
       <span class="navbar-text text-secondary small" id="sticky-status-text">AI-Powered Novel Generator</span>
-      <button class="btn btn-sm btn-outline-light ms-auto" id="btn-new-session"
-        title="Start a new session (archives current progress)">
-        <i class="bi bi-file-earmark-plus me-1"></i>New Session
-      </button>
+      <div class="d-flex align-items-center ms-auto gap-2">
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button"
+            id="btn-sessions-dropdown" data-bs-toggle="dropdown" aria-expanded="false"
+            title="Load a previous session">
+            <i class="bi bi-journal-bookmark me-1"></i>Sessions
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end" id="sessions-dropdown-menu"
+            style="max-height: 300px; overflow-y: auto;">
+            <li><span class="dropdown-item text-muted">Loading...</span></li>
+          </ul>
+        </div>
+        <button class="btn btn-sm btn-outline-light" id="btn-new-session"
+          title="Start a new session (archives current progress)">
+          <i class="bi bi-file-earmark-plus me-1"></i>New Session
+        </button>
+        <button class="btn btn-sm btn-outline-danger" id="btn-delete-session"
+          title="Delete the current session">
+          <i class="bi bi-trash me-1"></i>Delete Session
+        </button>
+      </div>
     </div>
   </nav>
 
@@ -41,38 +58,6 @@
      MAIN CONTENT
 ====================================================================== -->
   <div class="container py-5" id="app-container">
-
-    <!-- Resume Session Modal -->
-    <div class="modal fade" id="resumeModal" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header bg-warning">
-            <h5 class="modal-title">
-              <i class="bi bi-arrow-clockwise me-2"></i>Resume Previous Session?
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <p class="mb-2">Found a saved session:</p>
-            <ul class="mb-3">
-              <li><strong>Title:</strong> <span id="resume-title"></span></li>
-              <li><strong>Status:</strong> <span id="resume-status"></span></li>
-            </ul>
-            <p class="text-muted small">
-              Would you like to resume where you left off, or start a new session?
-            </p>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btn-start-fresh">
-              Start Fresh
-            </button>
-            <button type="button" class="btn btn-warning" id="btn-resume">
-              <i class="bi bi-arrow-clockwise me-1"></i>Resume Session
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- ----------------------------------------------------------------
        GLOBAL ALERT AREA

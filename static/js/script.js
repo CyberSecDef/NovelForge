@@ -211,96 +211,97 @@ $(function () {
   var _doneData = null;
 
   // -------------------------------------------------------------------
-  // Session Resume & New Session
+  // Session Management: Dropdown, New Session, Delete Session
   // -------------------------------------------------------------------
-  
-  // Check for saved state on page load
-  function checkSavedState() {
-    $.get("/check_saved_state", function (data) {
-      if (data.has_saved_state) {
-        // Show resume modal
-        $("#resume-title").text(data.title || "Untitled");
-        
-        var statusText = "";
-        if (data.has_progress && data.progress_info) {
-          var prog = data.progress_info;
-          if (prog.status === "done") {
-            statusText = "Generation complete";
-          } else if (prog.status === "error") {
-            statusText = "Generation stopped with error";
-          } else {
-            statusText = "In progress - Chapter " + prog.current + " of " + prog.total + " (" + prog.step + ")";
-          }
-        } else {
-          statusText = "Outline ready, generation not started";
-        }
-        
-        $("#resume-status").text(statusText);
-        
-        // Show the modal
-        var modal = new bootstrap.Modal(document.getElementById("resumeModal"));
-        modal.show();
+
+  // Populate sessions dropdown on page load and when dropdown is opened
+  function loadSessionsList() {
+    $.get("/list_sessions", function (data) {
+      var $menu = $("#sessions-dropdown-menu");
+      $menu.empty();
+
+      var sessions = data.sessions || [];
+      if (sessions.length === 0) {
+        $menu.append('<li><span class="dropdown-item text-muted">No saved sessions</span></li>');
+        return;
       }
+
+      $.each(sessions, function (_, s) {
+        var $item = $("<li>");
+        var $link = $('<button class="dropdown-item" type="button"></button>');
+        $link.text(s.title);
+        $link.attr("data-session-id", s.session_id);
+        $link.on("click", function () {
+          loadSession(s.session_id);
+        });
+        $item.append($link);
+        $menu.append($item);
+      });
     }).fail(function () {
-      console.log("No saved state check available");
+      var $menu = $("#sessions-dropdown-menu");
+      $menu.empty();
+      $menu.append('<li><span class="dropdown-item text-muted">Failed to load sessions</span></li>');
     });
   }
-  
-  // Resume button click
-  $("#btn-resume").on("click", function () {
-    var $btn = $(this);
-    $btn.prop("disabled", true).html('<span class="spinner-border spinner-border-sm me-1"></span>Resuming...');
-    
-    $.post("/resume_session", function (data) {
-      // Close modal
-      bootstrap.Modal.getInstance(document.getElementById("resumeModal")).hide();
-      
-      if (data.status === "resumed") {
-        // Generation is resuming - show progress step and start polling
-        showStep("#step-progress");
-        $("#chapter-progress-list").empty();
-        _progressToken = data.token;
-        _totalChapters = parseInt($("#chapters").val(), 10) || 20;
-        _pollInterval = setInterval(pollProgress, 3000);
-        // Trigger an immediate poll
-        pollProgress();
-        showAlert("Resuming chapter generation from where it left off...", "info");
-      } else {
-        // Just restored session data - reload to show outline
+
+  // Load a specific session by ID
+  function loadSession(sessionId) {
+    $.ajax({
+      url: "/load_session",
+      method: "POST",
+      contentType: "application/json",
+      data: JSON.stringify({ session_id: sessionId }),
+      success: function () {
         location.reload();
-      }
-    }).fail(function () {
-      $btn.prop("disabled", false).html('<i class="bi bi-arrow-clockwise me-1"></i>Resume Session');
-      showAlert("Failed to resume session. Please try again.", "danger");
+      },
+      error: function (xhr) {
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to load session.";
+        showAlert(msg);
+      },
     });
+  }
+
+  // Refresh the dropdown each time it is opened
+  $("#btn-sessions-dropdown").on("show.bs.dropdown", function () {
+    loadSessionsList();
   });
-  
-  // Start fresh button click
-  $("#btn-start-fresh").on("click", function () {
-    // Just close the modal and stay on the input page
-    bootstrap.Modal.getInstance(document.getElementById("resumeModal")).hide();
-  });
-  
+
   // New Session button click
   $("#btn-new-session").on("click", function () {
     if (!confirm("Start a new session? This will archive the current progress and clear all data.")) {
       return;
     }
-    
+
     var $btn = $(this);
     $btn.prop("disabled", true);
-    
+
     $.post("/new_session", function () {
-      // Reload the page to start fresh
       location.reload();
     }).fail(function () {
       $btn.prop("disabled", false);
       showAlert("Failed to start new session. Please try again.", "danger");
     });
   });
-  
-  // Check for saved state on page load
-  // checkSavedState();
+
+  // Delete Session button click
+  $("#btn-delete-session").on("click", function () {
+    if (!confirm("Delete the current session? This cannot be undone.")) {
+      return;
+    }
+
+    var $btn = $(this);
+    $btn.prop("disabled", true);
+
+    $.post("/delete_session", function () {
+      location.reload();
+    }).fail(function () {
+      $btn.prop("disabled", false);
+      showAlert("Failed to delete session. Please try again.", "danger");
+    });
+  });
+
+  // Load the sessions list on initial page load
+  loadSessionsList();
 
   // -------------------------------------------------------------------
   // Premise character counter

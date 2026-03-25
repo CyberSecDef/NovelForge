@@ -5107,96 +5107,81 @@ def progress(token: str):
     return jsonify(data)
 
 
-@app.route("/check_saved_state")
-def check_saved_state():
+@app.route("/list_sessions")
+def list_sessions():
     """
-    Check if there's a saved session state that can be resumed.
-    Returns information about the saved state if it exists.
+    Return a list of all saved sessions that have a book title.
+    Used to populate the sessions dropdown in the navbar.
     """
-    state = load_session_state()
-    if not state:
-        return jsonify({"has_saved_state": False})
-    
-    # Check if there's progress data
-    token = state.get("progress_token")
-    progress_file = Path("./sessions") / f"{token}_progress.json" if token else None
-    has_progress = progress_file and progress_file.exists() if token else False
-    
-    progress_info = None
-    if has_progress and progress_file:
+    sessions_dir = Path("./sessions")
+    result = []
+    for session_file in sessions_dir.glob("*.json"):
+        # Skip progress files
+        if session_file.name.endswith("_progress.json"):
+            continue
         try:
-            progress_data = json.loads(progress_file.read_text(encoding="utf-8"))
-            progress = progress_data.get("progress", {})
-            progress_info = {
-                "current": progress.get("current", 0),
-                "total": progress.get("total", 0),
-                "step": progress.get("step", ""),
-                "status": progress.get("status", ""),
-            }
-        except Exception as e:
-            logger.error(f"Failed to read progress file: {e}")
-    
-    return jsonify({
-        "has_saved_state": True,
-        "title": state.get("title", "Untitled"),
-        "chapters": state.get("chapters", 0),
-        "has_progress": has_progress,
-        "progress_info": progress_info,
-    })
-
-
-@app.route("/resume_session", methods=["POST"])
-def resume_session():
-    """
-    Restore the saved session state and optionally resume chapter generation.
-    """
-    state = load_session_state()
-    if not state:
-        return jsonify({"error": "No saved state found"}), 404
-    
-    # Restore session
-    restore_session_from_state(state)
-    
-    # Check if there's progress to resume
-    token = state.get("progress_token")
-    progress_file = Path("./sessions") / f"{token}_progress.json" if token else None
-    
-    if token and progress_file and progress_file.exists():
-        try:
-            # Load progress data
-            progress_data = json.loads(progress_file.read_text(encoding="utf-8"))
-            
-            # Restore progress store
-            with _progress_lock:
-                if token not in _progress_store:
-                    _progress_store[token] = progress_data.get("progress", {})
-            
-            # Check if we should resume generation
-            progress = progress_data.get("progress", {})
-            if progress.get("status") == "running":
-                # Resume generation from where it left off
-                snapshot = progress_data.get("snapshot", {})
-                chapters_done = progress_data.get("chapters_done", [])
-                summaries = progress_data.get("summaries", [])
-                current_chapter = progress.get("current", 0)
-                
-                # Start a new thread to continue generation
-                thread = threading.Thread(
-                    target=_resume_chapter_generation,
-                    args=(token, snapshot, chapters_done, summaries, current_chapter),
-                    daemon=True,
-                )
-                thread.start()
-                
-                return jsonify({
-                    "status": "resumed",
-                    "token": token,
-                    "message": f"Resuming from chapter {current_chapter + 1}"
+            state = json.loads(session_file.read_text(encoding="utf-8"))
+            title = (state.get("title") or "").strip()
+            if title:
+                result.append({
+                    "session_id": state.get("session_id", session_file.stem),
+                    "title": title,
                 })
-        except Exception as e:
-            logger.error(f"Failed to resume generation: {e}")
-    
-    return jsonify({"status": "restored", "message": "Session restored successfully"})
+        except Exception:
+            continue
+    # Sort alphabetically by title
+    result.sort(key=lambda s: s["title"].lower())
+    return jsonify({"sessions": result})
+
+
+@app.route("/load_session", methods=["POST"])
+def load_session():
+    """
+    Load a specific session by its session_id.
+    Restores all session data so the page can reload with that session active.
+    """
+    data = request.get_json(silent=True) or {}
+    target_id = data.get("session_id", "").strip()
+    if not target_id:
+        return jsonify({"error": "session_id is required."}), 400
+
+    session_file = Path("./sessions") / f"{target_id}.json"
+    if not session_file.exists():
+        return jsonify({"error": "Session not found."}), 404
+
+    try:
+        state = json.loads(session_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.error(f"Failed to read session file {session_file}: {e}")
+        return jsonify({"error": "Failed to read session data."}), 500
+
+    # Restore this session's data into the active Flask session
+    restore_session_from_state(state)
+
+    # Restore progress store if available
+    token = state.get("progress_token")
+    if token and "progress_data" in state:
+        with _progress_lock:
+            _progress_store[token] = state["progress_data"]
+
+    return jsonify({"status": "loaded", "title": state.get("title", "")})
+
+
+@app.route("/delete_session", methods=["POST"])
+def delete_session():
+    """
+    Delete the currently active session's JSON file and clear session data.
+    """
+    try:
+        session_file = get_session_file_path()
+        if session_file.exists():
+            session_file.unlink()
+            logger.info(f"Deleted session file {session_file}")
+    except Exception as e:
+        logger.error(f"Failed to delete session file: {e}")
+
+    session.clear()
+    return jsonify({"status": "success", "message": "Session deleted"})
 
 
 @app.route("/new_session", methods=["POST"])
@@ -5207,7 +5192,7 @@ def new_session():
     """
     import shutil
     from datetime import datetime
-    
+
     # Archive the current LLM log file
     llm_log = Path("./logs/llm.log")
     if llm_log.exists():
@@ -5221,13 +5206,13 @@ def new_session():
             logger.info(f"Archived LLM log to {archive_path}")
         except Exception as e:
             logger.error(f"Failed to archive LLM log: {e}")
-    
+
     # Clear session state file
     clear_session_state()
-    
+
     # Clear current session data
     session.clear()
-    
+
     # Clear progress token files
     try:
         sessions_dir = Path("./sessions")
@@ -5235,7 +5220,7 @@ def new_session():
             progress_file.unlink()
     except Exception as e:
         logger.error(f"Failed to clear progress files: {e}")
-    
+
     return jsonify({"status": "success", "message": "New session started"})
 
 
