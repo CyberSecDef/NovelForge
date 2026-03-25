@@ -251,6 +251,16 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 ## 6. User Experience
 
+### High Priority
+
+- [ ] **Chapter/Character updates not carrying forward** - During testing, when a character was renamed and the process was submitted to chapter drafting, the renamed character retained the old name.  Ensure all updates of any chapter or character fields are processed and recorded for all future steps.
+
+- [X] **Novel failed to export** - After generating a novel the manuscript failed to export.
+
+- [X] **Editor's notes failed to export** - After generating a novel the editors notes failed to export.
+
+- [X] **Illustrations failed to export** - After generating a novel the illustrations failed to export.
+
 ### Medium Priority
 
 - [ ] **Add Accessibility Labels** - Add ARIA attributes to step panels (`aria-hidden`, `role="main"`), `for` attributes on all form labels, and keyboard navigation support for the inline-editable chapter/character tables.
