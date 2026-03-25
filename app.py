@@ -4127,12 +4127,43 @@ def approve_outline():
         return str(markupsafe.escape(v)) if isinstance(v, str) else v
 
     session["title"] = sanitise_str(title)
-    session["chapter_list"] = [
-        {k: sanitise_str(v) for k, v in ch.items()} for ch in chapter_list
-    ]
-    session["character_list"] = [
+
+    # Detect character renames by comparing old vs new character lists.
+    # Apply renames to chapter summaries so all downstream agents see
+    # consistent names. Also update the premise text.
+    old_characters = session.get("character_list", [])
+    new_characters = [
         {k: sanitise_str(v) for k, v in ch.items()} for ch in character_list
     ]
+    rename_map: dict[str, str] = {}
+    for old_ch, new_ch in zip(old_characters, new_characters):
+        old_name = (old_ch.get("name") or "").strip()
+        new_name = (new_ch.get("name") or "").strip()
+        if old_name and new_name and old_name != new_name:
+            rename_map[old_name] = new_name
+
+    sanitised_chapters = [
+        {k: sanitise_str(v) for k, v in ch.items()} for ch in chapter_list
+    ]
+
+    if rename_map:
+        logger.info("Character renames detected: %s", rename_map)
+        # Apply renames to chapter summaries and titles
+        for ch in sanitised_chapters:
+            for old_name, new_name in rename_map.items():
+                for field in ("title", "summary"):
+                    if isinstance(ch.get(field), str):
+                        ch[field] = ch[field].replace(old_name, new_name)
+        # Apply renames to premise, special_events, and special_instructions
+        for session_field in ("premise", "special_events", "special_instructions"):
+            text = session.get(session_field, "")
+            if isinstance(text, str) and text:
+                for old_name, new_name in rename_map.items():
+                    text = text.replace(old_name, new_name)
+                session[session_field] = text
+
+    session["chapter_list"] = sanitised_chapters
+    session["character_list"] = new_characters
     session["story_architecture"] = plan_story_architecture(
         title=session["title"],
         premise=session.get("premise", ""),
