@@ -102,6 +102,111 @@ _progress_store: dict[str, dict] = {}
 _progress_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
+# Session state schema validation
+# ---------------------------------------------------------------------------
+
+# Define expected types and defaults for all session state fields.
+# Each entry: (expected_type, default_value)
+_SESSION_SCHEMA: dict[str, tuple[type, object]] = {
+    "session_id":               (str,   ""),
+    "premise":                  (str,   ""),
+    "genre":                    (str,   ""),
+    "chapters":                 (int,   0),
+    "word_count":               (int,   0),
+    "special_events":           (str,   ""),
+    "special_instructions":     (str,   ""),
+    "title":                    (str,   ""),
+    "chapter_list":             (list,  []),
+    "character_list":           (list,  []),
+    "story_architecture":       (dict,  {}),
+    "master_timeline":          (dict,  {}),
+    "character_fate_registry":  (dict,  {}),
+    "character_arc_plan":       (dict,  {}),
+    "antagonist_motivation_plan": (dict, {}),
+    "technology_rules":         (dict,  {}),
+    "theme_reinforcement":      (dict,  {}),
+    "pov_focal_character_plan": (dict,  {}),
+    "progress_token":           (str,   ""),
+    "completed_chapters":       (list,  []),
+    "illustrations":            (list,  []),
+}
+
+
+def validate_session_state(state: dict) -> dict:
+    """
+    Validate and coerce a session state dict against the expected schema.
+
+    - Missing keys are filled with defaults.
+    - Wrong types are coerced when possible, or replaced with defaults.
+    - Extra keys are preserved (e.g. progress_data).
+    - Issues are logged as warnings, never hard-fail.
+
+    Returns the cleaned state dict.
+    """
+    for key, (expected_type, default) in _SESSION_SCHEMA.items():
+        value = state.get(key)
+
+        # Missing key — fill default
+        if value is None:
+            state[key] = default if not isinstance(default, (list, dict)) else type(default)()
+            continue
+
+        # Correct type — no action needed
+        if isinstance(value, expected_type):
+            continue
+
+        # Attempt coercion
+        try:
+            if expected_type is int:
+                state[key] = int(value)
+                logger.warning(
+                    "Session field '%s' coerced from %s to int",
+                    key, type(value).__name__,
+                )
+            elif expected_type is str:
+                state[key] = str(value)
+                logger.warning(
+                    "Session field '%s' coerced from %s to str",
+                    key, type(value).__name__,
+                )
+            else:
+                raise TypeError(f"cannot coerce {type(value).__name__} to {expected_type.__name__}")
+        except (TypeError, ValueError):
+            logger.warning(
+                "Session field '%s' has wrong type %s (expected %s) — reset to default",
+                key, type(value).__name__, expected_type.__name__,
+            )
+            state[key] = default if not isinstance(default, (list, dict)) else type(default)()
+
+    # Validate chapter_list entries
+    chapter_list = state.get("chapter_list", [])
+    if isinstance(chapter_list, list):
+        for i, ch in enumerate(chapter_list):
+            if not isinstance(ch, dict):
+                logger.warning("chapter_list[%d] is not a dict — replacing with empty", i)
+                chapter_list[i] = {"number": i + 1, "title": f"Chapter {i + 1}", "summary": ""}
+
+    # Validate character_list entries
+    character_list = state.get("character_list", [])
+    if isinstance(character_list, list):
+        for i, ch in enumerate(character_list):
+            if not isinstance(ch, dict):
+                logger.warning("character_list[%d] is not a dict — replacing with empty", i)
+                character_list[i] = {"name": "", "age": "", "role": "", "background": "", "arc": ""}
+
+    # Validate completed_chapters entries
+    completed = state.get("completed_chapters", [])
+    if isinstance(completed, list):
+        for i, ch in enumerate(completed):
+            if not isinstance(ch, dict):
+                logger.warning("completed_chapters[%d] is not a dict — removing", i)
+                completed[i] = None
+        state["completed_chapters"] = [ch for ch in completed if ch is not None]
+
+    return state
+
+
+# ---------------------------------------------------------------------------
 # Session persistence for crash recovery
 # ---------------------------------------------------------------------------
 
@@ -162,6 +267,9 @@ def save_session_state() -> None:
                     if done:
                         state["completed_chapters"] = list(done)
         
+        # Validate before writing
+        state = validate_session_state(state)
+
         # Write to file
         session_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
         logger.info(f"Saved session state to {session_file}")
@@ -180,6 +288,7 @@ def load_session_state() -> dict | None:
             return None
         
         state = json.loads(session_file.read_text(encoding="utf-8"))
+        state = validate_session_state(state)
         logger.info(f"Loaded session state from {session_file}")
         return state
     except Exception as e:
@@ -191,6 +300,8 @@ def restore_session_from_state(state: dict) -> None:
     """
     Restore session and progress store from saved state dict.
     """
+    state = validate_session_state(state)
+
     # Restore session variables
     session["premise"] = state.get("premise", "")
     session["genre"] = state.get("genre", "")
@@ -263,6 +374,80 @@ _FORBIDDEN_WORDS = [
 
 MAX_RETRIES = 5
 RETRY_DELAY = 5  # seconds
+CIRCUIT_BREAKER_THRESHOLD = 3  # consecutive failures before tripping
+
+
+class LLMCircuitBreaker:
+    """
+    Thread-safe circuit breaker for LLM API calls.
+
+    After CIRCUIT_BREAKER_THRESHOLD consecutive call_llm failures the breaker
+    trips and immediately raises on subsequent calls until reset.
+    """
+
+    def __init__(self, threshold: int = CIRCUIT_BREAKER_THRESHOLD):
+        self._threshold = threshold
+        self._consecutive_failures = 0
+        self._tripped = False
+        self._last_error: str = ""
+        self._lock = threading.Lock()
+
+    def record_success(self) -> None:
+        with self._lock:
+            self._consecutive_failures = 0
+            self._tripped = False
+
+    def record_failure(self, error: str) -> None:
+        with self._lock:
+            self._consecutive_failures += 1
+            self._last_error = error
+            if self._consecutive_failures >= self._threshold:
+                self._tripped = True
+                logger.error(
+                    "Circuit breaker tripped after %d consecutive LLM failures: %s",
+                    self._consecutive_failures, error,
+                )
+
+    def check(self) -> None:
+        """Raise if the breaker is tripped."""
+        with self._lock:
+            if self._tripped:
+                raise CircuitBreakerError(
+                    f"LLM API circuit breaker open — {self._consecutive_failures} "
+                    f"consecutive failures. Last error: {self._last_error}"
+                )
+
+    def reset(self) -> None:
+        with self._lock:
+            self._consecutive_failures = 0
+            self._tripped = False
+            self._last_error = ""
+
+    @property
+    def is_tripped(self) -> bool:
+        with self._lock:
+            return self._tripped
+
+    @property
+    def failure_count(self) -> int:
+        with self._lock:
+            return self._consecutive_failures
+
+
+class CircuitBreakerError(RuntimeError):
+    """Raised when the LLM circuit breaker is open."""
+    pass
+
+
+class ChapterTimeoutError(RuntimeError):
+    """Raised when a single chapter exceeds the per-chapter time limit."""
+    pass
+
+
+PER_CHAPTER_TIMEOUT = 3600  # 60 minutes in seconds
+
+
+_llm_circuit_breaker = LLMCircuitBreaker()
 
 def load_prompt_by_name(prompt_name, filename='prompts.yaml'):
     """
@@ -278,7 +463,7 @@ def load_prompt_by_name(prompt_name, filename='prompts.yaml'):
     # Ensure the file path is correct
     filepath = os.path.join(os.getcwd(), filename)
     if not os.path.exists(filepath):
-        print(f"Error: {filename} not found at {filepath}")
+        logger.error("Prompt file not found: %s at %s", filename, filepath)
         return None
 
     try:
@@ -289,11 +474,11 @@ def load_prompt_by_name(prompt_name, filename='prompts.yaml'):
             if prompts_data and prompt_name in prompts_data:
                 return prompts_data[prompt_name]
             else:
-                print(f"Error: Prompt '{prompt_name}' not found in {filename}")
+                logger.warning("Prompt '%s' not found in %s", prompt_name, filename)
                 return None
                 
     except yaml.YAMLError as e:
-        print(f"Error parsing YAML file: {e}")
+        logger.error("Error parsing YAML file: %s", e)
         return None
 
 
@@ -331,7 +516,10 @@ def call_llm(messages: list[dict], *, action: str = "", json_mode: bool = False)
 
     Retries up to MAX_RETRIES times on transient errors (429, 5xx).
     Raises RuntimeError on persistent failure.
+    Raises CircuitBreakerError if the breaker is tripped.
     """
+    _llm_circuit_breaker.check()
+
     headers = {
         "Authorization": f"Bearer {config.LLM_API_KEY}",
         "Content-Type": "application/json",
@@ -388,11 +576,14 @@ def call_llm(messages: list[dict], *, action: str = "", json_mode: bool = False)
             }
             llm_logger.info(json.dumps(response_log, indent=2))
             
+            _llm_circuit_breaker.record_success()
             return data["choices"][0]["message"]["content"]
         except requests.exceptions.Timeout:
             logger.warning("LLM request timed out (attempt %d/%d)", attempt, MAX_RETRIES)
             if attempt == MAX_RETRIES:
-                raise RuntimeError("LLM API timed out after multiple retries.")
+                err = "LLM API timed out after multiple retries."
+                _llm_circuit_breaker.record_failure(err)
+                raise RuntimeError(err)
             time.sleep(RETRY_DELAY * attempt)
         except requests.exceptions.RequestException as exc:
             # Log the error
@@ -402,9 +593,13 @@ def call_llm(messages: list[dict], *, action: str = "", json_mode: bool = False)
                 "error": str(exc),
             }
             llm_logger.info(json.dumps(error_log))
-            raise RuntimeError(f"LLM API request failed: {exc}") from exc
+            err = f"LLM API request failed: {exc}"
+            _llm_circuit_breaker.record_failure(err)
+            raise RuntimeError(err) from exc
 
-    raise RuntimeError("LLM API failed after maximum retries.")
+    err = "LLM API failed after maximum retries."
+    _llm_circuit_breaker.record_failure(err)
+    raise RuntimeError(err)
 
 
 def parse_llm_json(response: str) -> dict:
@@ -851,6 +1046,31 @@ def normalise_story_architecture(
     }
 
 
+def _log_planning_agent_failure(
+    agent_name: str,
+    exc: Exception,
+    *,
+    title: str = "",
+    premise: str = "",
+    genre: str = "",
+    chapter_count: int = 0,
+    character_count: int = 0,
+) -> None:
+    """Log a structured error entry when a planning agent fails."""
+    logger.warning(
+        "Planning agent FAILED — agent=%s | genre=%s | chapters=%d | "
+        "characters=%d | title=%s | premise=%s | error=%s: %s",
+        agent_name,
+        genre,
+        chapter_count,
+        character_count,
+        title[:60],
+        (premise[:80] + "…") if len(premise) > 80 else premise,
+        type(exc).__name__,
+        exc,
+    )
+
+
 def plan_story_architecture(
     title: str,
     premise: str,
@@ -874,7 +1094,11 @@ def plan_story_architecture(
         )
         return normalise_story_architecture(parse_llm_json(raw), chapter_list, total_chapters)
     except (RuntimeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-        logger.warning("Story architecture planner failed, using fallback: %s", exc)
+        _log_planning_agent_failure(
+            "Story Architecture Planner", exc,
+            title=title, premise=premise, genre=genre,
+            chapter_count=total_chapters,
+        )
         return _build_fallback_story_architecture(chapter_list, total_chapters)
 
 
@@ -1118,7 +1342,11 @@ def plan_master_timeline(
         parsed = parse_llm_json(raw)
         return normalise_master_timeline(parsed, chapter_list, character_list)
     except (RuntimeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-        logger.warning("Master Timeline Builder failed, using fallback: %s", exc)
+        _log_planning_agent_failure(
+            "Master Timeline Builder", exc,
+            title=title, premise=premise, genre=genre,
+            chapter_count=len(chapter_list), character_count=len(character_list),
+        )
         return _build_fallback_master_timeline(chapter_list, character_list)
 
 
@@ -1415,7 +1643,11 @@ def plan_character_fate_registry(
         parsed = parse_llm_json(raw)
         return normalise_character_fate_registry(parsed, character_list, total_chapters)
     except (RuntimeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-        logger.warning("Character Fate Registry planner failed, using fallback: %s", exc)
+        _log_planning_agent_failure(
+            "Character Fate Registry", exc,
+            title=title, premise=premise, genre=genre,
+            chapter_count=len(chapter_list), character_count=len(character_list),
+        )
         return _build_fallback_character_fate_registry(character_list, total_chapters)
 
 
@@ -1694,7 +1926,11 @@ def plan_character_arc_plan(
         parsed = parse_llm_json(raw)
         return normalise_character_arc_plan(parsed, character_list, chapter_list)
     except (RuntimeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-        logger.warning("Character Arc Planner failed, using fallback: %s", exc)
+        _log_planning_agent_failure(
+            "Character Arc Planner", exc,
+            title=title, premise=premise, genre=genre,
+            chapter_count=len(chapter_list), character_count=len(character_list),
+        )
         return _build_fallback_character_arc_plan(character_list, chapter_list)
 
 
@@ -1982,7 +2218,11 @@ def plan_antagonist_motivation_plan(
         parsed = parse_llm_json(raw)
         return normalise_antagonist_motivation_plan(parsed, character_list, chapter_list)
     except (RuntimeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-        logger.warning("Antagonist Motivation Architect failed, using fallback: %s", exc)
+        _log_planning_agent_failure(
+            "Antagonist Motivation Architect", exc,
+            title=title, premise=premise, genre=genre,
+            chapter_count=len(chapter_list), character_count=len(character_list),
+        )
         return _build_fallback_antagonist_motivation_plan(character_list, chapter_list)
 
 
@@ -2210,7 +2450,11 @@ def plan_technology_rules(
         parsed = parse_llm_json(raw)
         return normalise_technology_rules(parsed, chapter_list)
     except (RuntimeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-        logger.warning("Technology Rules Designer failed, using fallback: %s", exc)
+        _log_planning_agent_failure(
+            "Technology Rules Designer", exc,
+            title=title, premise=premise, genre=genre,
+            chapter_count=len(chapter_list),
+        )
         return _build_fallback_technology_rules(chapter_list)
 
 
@@ -2413,7 +2657,12 @@ def plan_theme_reinforcement(
         )
         parsed = parse_llm_json(raw)
         return normalise_theme_reinforcement(parsed, chapter_list)
-    except Exception:
+    except Exception as exc:
+        _log_planning_agent_failure(
+            "Theme Reinforcement Planner", exc,
+            title=title, premise=premise, genre=genre,
+            chapter_count=len(chapter_list),
+        )
         return _build_fallback_theme_reinforcement(chapter_list)
 
 
@@ -2678,7 +2927,11 @@ def plan_pov_focal_character(
         parsed = parse_llm_json(raw)
         return normalise_pov_focal_character_plan(parsed, character_list, chapter_list)
     except (RuntimeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-        logger.warning("POV & Focal Character Planner failed, using fallback: %s", exc)
+        _log_planning_agent_failure(
+            "POV & Focal Character Planner", exc,
+            title=title, premise=premise, genre=genre,
+            chapter_count=len(chapter_list), character_count=len(character_list),
+        )
         return _build_fallback_pov_focal_character_plan(character_list, chapter_list)
 
 
@@ -4381,15 +4634,28 @@ def _run_all_chapter_agents(
     chapter_pov_context: str = "",
     gatekeeper_brief: str = "",
     step_callback=None,
+    deadline: float = 0,
 ) -> tuple[str, str]:
     """
     Run all chapter refinement agents (post-draft) and return:
     (final_chapter_text, continuity_summary)
+
+    If *deadline* is non-zero (a ``time.monotonic()`` timestamp), each step
+    checks the clock before calling the LLM and raises ``ChapterTimeoutError``
+    if the deadline has passed.
     """
+    def _check_deadline() -> None:
+        if deadline and time.monotonic() > deadline:
+            raise ChapterTimeoutError(
+                f"Chapter {chapter_num} exceeded the {PER_CHAPTER_TIMEOUT // 60}-minute time limit."
+            )
+
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: prose refinement (dialogue + scenes)")
     text = call_llm(build_prose_refinement_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: prose refinement")
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: scene variety & compression audit")
     scene_audit_directives = run_scene_variety_compression_auditor(
@@ -4399,6 +4665,7 @@ def _run_all_chapter_agents(
         title=title,
     )
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: verifying continuity")
     text = call_llm(
@@ -4414,10 +4681,12 @@ def _run_all_chapter_agents(
         action=f"Chapter {chapter_num}: verifying continuity"
     )
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: editing")
     text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title, scene_audit_directives), action=f"Chapter {chapter_num}: editing")
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: momentum & distinctiveness check")
     text = call_llm(
@@ -4432,6 +4701,7 @@ def _run_all_chapter_agents(
         action=f"Chapter {chapter_num}: momentum & distinctiveness"
     )
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: checking structure")
     text = call_llm(
@@ -4445,7 +4715,7 @@ def _run_all_chapter_agents(
         action=f"Chapter {chapter_num}: checking structure"
     )
 
-    
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: verifying operational distinctiveness")
     text = call_llm(
@@ -4459,6 +4729,7 @@ def _run_all_chapter_agents(
         action=f"Chapter {chapter_num}: verifying operational distinctiveness"
     )
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: deepening characters")
     text = call_llm(
@@ -4475,22 +4746,27 @@ def _run_all_chapter_agents(
         action=f"Chapter {chapter_num}: deepening characters"
     )
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: synthesizing")
     text = call_llm(build_synthesizer_prompt(text, chapter_num, title, genre), action=f"Chapter {chapter_num}: synthesizing")
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: polishing")
     text = call_llm(build_polish_agent_prompt(text, chapter_num, title, genre), action=f"Chapter {chapter_num}: polishing")
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: anti-LLM pass")
     text = call_llm(build_anti_llm_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: anti-LLM pass")
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: quality control")
     text = call_llm(build_quality_controller_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: quality control")
 
+    _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: summarising")
     summary = call_llm(build_chapter_summary_prompt(text, chapter_num), action=f"Chapter {chapter_num}: summarising")
@@ -4561,6 +4837,9 @@ def _run_chapter_generation_internal(
     character_state_log: list[str] = []
     compression_guidance: str = ""  # Guidance from previous chapter's compression check
 
+    # Reset circuit breaker at the start of a (new or resumed) generation run
+    _llm_circuit_breaker.reset()
+
     def _set_step(step_label: str) -> None:
         with _progress_lock:
             _progress_store[token]["step"] = step_label
@@ -4585,6 +4864,7 @@ def _run_chapter_generation_internal(
 
     try:
         for idx, ch in enumerate(chapter_list[start_idx:], start=start_idx):
+            chapter_deadline = time.monotonic() + PER_CHAPTER_TIMEOUT
             chapter_num = ch.get("number", idx + 1)
             chapter_title = ch.get("title", f"Chapter {chapter_num}")
             chapter_outline_summary = ch.get("summary", "")
@@ -4693,6 +4973,7 @@ def _run_chapter_generation_internal(
                 chapter_pov_context=chapter_pov_context,
                 gatekeeper_brief=gatekeeper_brief,
                 step_callback=_set_step,
+                deadline=chapter_deadline,
             )
             summaries.append(summary)
 
@@ -4981,12 +5262,48 @@ def _run_chapter_generation_internal(
         if session_id:
             _persist_completed_chapters(session_id, chapters_done)
 
+    except ChapterTimeoutError as exc:
+        logger.error("Chapter timeout during generation for token %s: %s", token, exc)
+        with _progress_lock:
+            _progress_store[token]["status"] = "error"
+            _progress_store[token]["error"] = str(exc)
+            _progress_store[token]["error_code"] = "chapter_timeout"
+
+        # Persist any chapters completed before the timeout
+        session_id = snap.get("session_id")
+        if session_id and chapters_done:
+            _persist_completed_chapters(session_id, chapters_done)
+
+        _set_step(f"Error: {exc}")
+
+    except CircuitBreakerError as exc:
+        logger.error("Circuit breaker tripped during generation for token %s: %s", token, exc)
+        with _progress_lock:
+            _progress_store[token]["status"] = "error"
+            _progress_store[token]["error"] = (
+                "LLM API is unavailable — 3 consecutive calls failed. "
+                "Please check your API key, endpoint, and rate limits, then try again."
+            )
+            _progress_store[token]["error_code"] = "circuit_breaker"
+
+        # Persist any chapters completed before the failure
+        session_id = snap.get("session_id")
+        if session_id and chapters_done:
+            _persist_completed_chapters(session_id, chapters_done)
+
+        _set_step("Error: LLM API circuit breaker tripped")
+
     except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.error("Chapter generation failed for token %s: %s", token, exc)
         with _progress_lock:
             _progress_store[token]["status"] = "error"
             _progress_store[token]["error"] = str(exc)
-        
+
+        # Persist any chapters completed before the failure
+        session_id = snap.get("session_id")
+        if session_id and chapters_done:
+            _persist_completed_chapters(session_id, chapters_done)
+
         # Auto-save error state
         _set_step(f"Error: {str(exc)}")
 

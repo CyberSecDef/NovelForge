@@ -33,10 +33,6 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 ### Medium Priority
 
-- [ ] **Add Security Test Suite** - Implement comprehensive XSS, CSRF, injection, and path traversal tests to lock in security guarantees across refactors.
-  - Test that `markupsafe.escape()` is applied before LLM calls, that `/download/<filename>` rejects `../` traversal, that CSRF tokens are enforced
-  - Location: `tests/test_security.py` (new file)
-
 - [X] **Sanitize Contenteditable Fields** - Add character limits and server-side validation to inline-editable table cells (chapter titles, character names/backgrounds) to prevent malformed data reaching LLM prompts.
   - Add `maxlength` enforcement via JS `input` event; validate lengths again in `/approve_outline`
   - Location: `static/js/script.js` (contenteditable handlers), `app.py:/approve_outline`
@@ -51,41 +47,33 @@ This document tracks planned improvements and enhancements for NovelForge.
   - Implement a `validate_config()` function called from `create_app()` (see Code Organization); use environment-based config classes (`DevelopmentConfig`, `ProductionConfig`) so `SECRET_KEY` is required in production but defaults gracefully in development
   - Location: `config.py`, `app.py` (startup)
 
-- [ ] **Replace In-Memory Progress Store** - Migrate `_progress_store` dict to Redis or SQLite. The current design silently loses all progress when running gunicorn with `-w > 1` workers because each worker has its own memory space. Redis is preferred for production; SQLite is acceptable for single-server deployments.
-  - Use `flask-caching` with a Redis backend or create a `progress.py` module backed by SQLite with a `threading.Lock`
-  - Location: `app.py` (global `_progress_store`, `_progress_lock`, and all callers)
-
 ### Medium Priority
 
-- [ ] **Implement Circuit Breaker for LLM API** - After 3 consecutive LLM call failures, abort chapter generation and surface a clear error to the user rather than continuing to send requests to a failing API endpoint.
+- [X] **Implement Circuit Breaker for LLM API** - After 3 consecutive LLM call failures, abort chapter generation and surface a clear error to the user rather than continuing to send requests to a failing API endpoint.
   - Track consecutive failure count in the progress store; abort with a specific error code the frontend can display with a "Retry" option
   - Location: `app.py:call_llm()`, `app.py:_run_chapter_generation_internal()`
 
-- [ ] **Add Per-Chapter Timeout** - Enforce a maximum wall-clock time (e.g., 30 minutes) for each chapter generation pass through the 16-step agent pipeline to prevent runaway background threads from consuming resources indefinitely.
+- [X] **Add Per-Chapter Timeout** - Enforce a maximum wall-clock time (e.g., 60 minutes) for each chapter generation pass through the 16-step agent pipeline to prevent runaway background threads from consuming resources indefinitely.
   - Use `threading.Timer` or track `time.monotonic()` at the start of each chapter and abort if elapsed exceeds limit
   - Location: `app.py:_run_all_chapter_agents()`
 
-- [ ] **Add Session File Cleanup** - Session persistence files in `./sessions/` accumulate indefinitely and are never purged. Add a background cleanup job or a startup sweep to remove sessions older than a configurable TTL (default: 7 days).
-  - Scan `./sessions/` on startup and schedule periodic cleanup; expose TTL as a `SESSION_TTL_DAYS` env var in `config.py`
-  - Location: `app.py` (startup), `config.py`
-
-- [ ] **Improve Error Logging for Planning Agents** - Log which specific planning agent failed with full context (chapter count, genre, premise snippet) before returning an error response. Currently failures are hard to trace post-mortem.
+- [X] **Improve Error Logging for Planning Agents** - Log which specific planning agent failed with full context (chapter count, genre, premise snippet) before returning an error response. Currently failures are hard to trace post-mortem.
   - Add structured log entries at each agent call site with agent name, input hash, and error details
   - Location: `app.py` (planning agent call sites, approximately lines 4352–4487)
 
-- [ ] **Add Polling Failure Handling** - After 5 consecutive `/progress/<token>` polling failures in JavaScript, show a visible warning to the user ("Connection lost — generation may still be running in the background") instead of silently continuing.
+- [X] **Add Polling Failure Handling** - After 5 consecutive `/progress/<token>` polling failures in JavaScript, show a visible warning to the user ("Connection lost — generation may still be running in the background") instead of silently continuing.
   - Track consecutive failure count in `pollProgress()`; clear count on success
   - Location: `static/js/script.js:pollProgress()`
 
-- [ ] **Add Exponential Backoff to Progress Polling** - Replace fixed 3-second polling interval with adaptive backoff (e.g., 2s → 4s → 8s → cap at 15s) based on how often the response changes, reducing server load during long generations.
+- [X] **Add Exponential Backoff to Progress Polling** - Replace fixed 15-second polling interval with adaptive backoff (e.g., 15s → 30s → 60s → cap at 60s) based on how often the response changes, reducing server load during long generations.
   - Location: `static/js/script.js:pollProgress()`
 
 ### Low Priority
 
-- [ ] **Replace `print()` and `console.log()` with Proper Logging** - Three `print()` statements in production Python code (lines 232, 243, 247 in `app.py`) and two `console.log()` calls in `script.js` (lines 95, 190) bypass structured logging. Replace with `logger.error()` / `logger.warning()` in Python and remove or guard console statements in JavaScript.
+- [X] **Replace `print()` and `console.log()` with Proper Logging** - Three `print()` statements in production Python code (lines 232, 243, 247 in `app.py`) and two `console.log()` calls in `script.js` (lines 95, 190) bypass structured logging. Replace with `logger.error()` / `logger.warning()` in Python and remove or guard console statements in JavaScript.
   - Location: `app.py` (lines 232, 243, 247), `static/js/script.js` (lines 95, 190)
 
-- [ ] **Add Schema Validation for Session Persistence** - Use Pydantic or `dataclasses` with field validators to ensure all session keys are correctly typed when saving and restoring session state. Prevents silent data corruption from partial writes or format changes.
+- [X] **Add Schema Validation for Session Persistence** - Use Pydantic or `dataclasses` with field validators to ensure all session keys are correctly typed when saving and restoring session state. Prevents silent data corruption from partial writes or format changes.  Don't hard fail on issues, but validate and correct when possible
   - Location: `app.py` (session persistence functions, approximately lines 77–198)
 
 ---
@@ -253,7 +241,7 @@ This document tracks planned improvements and enhancements for NovelForge.
 
 ### High Priority
 
-- [ ] **Chapter/Character updates not carrying forward** - During testing, when a character was renamed and the process was submitted to chapter drafting, the renamed character retained the old name.  Ensure all updates of any chapter or character fields are processed and recorded for all future steps.
+- [X] **Chapter/Character updates not carrying forward** - During testing, when a character was renamed and the process was submitted to chapter drafting, the renamed character retained the old name.  Ensure all updates of any chapter or character fields are processed and recorded for all future steps.
 
 - [X] **Novel failed to export** - After generating a novel the manuscript failed to export.
 

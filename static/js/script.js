@@ -147,7 +147,6 @@ $(function () {
       .join("\n")
       .toLowerCase();
 
-      console.log(combined)
     if (!combined) return "Prompting LLM";
 
     if (combined.indexOf("title") !== -1 && combined.indexOf("novel") !== -1) {
@@ -660,7 +659,10 @@ $(function () {
       success: function (resp) {
         _progressToken = resp.token;
         _totalChapters = parseInt($("#chapters").val(), 10) || 20;
-        _pollInterval = setInterval(pollProgress, 3000);
+        _pollDelay = _pollDelayMin;
+        _lastPollStep = "";
+        _pollFailures = 0;
+        _schedulePoll();
       },
       error: function (xhr) {
         var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to start generation.";
@@ -670,6 +672,16 @@ $(function () {
     });
   }
 
+  var _pollFailures = 0;
+  var _pollDelay = 15000;       // current adaptive delay (ms)
+  var _pollDelayMin = 15000;    // 15s floor
+  var _pollDelayMax = 60000;    // 60s ceiling
+  var _lastPollStep = "";       // last observed step label
+
+  function _schedulePoll() {
+    _pollInterval = setTimeout(pollProgress, _pollDelay);
+  }
+
   function pollProgress() {
     if (!_progressToken) return;
 
@@ -677,10 +689,25 @@ $(function () {
       url: "/progress/" + _progressToken,
       method: "GET",
       success: function (data) {
+        // Reset failure counter and clear any connection-lost warning
+        if (_pollFailures >= 5) {
+          clearAlerts();
+        }
+        _pollFailures = 0;
+
         var current = data.current || 0;
         var total = data.total || _totalChapters;
+        var step = data.step || "";
 
-        updateProgressBar(current, total, data.step || null);
+        updateProgressBar(current, total, step || null);
+
+        // Adaptive backoff: reset delay when progress changes, else double it
+        if (step !== _lastPollStep) {
+          _pollDelay = _pollDelayMin;
+        } else {
+          _pollDelay = Math.min(_pollDelay * 2, _pollDelayMax);
+        }
+        _lastPollStep = step;
 
         // Render completed chapters in list
         var $list = $("#chapter-progress-list");
@@ -695,16 +722,35 @@ $(function () {
         });
 
         if (data.status === "done") {
-          clearInterval(_pollInterval);
           showDoneStep(data);
         } else if (data.status === "error") {
-          clearInterval(_pollInterval);
-          showAlert("Chapter generation failed: " + (data.error || "Unknown error"));
+          if (data.error_code === "circuit_breaker") {
+            showAlert(
+              "LLM API is unavailable — 3 consecutive calls failed. " +
+              "Check your API key, endpoint, and rate limits, then click " +
+              "\"Approve & Write Chapters\" to retry.",
+              "danger"
+            );
+          } else {
+            showAlert("Chapter generation failed: " + (data.error || "Unknown error"));
+          }
           showStep("#step-outline");
+        } else {
+          _schedulePoll();
         }
       },
       error: function () {
-        // Non-fatal – keep polling
+        _pollFailures++;
+        if (_pollFailures === 5) {
+          showAlert(
+            "Connection lost — generation may still be running in the background. " +
+            "Will keep trying to reconnect.",
+            "warning"
+          );
+        }
+        // Back off on errors too
+        _pollDelay = Math.min(_pollDelay * 2, _pollDelayMax);
+        _schedulePoll();
       },
     });
   }
@@ -1143,7 +1189,7 @@ $(function () {
   // -------------------------------------------------------------------
   $("#btn-start-over").on("click", function () {
     clearAlerts();
-    clearInterval(_pollInterval);
+    clearTimeout(_pollInterval);
     _progressToken = null;
 
     // Reset form
@@ -1201,7 +1247,10 @@ $(function () {
           // Generation still in progress — show progress tab and start polling
           _totalChapters = sd.chapters || 20;
           showStep("#step-progress");
-          _pollInterval = setInterval(pollProgress, 3000);
+          _pollDelay = _pollDelayMin;
+        _lastPollStep = "";
+        _pollFailures = 0;
+        _schedulePoll();
           pollProgress();
         } else if (pd.chapters_done && pd.chapters_done.length) {
           // Has some chapters (e.g. errored mid-run) — show what we have
