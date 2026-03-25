@@ -15,12 +15,20 @@ $(function () {
 
   // -------------------------------------------------------------------
   // CSRF token – attach to every AJAX request via X-CSRFToken header
+  // Read from cookie first (survives page refresh), fall back to meta tag
   // -------------------------------------------------------------------
-  var csrfToken = $('meta[name="csrf-token"]').attr("content");
+  function getCsrfToken() {
+    var match = document.cookie.match(/(^|;\s*)csrf_token=([^;]+)/);
+    if (match) return decodeURIComponent(match[2]);
+    return $('meta[name="csrf-token"]').attr("content") || "";
+  }
   $.ajaxSetup({
     beforeSend: function (xhr, settings) {
-      if (!/^(GET|HEAD|OPTIONS)$/i.test(settings.type) && csrfToken) {
-        xhr.setRequestHeader("X-CSRFToken", csrfToken);
+      if (!/^(GET|HEAD|OPTIONS)$/i.test(settings.type)) {
+        var token = getCsrfToken();
+        if (token) {
+          xhr.setRequestHeader("X-CSRFToken", token);
+        }
       }
     },
   });

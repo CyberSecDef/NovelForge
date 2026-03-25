@@ -30,7 +30,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_file, se
 from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from jinja2 import Template
 
 # Load environment variables before local imports so config picks them up
@@ -49,6 +49,9 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = config.SECRET_KEY
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
+# CSRF settings: 7-day token lifetime (long-running local generation process)
+app.config["WTF_CSRF_TIME_LIMIT"] = 604800  # 7 days in seconds
+app.config["WTF_CSRF_SSL_STRICT_MODE"] = False
 
 # Ensure directories exist BEFORE initializing sessions
 Path(config.SESSION_FILE_DIR).mkdir(parents=True, exist_ok=True)
@@ -65,6 +68,20 @@ app.config["SESSION_PERMANENT"] = False
 Session(app)
 CSRFProtect(app)
 limiter = Limiter(get_remote_address, app=app, default_limits=["60 per minute"])
+
+
+@app.after_request
+def set_csrf_cookie(response):
+    """Set CSRF token in a cookie so JS can read it after page refresh."""
+    csrf_token = generate_csrf()
+    response.set_cookie(
+        "csrf_token",
+        csrf_token,
+        max_age=604800,  # 7 days, matching WTF_CSRF_TIME_LIMIT
+        samesite="Lax",
+        httponly=False,   # JS needs to read it
+    )
+    return response
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
