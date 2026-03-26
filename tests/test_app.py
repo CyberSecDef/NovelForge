@@ -8,16 +8,7 @@ import unittest
 import pytest
 
 
-@pytest.fixture
-def client():
-    from novelforge import create_app, limiter
-    flask_app = create_app(testing=True)
-    flask_app.config["SECRET_KEY"] = "test-secret"
-    flask_app.config["WTF_CSRF_ENABLED"] = False
-    flask_app.config["RATELIMIT_ENABLED"] = False
-    limiter.enabled = False
-    with flask_app.test_client() as c:
-        yield c
+# client fixture is defined in conftest.py
 
 
 # ---------------------------------------------------------------------------
