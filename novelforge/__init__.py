@@ -42,9 +42,14 @@ def create_app(*, testing: bool = False) -> Flask:
     Path(config.LOGS_DIR).mkdir(parents=True, exist_ok=True)
     Path(config.NOVELS_DIR).mkdir(parents=True, exist_ok=True)
 
-    # Configure filesystem-based sessions
-    app.config["SESSION_TYPE"] = "filesystem"
-    app.config["SESSION_FILE_DIR"] = config.SESSION_FILE_DIR
+    # Configure filesystem-based sessions using CacheLib directly
+    # (avoids deprecated SESSION_FILE_DIR / FileSystemSessionInterface)
+    from cachelib import FileSystemCache
+    app.config["SESSION_TYPE"] = "cachelib"
+    app.config["SESSION_CACHELIB"] = FileSystemCache(
+        cache_dir=config.SESSION_FILE_DIR,
+        threshold=500,
+    )
     app.config["SESSION_PERMANENT"] = False
 
     Session(app)

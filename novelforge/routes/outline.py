@@ -241,6 +241,10 @@ def approve_outline() -> Response | tuple[Response, int]:
         {k: sanitise_str(v) for k, v in ch.items()} for ch in chapter_list
     ]
 
+    # Force sequential chapter numbers 1..N regardless of what the client sent
+    for idx, ch in enumerate(sanitised_chapters, 1):
+        ch["number"] = idx
+
     if rename_map:
         logger.info("Character renames detected: %s", rename_map)
         for ch in sanitised_chapters:

@@ -16,7 +16,7 @@ from novelforge.llm.client import (
     _llm_circuit_breaker,
     llm_logger,
 )
-from novelforge.llm.prompts import load_prompt_by_name, render_prompt
+from novelforge.llm.prompts import render_prompt
 from novelforge.llm.image import call_image_api
 
 __all__ = [
@@ -34,7 +34,6 @@ __all__ = [
     "_friendly_llm_error",
     "_llm_circuit_breaker",
     "llm_logger",
-    "load_prompt_by_name",
     "render_prompt",
     "call_image_api",
 ]
