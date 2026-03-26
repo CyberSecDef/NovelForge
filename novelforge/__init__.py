@@ -52,14 +52,20 @@ def create_app(*, testing: bool = False) -> Flask:
     limiter.init_app(app)
 
     # Set up logging
-    # Set up logging with correlation ID support
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s [%(name)s] [token=%(correlation_token)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    # Install correlation filter on the root logger so all modules get it
-    logging.getLogger().addFilter(CorrelationFilter())
+    # Set up logging with correlation ID support.
+    # Install the filter on the root logger so all records get the attribute,
+    # then configure the format to include it.
+    root_logger = logging.getLogger()
+    if not any(isinstance(f, CorrelationFilter) for f in root_logger.filters):
+        root_logger.addFilter(CorrelationFilter())
+    if not root_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s [%(name)s] [token=%(correlation_token)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+        root_logger.addHandler(handler)
+        root_logger.setLevel(logging.INFO)
     logger = logging.getLogger(__name__)
 
     if testing:
