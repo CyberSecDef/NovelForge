@@ -29,7 +29,7 @@ def choose_story_architecture_mode(total_chapters: int) -> str:
 
 def _coerce_positive_int(value: object, default: int) -> int:
     try:
-        coerced = int(value)
+        coerced = int(value)  # type: ignore[call-overload]
         return coerced if coerced > 0 else default
     except (TypeError, ValueError):
         return default
@@ -156,9 +156,9 @@ class StoryArchitectureAgent(BaseAgent):
         _climax = ChapterPosition.climax_chapter(total_chapters)
         _resolution = ChapterPosition.resolution_chapter(total_chapters)
 
-        def _act_for_chapter(chapter_num: int) -> dict:
+        def _act_for_chapter(chapter_num: int) -> dict[str, object]:
             for act in acts:
-                if act["chapter_start"] <= chapter_num <= act["chapter_end"]:
+                if int(act["chapter_start"]) <= chapter_num <= int(act["chapter_end"]):  # type: ignore[call-overload]
                     return act
             return acts[-1]
 
@@ -1867,7 +1867,7 @@ class PovFocalCharacterAgent(BaseAgent):
         for ch_num in range(1, total_chapters + 1):
             if ch_num not in normalised_map and ch_num in fallback_map:
                 normalised_plan.append(fallback_map[ch_num])
-        normalised_plan.sort(key=lambda x: x["chapter"])
+        normalised_plan.sort(key=lambda x: int(x.get("chapter", 0)))  # type: ignore[call-overload]
 
         rotation_rules = data.get("rotation_rules", [])
         if not isinstance(rotation_rules, list):

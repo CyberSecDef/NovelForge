@@ -3,7 +3,7 @@
 import hashlib
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 
 import markupsafe
 from flask import Blueprint, Response, jsonify, request, session
@@ -232,8 +232,8 @@ def approve_outline() -> Response | tuple[Response, int]:
     ]
     rename_map: dict[str, str] = {}
     for old_ch, new_ch in zip(old_characters, new_characters):
-        old_name = (old_ch.get("name") or "").strip()
-        new_name = (new_ch.get("name") or "").strip()
+        old_name = str(old_ch.get("name") or "").strip()
+        new_name = str(new_ch.get("name") or "").strip()
         if old_name and new_name and old_name != new_name:
             rename_map[old_name] = new_name
 
@@ -246,8 +246,9 @@ def approve_outline() -> Response | tuple[Response, int]:
         for ch in sanitised_chapters:
             for old_name, new_name in rename_map.items():
                 for field in ("title", "summary"):
-                    if isinstance(ch.get(field), str):
-                        ch[field] = ch[field].replace(old_name, new_name)
+                    val = ch.get(field)
+                    if isinstance(val, str):
+                        ch[field] = val.replace(old_name, new_name)
         for session_field in ("premise", "special_events", "special_instructions"):
             text = session.get(session_field, "")
             if isinstance(text, str) and text:
@@ -291,7 +292,7 @@ def approve_outline() -> Response | tuple[Response, int]:
         return new_hashes.get(agent_key) != prev_hashes.get(agent_key)
 
     # --- Group 1: independent agents (run in parallel, skip if unchanged) ---
-    g1_agents: dict[str, object] = {}
+    g1_agents: dict[str, Future[dict]] = {}
     with ThreadPoolExecutor(max_workers=4) as pool:
         if _needs_regen("story_architecture"):
             g1_agents["story_architecture"] = pool.submit(plan_story_architecture, **common)
@@ -320,7 +321,7 @@ def approve_outline() -> Response | tuple[Response, int]:
     )
 
     # --- Group 2: depend on Group 1 outputs (run in parallel, skip if unchanged) ---
-    g2_agents: dict[str, object] = {}
+    g2_agents: dict[str, Future[dict]] = {}
     with ThreadPoolExecutor(max_workers=3) as pool:
         if _needs_regen("character_fate_registry"):
             g2_agents["character_fate_registry"] = pool.submit(

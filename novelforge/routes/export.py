@@ -474,6 +474,7 @@ def generate_illustrations() -> Response | tuple[Response, int]:
                 logger.warning("Illustration LLM prompt failed (attempt %d/3) – retrying in %ds", llm_attempt, wait)
                 time.sleep(wait)
 
+        assert raw is not None  # guaranteed by retry loop raising on final failure
         prompt_data = parse_llm_json(raw)
         illustrations = prompt_data.get("illustrations", [])
 

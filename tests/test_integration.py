@@ -212,7 +212,11 @@ class TestGenerateChapters:
             sess["theme_reinforcement"] = {}
             sess["pov_focal_character_plan"] = {}
 
-    def test_starts_generation_returns_token(self, client):
+    def test_starts_generation_returns_token(self, client, monkeypatch):
+        import novelforge.routes.generation as gen_mod
+        monkeypatch.setattr(gen_mod.threading, "Thread",
+                            lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+
         self._seed_full_session(client)
         r = client.post(
             "/generate_chapters",
@@ -224,7 +228,11 @@ class TestGenerateChapters:
         assert "token" in data
         assert len(data["token"]) > 0
 
-    def test_progress_endpoint_returns_status(self, client):
+    def test_progress_endpoint_returns_status(self, client, monkeypatch):
+        import novelforge.routes.generation as gen_mod
+        monkeypatch.setattr(gen_mod.threading, "Thread",
+                            lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+
         self._seed_full_session(client)
         r = client.post(
             "/generate_chapters",

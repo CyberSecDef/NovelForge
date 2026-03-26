@@ -273,8 +273,13 @@ class TestConcurrentGenerationRequests:
         with _progress_lock:
             _progress_store.clear()
 
-    def test_two_generation_requests_get_different_tokens(self, client):
+    def test_two_generation_requests_get_different_tokens(self, client, monkeypatch):
         """Two POST /generate_chapters requests should produce different tokens."""
+        # Prevent background threads from spawning — we only test token creation
+        import novelforge.routes.generation as gen_mod
+        monkeypatch.setattr(gen_mod.threading, "Thread",
+                            lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+
         def seed():
             with client.session_transaction() as sess:
                 sess["premise"] = "A test"
@@ -304,7 +309,6 @@ class TestConcurrentGenerationRequests:
         assert r1.status_code == 200
         token1 = r1.get_json()["token"]
 
-        # Wait for rate limit window (test has limiter disabled, so this is fine)
         seed()
         r2 = client.post("/generate_chapters", data=json.dumps({}),
                          content_type="application/json")

@@ -430,8 +430,13 @@ class TestPromptBuilders:
         from novelforge.agents.chapter import build_chapter_summary_prompt
         self._check_messages(build_chapter_summary_prompt("Full chapter text here.", 1))
 
-    def test_progress_token_includes_step(self, client):
+    def test_progress_token_includes_step(self, client, monkeypatch):
         """After /generate_chapters, the initial progress record should include 'step'."""
+        # Prevent background thread from spawning — only test initial progress state
+        import novelforge.routes.generation as gen_mod
+        monkeypatch.setattr(gen_mod.threading, "Thread",
+                            lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+
         with client.session_transaction() as sess:
             sess["premise"] = "A hero's journey"
             sess["genre"] = "Fantasy"
