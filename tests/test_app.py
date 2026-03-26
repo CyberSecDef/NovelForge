@@ -10,8 +10,8 @@ import pytest
 
 @pytest.fixture
 def client():
-    from app import app as flask_app, limiter
-    flask_app.config["TESTING"] = True
+    from novelforge import create_app, limiter
+    flask_app = create_app(testing=True)
     flask_app.config["SECRET_KEY"] = "test-secret"
     flask_app.config["WTF_CSRF_ENABLED"] = False
     flask_app.config["RATELIMIT_ENABLED"] = False
@@ -26,7 +26,7 @@ def client():
 
 class TestValidateOutlineInput:
     def _call(self, data):
-        from app import validate_outline_input
+        from novelforge.validation import validate_outline_input
         return validate_outline_input(data)
 
     def test_valid_input(self):
@@ -64,7 +64,7 @@ class TestValidateOutlineInput:
         assert "genre" in err.lower() or "Genre" in err
 
     def test_all_valid_genres(self):
-        from app import ALLOWED_GENRES
+        from novelforge.validation import ALLOWED_GENRES
         for genre in ALLOWED_GENRES:
             ok, err = self._call(
                 {"premise": "A story", "genre": genre, "chapters": 5, "word_count": 50000}
@@ -205,7 +205,7 @@ class TestRoutes:
         assert r.status_code == 400
 
     def test_export_editors_notes_success_filename(self, client):
-        from app import _progress_lock, _progress_store
+        from novelforge.progress import _progress_lock, _progress_store
 
         token = "test-token-editors-notes"
         with _progress_lock:
@@ -232,7 +232,7 @@ class TestRoutes:
         assert payload["download_url"].endswith("My_Great_Novel-Editors_Notes.md")
 
     def test_revise_chapter_requires_instructions(self, client):
-        from app import _progress_lock, _progress_store
+        from novelforge.progress import _progress_lock, _progress_store
 
         token = "test-token-revise-empty"
         with _progress_lock:
@@ -250,7 +250,7 @@ class TestRoutes:
         assert r.status_code == 400
 
     def test_revise_chapter_success_reruns_agents(self, client, monkeypatch):
-        from app import _progress_lock, _progress_store
+        from novelforge.progress import _progress_lock, _progress_store
 
         token = "test-token-revise-success"
         with _progress_lock:
@@ -285,7 +285,9 @@ class TestRoutes:
                 return '{"issues": ["Issue after revision"], "overall_assessment": "Revised consistency"}'
             return "Updated chapter content"
 
-        monkeypatch.setattr("app.call_llm", fake_call_llm)
+        monkeypatch.setattr("novelforge.llm.client.call_llm", fake_call_llm)
+        monkeypatch.setattr("novelforge.agents.chapter.call_llm", fake_call_llm)
+        monkeypatch.setattr("novelforge.routes.generation.call_llm", fake_call_llm)
 
         r = client.post(
             "/revise_chapter",
@@ -333,108 +335,108 @@ class TestPromptBuilders:
         assert user_msg["content"].strip(), "User prompt must not be empty"
 
     def test_prose_refinement_agent_prompt(self):
-        from app import build_prose_refinement_agent_prompt
+        from novelforge.agents.chapter import build_prose_refinement_agent_prompt
         self._check_messages(build_prose_refinement_agent_prompt("Some chapter text with dialogue.", 1, "Test Novel"))
 
     def test_prose_refinement_agent_prompt_contains_text(self):
-        from app import build_prose_refinement_agent_prompt
+        from novelforge.agents.chapter import build_prose_refinement_agent_prompt
         text = "He said hello. She replied."
         msgs = build_prose_refinement_agent_prompt(text, 1, "Test Novel")
         assert text in msgs[1]["content"]
 
     def test_scene_agent_prompt(self):
-        from app import build_prose_refinement_agent_prompt
+        from novelforge.agents.chapter import build_prose_refinement_agent_prompt
         self._check_messages(build_prose_refinement_agent_prompt("A scene in the forest.", 1, "Test Novel"))
 
     def test_scene_agent_prompt_contains_pattern(self):
-        from app import build_prose_refinement_agent_prompt
+        from novelforge.agents.chapter import build_prose_refinement_agent_prompt
         msgs = build_prose_refinement_agent_prompt("text", 1, "Test Novel")
         combined = msgs[0]["content"] + msgs[1]["content"]
         assert "Goal" in combined and "Obstacle" in combined
 
     def test_structure_agent_prompt(self):
-        from app import build_structure_agent_prompt
+        from novelforge.agents.chapter import build_structure_agent_prompt
         self._check_messages(
             build_structure_agent_prompt("Chapter text.", 5, 20, "Chapter 5 outline")
         )
 
     def test_structure_agent_beginning(self):
-        from app import build_structure_agent_prompt
+        from novelforge.agents.chapter import build_structure_agent_prompt
         msgs = build_structure_agent_prompt("text", 1, 20, "intro")
         assert "Beginning" in msgs[1]["content"]
 
     def test_structure_agent_middle(self):
-        from app import build_structure_agent_prompt
+        from novelforge.agents.chapter import build_structure_agent_prompt
         msgs = build_structure_agent_prompt("text", 10, 20, "midpoint")
         assert "Middle" in msgs[1]["content"]
 
     def test_structure_agent_end(self):
-        from app import build_structure_agent_prompt
+        from novelforge.agents.chapter import build_structure_agent_prompt
         msgs = build_structure_agent_prompt("text", 18, 20, "climax")
         assert "End" in msgs[1]["content"]
 
     def test_character_agent_prompt(self):
-        from app import build_character_agent_prompt
+        from novelforge.agents.chapter import build_character_agent_prompt
         self._check_messages(
             build_character_agent_prompt("Chapter text.", "Alice: protagonist, brave.", 1, "Test Novel")
         )
 
     def test_character_agent_prompt_contains_characters(self):
-        from app import build_character_agent_prompt
+        from novelforge.agents.chapter import build_character_agent_prompt
         chars = "Alice: protagonist"
         msgs = build_character_agent_prompt("text", chars, 1, "Test Novel")
         assert chars in msgs[1]["content"]
 
     def test_context_analyzer_prompt_with_previous(self):
-        from app import build_context_analyzer_prompt
+        from novelforge.agents.chapter import build_context_analyzer_prompt
         msgs = build_context_analyzer_prompt("current chapter", "Chapter 1: something happened", 2, "Test Novel")
         self._check_messages(msgs)
         assert "Chapter 1" in msgs[1]["content"]
 
     def test_context_analyzer_prompt_first_chapter(self):
-        from app import build_context_analyzer_prompt
+        from novelforge.agents.chapter import build_context_analyzer_prompt
         msgs = build_context_analyzer_prompt("current chapter", "", 1, "Test Novel")
         self._check_messages(msgs)
         assert "first chapter" in msgs[1]["content"]
 
     def test_synthesizer_prompt(self):
-        from app import build_synthesizer_prompt
+        from novelforge.agents.chapter import build_synthesizer_prompt
         self._check_messages(
             build_synthesizer_prompt("Chapter text.", 3, "My Novel", "Fantasy")
         )
 
     def test_synthesizer_prompt_contains_title(self):
-        from app import build_synthesizer_prompt
+        from novelforge.agents.chapter import build_synthesizer_prompt
         msgs = build_synthesizer_prompt("text", 1, "Dragon Fire", "Fantasy")
         assert "Dragon Fire" in msgs[1]["content"]
 
     def test_quality_controller_prompt(self):
-        from app import build_quality_controller_prompt
+        from novelforge.agents.chapter import build_quality_controller_prompt
         self._check_messages(build_quality_controller_prompt("Chapter text.", 1, "Test Novel"))
 
     def test_anti_llm_agent_prompt(self):
-        from app import build_anti_llm_agent_prompt
+        from novelforge.agents.chapter import build_anti_llm_agent_prompt
         self._check_messages(build_anti_llm_agent_prompt("Some text with embark delve.", 1, "Test Novel"))
 
     def test_anti_llm_agent_prompt_contains_forbidden_words(self):
-        from app import build_anti_llm_agent_prompt, _FORBIDDEN_WORDS
+        from novelforge.agents.chapter import build_anti_llm_agent_prompt, _FORBIDDEN_WORDS
         msgs = build_anti_llm_agent_prompt("text", 1, "Test Novel")
         # At least one forbidden word should appear in the system prompt
         forbidden_in_prompt = any(w in msgs[0]["content"] for w in _FORBIDDEN_WORDS)
         assert forbidden_in_prompt, "Anti-LLM system prompt should list forbidden words"
 
     def test_polish_agent_prompt(self):
-        from app import build_polish_agent_prompt
+        from novelforge.agents.chapter import build_polish_agent_prompt
         self._check_messages(build_polish_agent_prompt("Draft chapter text.", 1, "Test Novel", "Fantasy"))
 
     def test_editing_agent_prompt(self):
-        from app import build_editing_agent_prompt
+        from novelforge.agents.chapter import build_editing_agent_prompt
         self._check_messages(
             build_editing_agent_prompt("Draft text.", "Chapter should end with a fight.", 1, "Test Novel")
         )
 
     def test_chapter_summary_prompt(self):
-        from app import build_chapter_summary_prompt
+        from novelforge.agents.chapter import build_chapter_summary_prompt
         self._check_messages(build_chapter_summary_prompt("Full chapter text here.", 1))
 
     def test_progress_token_includes_step(self, client):
@@ -469,7 +471,7 @@ class TestPromptBuilders:
 
 class TestMasterTimelineBuilder:
     def test_normalise_master_timeline_uses_fallback_shape(self):
-        from app import normalise_master_timeline
+        from novelforge.agents.planning import normalise_master_timeline
 
         chapter_list = [
             {"number": 1, "title": "Ch1", "summary": "Setup"},
@@ -485,7 +487,7 @@ class TestMasterTimelineBuilder:
         assert "chapter_constraints" in timeline
 
     def test_get_chapter_timeline_context_contains_constraints(self):
-        from app import get_chapter_timeline_context
+        from novelforge.agents.planning import get_chapter_timeline_context
 
         master_timeline = {
             "ledger": [
@@ -514,7 +516,7 @@ class TestMasterTimelineBuilder:
 
 class TestCharacterFateRegistry:
     def test_normalise_character_fate_registry_uses_fallback(self):
-        from app import normalise_character_fate_registry
+        from novelforge.agents.planning import normalise_character_fate_registry
 
         character_list = [{"name": "Mara", "role": "Protagonist"}]
         timeline = normalise_character_fate_registry({}, character_list, 3)
@@ -525,7 +527,7 @@ class TestCharacterFateRegistry:
         assert len(timeline["chapter_constraints"]) == 3
 
     def test_get_chapter_fate_context_contains_constraints(self):
-        from app import get_chapter_fate_context
+        from novelforge.agents.planning import get_chapter_fate_context
 
         fate_registry = {
             "registry": [
@@ -562,7 +564,7 @@ class TestCharacterFateRegistry:
 
 class TestCharacterArcPlanner:
     def test_normalise_character_arc_plan_uses_fallback(self):
-        from app import normalise_character_arc_plan
+        from novelforge.agents.planning import normalise_character_arc_plan
 
         character_list = [{"name": "Elena", "role": "Protagonist", "arc": "Learns trust"}]
         chapter_list = [
@@ -578,7 +580,7 @@ class TestCharacterArcPlanner:
         assert len(arc_plan["chapter_constraints"]) == 3
 
     def test_get_chapter_arc_context_contains_beats(self):
-        from app import get_chapter_arc_context
+        from novelforge.agents.planning import get_chapter_arc_context
 
         arc_plan = {
             "arcs": [
@@ -615,7 +617,7 @@ class TestCharacterArcPlanner:
 
 class TestAntagonistMotivationArchitect:
     def test_normalise_antagonist_motivation_plan_uses_fallback(self):
-        from app import normalise_antagonist_motivation_plan
+        from novelforge.agents.planning import normalise_antagonist_motivation_plan
 
         character_list = [
             {"name": "Drex", "role": "Antagonist", "arc": "Escalates control"},
@@ -635,7 +637,7 @@ class TestAntagonistMotivationArchitect:
         assert len(plan["chapter_constraints"]) == 3
 
     def test_get_chapter_antagonist_context_contains_escalation(self):
-        from app import get_chapter_antagonist_context
+        from novelforge.agents.planning import get_chapter_antagonist_context
 
         plan = {
             "antagonists": [
@@ -677,7 +679,7 @@ class TestAntagonistMotivationArchitect:
 
 class TestTechnologyRulesDesigner:
     def test_normalise_technology_rules_uses_fallback(self):
-        from app import normalise_technology_rules
+        from novelforge.agents.planning import normalise_technology_rules
 
         chapter_list = [
             {"number": 1, "title": "Setup", "summary": "System introduced"},
@@ -692,7 +694,7 @@ class TestTechnologyRulesDesigner:
         assert len(rules["chapter_constraints"]) == 2
 
     def test_get_chapter_technology_context_contains_constraints(self):
-        from app import get_chapter_technology_context
+        from novelforge.agents.planning import get_chapter_technology_context
 
         rules = {
             "systems": [
@@ -729,7 +731,7 @@ class TestTechnologyRulesDesigner:
 
 class TestThemeReinforcementPlanner:
     def test_normalise_theme_reinforcement_uses_fallback(self):
-        from app import normalise_theme_reinforcement
+        from novelforge.agents.planning import normalise_theme_reinforcement
 
         chapter_list = [
             {"number": 1, "title": "Opening", "summary": "Setup."},
@@ -745,7 +747,7 @@ class TestThemeReinforcementPlanner:
         assert len(result["chapter_constraints"]) == 2
 
     def test_get_chapter_theme_context_contains_guidance(self):
-        from app import get_chapter_theme_context
+        from novelforge.agents.planning import get_chapter_theme_context
 
         theme_data = {
             "themes": [
@@ -779,7 +781,7 @@ class TestThemeReinforcementPlanner:
 
 class TestContinuityGatekeeper:
     def test_build_continuity_gatekeeper_prompt_mentions_core_sources(self):
-        from app import build_continuity_gatekeeper_prompt
+        from novelforge.agents.chapter import build_continuity_gatekeeper_prompt
 
         messages = build_continuity_gatekeeper_prompt(
             chapter_num=4,
@@ -800,14 +802,14 @@ class TestContinuityGatekeeper:
         assert "FORBIDDEN SCENARIOS" in content
 
     def test_run_continuity_gatekeeper_returns_empty_on_failure(self, monkeypatch):
-        import app
+        import novelforge.agents.chapter as chapter_agents
 
         def _boom(*args, **kwargs):
             raise RuntimeError("llm failed")
 
-        monkeypatch.setattr(app, "call_llm", _boom)
+        monkeypatch.setattr(chapter_agents, "call_llm", _boom)
 
-        result = app.run_continuity_gatekeeper(
+        result = chapter_agents.run_continuity_gatekeeper(
             chapter_num=2,
             chapter_title="Checkpoint",
             chapter_summary="A risky crossing.",
@@ -822,7 +824,7 @@ class TestContinuityGatekeeper:
 
 class TestNarrativeRedundancyDetector:
     def test_build_prompt_mentions_redundancy_targets(self):
-        from app import build_narrative_momentum_distinctiveness_prompt
+        from novelforge.agents.chapter import build_narrative_momentum_distinctiveness_prompt
 
         messages = build_narrative_momentum_distinctiveness_prompt(
             chapter_text="Mara plans another extraction from the same prison convoy.",
@@ -842,7 +844,7 @@ class TestNarrativeRedundancyDetector:
         assert "Return ONLY the complete revised chapter text" in content
 
     def test_build_prompt_handles_first_chapter(self):
-        from app import build_narrative_momentum_distinctiveness_prompt
+        from novelforge.agents.chapter import build_narrative_momentum_distinctiveness_prompt
 
         messages = build_narrative_momentum_distinctiveness_prompt(
             chapter_text="Opening chapter text.",
@@ -858,7 +860,7 @@ class TestNarrativeRedundancyDetector:
 
 class TestCharacterThreadTracker:
     def test_build_prompt_mentions_forward_movement(self):
-        from app import build_character_agent_prompt
+        from novelforge.agents.chapter import build_character_agent_prompt
 
         messages = build_character_agent_prompt(
             chapter_text="Mara and Iven walk to the checkpoint. Kael watches.",
@@ -879,7 +881,7 @@ class TestCharacterThreadTracker:
         assert "Glass Province" in content
 
     def test_build_prompt_includes_arc_context(self):
-        from app import build_character_agent_prompt
+        from novelforge.agents.chapter import build_character_agent_prompt
 
         messages = build_character_agent_prompt(
             chapter_text="Chapter text here.",
@@ -896,7 +898,7 @@ class TestCharacterThreadTracker:
 
 class TestOperationalDistinctivenessAgent:
     def test_build_prompt_checks_operational_repetition(self):
-        from app import build_operational_distinctiveness_prompt
+        from novelforge.agents.chapter import build_operational_distinctiveness_prompt
 
         messages = build_operational_distinctiveness_prompt(
             chapter_text="They infiltrate the server room using the same vent route as before.",
@@ -915,7 +917,7 @@ class TestOperationalDistinctivenessAgent:
         assert "Return ONLY the complete revised chapter text" in content
 
     def test_build_prompt_handles_first_chapter(self):
-        from app import build_operational_distinctiveness_prompt
+        from novelforge.agents.chapter import build_operational_distinctiveness_prompt
 
         messages = build_operational_distinctiveness_prompt(
             chapter_text="Opening operation text.",
@@ -930,7 +932,7 @@ class TestOperationalDistinctivenessAgent:
 
 class TestStoryMomentumTracker:
     def test_build_prompt_checks_escalation(self):
-        from app import build_narrative_momentum_distinctiveness_prompt
+        from novelforge.agents.chapter import build_narrative_momentum_distinctiveness_prompt
 
         messages = build_narrative_momentum_distinctiveness_prompt(
             chapter_text="Raya escapes again through the back channel unharmed.",
@@ -953,7 +955,7 @@ class TestStoryMomentumTracker:
         assert "Return ONLY the complete revised chapter text" in content
 
     def test_build_prompt_handles_first_chapter(self):
-        from app import build_narrative_momentum_distinctiveness_prompt
+        from novelforge.agents.chapter import build_narrative_momentum_distinctiveness_prompt
 
         messages = build_narrative_momentum_distinctiveness_prompt(
             chapter_text="The story begins.",
@@ -969,7 +971,7 @@ class TestStoryMomentumTracker:
 
 class TestCharacterStateUpdater:
     def test_build_prompt_records_character_states(self):
-        from app import build_character_state_updater_prompt
+        from novelforge.agents.chapter import build_character_state_updater_prompt
 
         messages = build_character_state_updater_prompt(
             chapter_text="Mara is shot and captured by Kael's forces. Iven escapes through the east gate.",
@@ -992,7 +994,7 @@ class TestCharacterStateUpdater:
         assert "Return ONLY the character state log" in content
 
     def test_build_prompt_includes_character_roster(self):
-        from app import build_character_state_updater_prompt
+        from novelforge.agents.chapter import build_character_state_updater_prompt
 
         messages = build_character_state_updater_prompt(
             chapter_text="Brief chapter text.",
@@ -1007,7 +1009,7 @@ class TestCharacterStateUpdater:
         assert "Solen" in content
 
     def test_build_continuity_gatekeeper_prompt_includes_state_log(self):
-        from app import build_continuity_gatekeeper_prompt
+        from novelforge.agents.chapter import build_continuity_gatekeeper_prompt
 
         messages = build_continuity_gatekeeper_prompt(
             chapter_num=8,
@@ -1024,7 +1026,7 @@ class TestCharacterStateUpdater:
 
 class TestGlobalContinuityAuditor:
     def test_build_prompt_includes_all_sources(self):
-        from app import build_global_continuity_auditor_prompt
+        from novelforge.agents.chapter import build_global_continuity_auditor_prompt
 
         messages = build_global_continuity_auditor_prompt(
             title="Iron Meridian",
@@ -1061,7 +1063,7 @@ class TestGlobalContinuityAuditor:
         assert "overall_integrity" in content
 
     def test_build_prompt_handles_empty_supporting_data(self):
-        from app import build_global_continuity_auditor_prompt
+        from novelforge.agents.chapter import build_global_continuity_auditor_prompt
 
         messages = build_global_continuity_auditor_prompt(
             title="First Draft",
@@ -1079,7 +1081,7 @@ class TestGlobalContinuityAuditor:
 
 class TestNarrativeCompressionEditor:
     def test_build_prompt_identifies_redundancy_targets(self):
-        from app import build_narrative_compression_editor_prompt
+        from novelforge.agents.chapter import build_narrative_compression_editor_prompt
 
         messages = build_narrative_compression_editor_prompt(
             title="Iron Meridian",
@@ -1101,7 +1103,7 @@ class TestNarrativeCompressionEditor:
         assert "Return ONLY a valid JSON object" in content
 
     def test_build_prompt_includes_audit_flags_when_provided(self):
-        from app import build_narrative_compression_editor_prompt
+        from novelforge.agents.chapter import build_narrative_compression_editor_prompt
 
         audit = {
             "contradictions": [
@@ -1126,7 +1128,7 @@ class TestNarrativeCompressionEditor:
         assert "Same infiltration method" in content
 
     def test_build_prompt_handles_no_audit(self):
-        from app import build_narrative_compression_editor_prompt
+        from novelforge.agents.chapter import build_narrative_compression_editor_prompt
 
         messages = build_narrative_compression_editor_prompt(
             title="First Draft",
@@ -1139,7 +1141,7 @@ class TestNarrativeCompressionEditor:
 
 class TestCharacterResolutionValidator:
     def test_build_prompt_includes_all_sources(self):
-        from app import build_character_resolution_validator_prompt
+        from novelforge.agents.chapter import build_character_resolution_validator_prompt
 
         messages = build_character_resolution_validator_prompt(
             title="Iron Meridian",
@@ -1185,7 +1187,7 @@ class TestCharacterResolutionValidator:
         assert "resolution_integrity" in content
 
     def test_build_prompt_handles_empty_supporting_data(self):
-        from app import build_character_resolution_validator_prompt
+        from novelforge.agents.chapter import build_character_resolution_validator_prompt
 
         messages = build_character_resolution_validator_prompt(
             title="Empty Draft",
@@ -1203,7 +1205,7 @@ class TestCharacterResolutionValidator:
 
 class TestThematicPayoffAnalyzer:
     def test_build_prompt_includes_theme_plan_and_summaries(self):
-        from app import build_thematic_payoff_analyzer_prompt
+        from novelforge.agents.chapter import build_thematic_payoff_analyzer_prompt
 
         messages = build_thematic_payoff_analyzer_prompt(
             title="Iron Meridian",
@@ -1239,7 +1241,7 @@ class TestThematicPayoffAnalyzer:
         assert "Final quarter begins at Chapter" in content
 
     def test_build_prompt_handles_empty_theme_plan(self):
-        from app import build_thematic_payoff_analyzer_prompt
+        from novelforge.agents.chapter import build_thematic_payoff_analyzer_prompt
 
         messages = build_thematic_payoff_analyzer_prompt(
             title="Empty Draft",
@@ -1254,7 +1256,7 @@ class TestThematicPayoffAnalyzer:
 
 class TestClimaxIntegrityChecker:
     def test_build_prompt_checks_protagonist_decision(self):
-        from app import build_climax_integrity_checker_prompt
+        from novelforge.agents.chapter import build_climax_integrity_checker_prompt
 
         messages = build_climax_integrity_checker_prompt(
             title="Iron Meridian",
@@ -1287,7 +1289,7 @@ class TestClimaxIntegrityChecker:
         assert "climax_integrity" in content
 
     def test_build_prompt_handles_empty_arc_plan(self):
-        from app import build_climax_integrity_checker_prompt
+        from novelforge.agents.chapter import build_climax_integrity_checker_prompt
 
         messages = build_climax_integrity_checker_prompt(
             title="Empty Draft",
@@ -1304,7 +1306,7 @@ class TestLooseThreadResolver(unittest.TestCase):
     """Tests for build_loose_thread_resolver_prompt."""
 
     def test_build_prompt_full_content(self):
-        from app import build_loose_thread_resolver_prompt
+        from novelforge.agents.chapter import build_loose_thread_resolver_prompt
 
         messages = build_loose_thread_resolver_prompt(
             title="Iron Meridian",
@@ -1349,7 +1351,7 @@ class TestLooseThreadResolver(unittest.TestCase):
         assert "overall_assessment" in content
 
     def test_build_prompt_handles_empty_supporting_data(self):
-        from app import build_loose_thread_resolver_prompt
+        from novelforge.agents.chapter import build_loose_thread_resolver_prompt
 
         messages = build_loose_thread_resolver_prompt(
             title="Empty Draft",
@@ -1370,7 +1372,7 @@ class TestReaderImmersionTester(unittest.TestCase):
     """Tests for build_reader_immersion_tester_prompt."""
 
     def test_build_prompt_full_content(self):
-        from app import build_reader_immersion_tester_prompt
+        from novelforge.agents.chapter import build_reader_immersion_tester_prompt
 
         messages = build_reader_immersion_tester_prompt(
             title="Iron Meridian",
@@ -1419,7 +1421,7 @@ class TestReaderImmersionTester(unittest.TestCase):
         assert "recommendations" in content
 
     def test_build_prompt_handles_empty_supporting_data(self):
-        from app import build_reader_immersion_tester_prompt
+        from novelforge.agents.chapter import build_reader_immersion_tester_prompt
 
         messages = build_reader_immersion_tester_prompt(
             title="Empty Draft",

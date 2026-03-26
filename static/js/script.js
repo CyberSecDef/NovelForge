@@ -976,7 +976,99 @@ $(function () {
       $acc.append($item);
     });
 
+    // Writing statistics dashboard
+    _renderWritingStats(data.chapters_done || []);
+
     showStep("#step-done");
+  }
+
+  function _renderWritingStats(chapters) {
+    var $panel = $("#writing-stats-panel");
+    var $tbody = $("#writing-stats-tbody").empty();
+    var $summary = $("#writing-stats-summary").empty();
+
+    // Check if any chapter has stats (word_count field present)
+    var hasStats = chapters.some(function (ch) {
+      return ch.word_count || ch.generation_time_seconds || ch.total_tokens;
+    });
+
+    if (!chapters.length) {
+      $panel.addClass("d-none");
+      return;
+    }
+
+    // Compute per-chapter stats and totals
+    var totalWords = 0;
+    var totalTime = 0;
+    var totalCalls = 0;
+    var totalTokens = 0;
+
+    $.each(chapters, function (_, ch) {
+      var words = ch.word_count || (ch.content ? ch.content.split(/\s+/).length : 0);
+      var timeSec = ch.generation_time_seconds || 0;
+      var calls = ch.llm_calls || 0;
+      var tokens = ch.total_tokens || 0;
+
+      totalWords += words;
+      totalTime += timeSec;
+      totalCalls += calls;
+      totalTokens += tokens;
+
+      var timeStr = timeSec > 0 ? _formatDuration(timeSec) : "-";
+      var tokensStr = tokens > 0 ? tokens.toLocaleString() : "-";
+      var callsStr = calls > 0 ? calls.toLocaleString() : "-";
+
+      $tbody.append(
+        "<tr>" +
+        "<td>" + escapeHtml(ch.number) + "</td>" +
+        "<td>" + escapeHtml(ch.title || "") + "</td>" +
+        '<td class="text-end">' + words.toLocaleString() + "</td>" +
+        '<td class="text-end">' + timeStr + "</td>" +
+        '<td class="text-end">' + callsStr + "</td>" +
+        '<td class="text-end">' + tokensStr + "</td>" +
+        "</tr>"
+      );
+    });
+
+    // Summary cards
+    var avgWords = chapters.length > 0 ? Math.round(totalWords / chapters.length) : 0;
+    var summaryItems = [
+      { label: "Total Words", value: totalWords.toLocaleString(), icon: "bi-file-text" },
+      { label: "Avg Words/Ch", value: avgWords.toLocaleString(), icon: "bi-calculator" },
+    ];
+    if (totalTime > 0) {
+      summaryItems.push({ label: "Total Gen Time", value: _formatDuration(totalTime), icon: "bi-clock" });
+    }
+    if (totalCalls > 0) {
+      summaryItems.push({ label: "LLM Calls", value: totalCalls.toLocaleString(), icon: "bi-chat-dots" });
+    }
+    if (totalTokens > 0) {
+      summaryItems.push({ label: "Total Tokens", value: totalTokens.toLocaleString(), icon: "bi-cpu" });
+    }
+
+    $.each(summaryItems, function (_, item) {
+      $summary.append(
+        '<div class="col-6 col-md-4 col-lg-2">' +
+        '<div class="card text-center h-100">' +
+        '<div class="card-body py-2 px-1">' +
+        '<i class="bi ' + item.icon + ' text-primary mb-1 d-block"></i>' +
+        '<div class="fw-bold">' + item.value + "</div>" +
+        '<small class="text-muted">' + item.label + "</small>" +
+        "</div></div></div>"
+      );
+    });
+
+    $panel.removeClass("d-none");
+  }
+
+  function _formatDuration(seconds) {
+    if (seconds < 60) return Math.round(seconds) + "s";
+    var mins = Math.floor(seconds / 60);
+    var secs = Math.round(seconds % 60);
+    if (mins < 60) return mins + "m " + secs + "s";
+    var hrs = Math.floor(mins / 60);
+    mins = mins % 60;
+    return hrs + "h " + mins + "m";
   }
 
   // -------------------------------------------------------------------
