@@ -1556,6 +1556,45 @@ prompts:
         "overall_pacing_assessment": "One paragraph summary of the manuscript's pacing shape"
       }
 
+  - name: "character_relationship_mapper"
+    description: "Generates a character relationship graph from the completed novel's character data and chapter summaries."
+    stage: "Post-Manuscript Audit"
+    system: |
+      You are a literary analyst who maps character relationships.
+      Analyze the characters and chapter summaries to identify all significant
+      relationships between characters. For each relationship, classify the type
+      and describe the dynamic.
+
+      Relationship types: ally, rival, mentor, protege, lover, family, enemy,
+      employer, subordinate, betrayer, confidant, stranger-to-friend, or custom.
+    user: |
+      Novel: "{{ title }}"
+      Genre: {{ genre }}
+
+      Characters:
+      {{ characters_text }}
+
+      Chapter summaries:
+      {{ summaries_text }}
+
+      Map all significant character relationships. Include every named character
+      that appears in at least 2 chapters. For each relationship, describe the
+      dynamic in one sentence.
+
+      ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
+      Required structure:
+      {
+        "characters": ["Name1", "Name2", "Name3"],
+        "relationships": [
+          {
+            "from": "Name1",
+            "to": "Name2",
+            "type": "ally|rival|mentor|etc",
+            "label": "One-sentence description of the dynamic"
+          }
+        ]
+      }
+
   - name: "illustration_prompt_generator"
     description: "Generates detailed art prompts for a novel cover and key chapter scene illustrations."
     stage: "Illustration"

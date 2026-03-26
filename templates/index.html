@@ -440,6 +440,24 @@
                     <!-- Populated by JS -->
                   </div>
 
+                  <!-- Character relationship map -->
+                  <div id="relationship-map-panel" class="card border-0 text-start mt-3 d-none">
+                    <div class="card-body">
+                      <h6 class="fw-semibold mb-2">
+                        <a class="text-decoration-none" data-bs-toggle="collapse" href="#relationship-map-collapse"
+                          role="button" aria-expanded="false" aria-controls="relationship-map-collapse">
+                          <i class="bi bi-diagram-3 me-2"></i>Character Relationships
+                          <i class="bi bi-chevron-down ms-1 small"></i>
+                        </a>
+                      </h6>
+                      <div class="collapse" id="relationship-map-collapse">
+                        <div class="text-center">
+                          <pre class="mermaid" id="relationship-mermaid"></pre>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <!-- Preview accordion -->
                   <div class="accordion mt-4 text-start" id="chapters-preview-accordion">
                     <!-- Populated by JS -->
@@ -503,6 +521,16 @@
       window._savedSessionData = {{ session_data | tojson }};
     </script>
     {% endif %}
+
+    <!-- Mermaid.js for character relationship diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script>
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: document.documentElement.getAttribute("data-bs-theme") === "dark" ? "dark" : "default",
+        flowchart: { curve: "basis", padding: 15 },
+      });
+    </script>
 
     <!-- App logic -->
     <script src="/static/js/script.js"></script>

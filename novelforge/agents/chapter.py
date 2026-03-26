@@ -625,6 +625,22 @@ def build_pacing_tension_heatmap_prompt(title: str, all_summaries: list[str], to
                          summaries_text=summaries_text)
 
 
+def build_character_relationship_prompt(
+    title: str, genre: str, character_list: list[dict], all_summaries: list[str],
+) -> list[dict[str, str]]:
+    characters_text = "\n".join(
+        f"- {c.get('name', '?')}: role={c.get('role', '')}; background={c.get('background', '')}; arc={c.get('arc', '')}"
+        for c in character_list
+    )
+    if not characters_text.strip():
+        characters_text = "- No explicit characters provided."
+    summaries_text = "\n\n".join(f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries))
+    return render_prompt(
+        "character_relationship_mapper", title=title, genre=genre,
+        characters_text=characters_text, summaries_text=summaries_text,
+    )
+
+
 def build_illustration_prompt_generator_prompt(title: str, genre: str, premise: str, character_list: list[dict], all_summaries: list[str]) -> list[dict[str, str]]:
     characters_text = "\n".join(
         f"- {c.get('name', '?')}: role={c.get('role', '')}; background={c.get('background', '')}"

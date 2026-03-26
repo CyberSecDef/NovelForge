@@ -42,6 +42,7 @@ from novelforge.agents.chapter import (
     build_loose_thread_resolver_prompt,
     build_reader_immersion_tester_prompt,
     build_pacing_tension_heatmap_prompt,
+    build_character_relationship_prompt,
     run_continuity_gatekeeper, run_chapter_rhythm_classifier,
     run_character_state_updater, run_per_chapter_compression_check,
     _run_all_chapter_agents, ChapterContext,
@@ -541,6 +542,24 @@ def _run_chapter_generation_internal(
 
         with _progress_lock:
             _progress_store[token]["pacing_heatmap"] = pacing_heatmap
+
+        # --- Character Relationship Map ---
+        with _progress_lock:
+            _progress_store[token]["step"] = "Mapping character relationships"
+        relationship_raw = call_llm(
+            build_character_relationship_prompt(
+                title=title, genre=genre,
+                character_list=character_list, all_summaries=summaries,
+            ),
+            action="Character relationship mapping", json_mode=True,
+        )
+        try:
+            relationship_map = parse_llm_json(relationship_raw)
+        except json.JSONDecodeError:
+            relationship_map = {"characters": [], "relationships": []}
+
+        with _progress_lock:
+            _progress_store[token]["character_relationship_map"] = relationship_map
 
         _set_step("Complete")
 

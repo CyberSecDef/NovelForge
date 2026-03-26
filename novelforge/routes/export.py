@@ -86,6 +86,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
     loose_thread_report = progress_data.get("loose_thread_report", {})
     reader_immersion_report = progress_data.get("reader_immersion_report", {})
     pacing_heatmap = progress_data.get("pacing_heatmap", {})
+    character_relationship_map = progress_data.get("character_relationship_map", {})
 
     has_content = any([
         consistency.get("overall_assessment") or consistency.get("issues"),
@@ -93,6 +94,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         character_resolution_report, thematic_payoff_report,
         climax_integrity_report, loose_thread_report,
         reader_immersion_report, pacing_heatmap,
+        character_relationship_map.get("relationships"),
     ])
 
     if not has_content:
@@ -421,6 +423,47 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 else:
                     lines.append(f"- {fs}")
             lines.append("")
+
+    # 10. Character Relationship Map
+    rel_chars = character_relationship_map.get("characters", [])
+    rel_edges = character_relationship_map.get("relationships", [])
+    if rel_edges:
+        lines.append("---\n")
+        lines.append("## 10. Character Relationship Map\n")
+
+        # Render as a Mermaid diagram (viewable in GitHub, VS Code, etc.)
+        lines.append("```mermaid")
+        lines.append("graph LR")
+        id_map: dict[str, str] = {}
+        for idx, name in enumerate(rel_chars):
+            cid = f"C{idx}"
+            id_map[name] = cid
+            lines.append(f'    {cid}["{name}"]')
+        seen: set[str] = set()
+        for rel in rel_edges:
+            from_id = id_map.get(str(rel.get("from", "")))
+            to_id = id_map.get(str(rel.get("to", "")))
+            if not from_id or not to_id:
+                continue
+            edge_key = f"{from_id}-{to_id}"
+            if edge_key in seen:
+                continue
+            seen.add(edge_key)
+            label = str(rel.get("type", "")).replace('"', "'")
+            lines.append(f"    {from_id} -->|{label}| {to_id}")
+        lines.append("```\n")
+
+        # Also render as a text table for plain Markdown readers
+        lines.append("**Relationships:**\n")
+        lines.append("| From | To | Type | Description |")
+        lines.append("|------|------|------|-------------|")
+        for rel in rel_edges:
+            fr = rel.get("from", "?")
+            to = rel.get("to", "?")
+            rtype = rel.get("type", "?")
+            desc = rel.get("label", "")
+            lines.append(f"| {fr} | {to} | {rtype} | {desc} |")
+        lines.append("")
 
     markdown_content = "\n".join(lines)
 

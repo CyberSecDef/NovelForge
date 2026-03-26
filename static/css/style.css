@@ -138,13 +138,114 @@ body {
 
 /* ----------------------------------------------------------------
    Dark mode – triggered by data-bs-theme="dark" on <html>
-   Bootstrap 5.3+ handles component colors automatically;
-   these rules cover custom styles only.
+   Bootstrap 5.3+ handles most component colors automatically;
+   these rules cover custom styles and overrides for elements
+   that use hardcoded light-mode colors.
 ---------------------------------------------------------------- */
+
+/* Base background */
 [data-bs-theme="dark"] body {
   background-color: #1a1d21;
 }
 
+/* Cards and panels */
+[data-bs-theme="dark"] .card {
+  background-color: #212529;
+  border-color: #495057;
+}
+
+[data-bs-theme="dark"] .card.bg-light {
+  background-color: #2b3035 !important;
+}
+
+[data-bs-theme="dark"] .card.border-0 {
+  border-color: transparent !important;
+}
+
+[data-bs-theme="dark"] .card-body {
+  color: #dee2e6;
+}
+
+/* Tables — editable cells and headers */
+[data-bs-theme="dark"] .editable-cell {
+  color: #dee2e6;
+}
+
+[data-bs-theme="dark"] #chapter-table td,
+[data-bs-theme="dark"] #characters-table td {
+  border-color: #495057;
+  color: #dee2e6;
+}
+
+[data-bs-theme="dark"] .table {
+  --bs-table-bg: #212529;
+  --bs-table-border-color: #495057;
+  --bs-table-striped-bg: #2b3035;
+  --bs-table-hover-bg: #323940;
+  color: #dee2e6;
+}
+
+[data-bs-theme="dark"] .table-dark {
+  --bs-table-bg: #343a40;
+}
+
+/* Form controls */
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+  background-color: #2b3035;
+  border-color: #495057;
+  color: #dee2e6;
+}
+
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-select:focus {
+  background-color: #323940;
+  border-color: #6c757d;
+  color: #f8f9fa;
+}
+
+[data-bs-theme="dark"] .form-control::placeholder {
+  color: #6c757d;
+}
+
+/* Chapter preview accordion */
+[data-bs-theme="dark"] .accordion-body {
+  background-color: #212529;
+  color: #dee2e6;
+}
+
+[data-bs-theme="dark"] .accordion-button {
+  background-color: #2b3035;
+  color: #dee2e6;
+  border-color: #495057;
+}
+
+[data-bs-theme="dark"] .accordion-button:not(.collapsed) {
+  background-color: #323940;
+  color: #f8f9fa;
+}
+
+[data-bs-theme="dark"] .accordion-item {
+  border-color: #495057;
+}
+
+/* Progress chapter list */
+[data-bs-theme="dark"] .list-group-item {
+  background-color: #212529;
+  border-color: #495057;
+  color: #dee2e6;
+}
+
+[data-bs-theme="dark"] .list-group-item.done-chapter {
+  border-left-color: #20c997;
+}
+
+/* Progress bar container */
+[data-bs-theme="dark"] .progress {
+  background-color: #343a40;
+}
+
+/* LLM Chat Log */
 [data-bs-theme="dark"] .llm-chat-window {
   background-color: #1a1d21;
   border-top-color: #495057;
@@ -160,15 +261,85 @@ body {
   color: #dee2e6;
 }
 
-[data-bs-theme="dark"] .list-group-item.done-chapter {
-  border-left-color: #20c997;
+/* Alerts */
+[data-bs-theme="dark"] .alert-info {
+  background-color: #1a3a4a;
+  border-color: #2a5a7a;
+  color: #7ec8e3;
 }
 
-[data-bs-theme="dark"] .editable-cell {
+[data-bs-theme="dark"] .alert-danger {
+  background-color: #3a1a1a;
+  border-color: #7a2a2a;
+  color: #e37e7e;
+}
+
+[data-bs-theme="dark"] .alert-warning {
+  background-color: #3a3a1a;
+  border-color: #7a7a2a;
+  color: #e3d97e;
+}
+
+[data-bs-theme="dark"] .alert-success {
+  background-color: #1a3a1a;
+  border-color: #2a7a2a;
+  color: #7ee37e;
+}
+
+/* Dropdown menus */
+[data-bs-theme="dark"] .dropdown-menu {
+  background-color: #2b3035;
+  border-color: #495057;
+}
+
+[data-bs-theme="dark"] .dropdown-item {
   color: #dee2e6;
 }
 
-[data-bs-theme="dark"] .accordion-body {
+[data-bs-theme="dark"] .dropdown-item:hover,
+[data-bs-theme="dark"] .dropdown-item:focus {
+  background-color: #323940;
+  color: #f8f9fa;
+}
+
+/* Illustration gallery cards */
+[data-bs-theme="dark"] #illustrations-gallery .card {
+  background-color: #2b3035;
+}
+
+/* Writing statistics summary cards */
+[data-bs-theme="dark"] #writing-stats-summary .card {
+  background-color: #2b3035;
+  border-color: #495057;
+}
+
+/* Modal (if any remain) */
+[data-bs-theme="dark"] .modal-content {
   background-color: #212529;
+  border-color: #495057;
+}
+
+/* Misc text */
+[data-bs-theme="dark"] .text-muted {
+  color: #8e9aab !important;
+}
+
+/* Nav tabs */
+[data-bs-theme="dark"] .nav-tabs {
+  border-bottom-color: #495057;
+}
+
+[data-bs-theme="dark"] .nav-tabs .nav-link {
+  color: #8e9aab;
+}
+
+[data-bs-theme="dark"] .nav-tabs .nav-link.active {
+  background-color: #212529;
+  border-color: #495057 #495057 #212529;
+  color: #f8f9fa;
+}
+
+[data-bs-theme="dark"] .nav-tabs .nav-link:hover {
+  border-color: #495057;
   color: #dee2e6;
 }

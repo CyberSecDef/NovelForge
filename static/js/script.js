@@ -979,7 +979,62 @@ $(function () {
     // Writing statistics dashboard
     _renderWritingStats(data.chapters_done || []);
 
+    // Character relationship map
+    _renderRelationshipMap(data.character_relationship_map);
+
     showStep("#step-done");
+  }
+
+  function _renderRelationshipMap(mapData) {
+    var $panel = $("#relationship-map-panel");
+    var $pre = $("#relationship-mermaid");
+
+    if (!mapData || !mapData.relationships || mapData.relationships.length === 0) {
+      $panel.addClass("d-none");
+      return;
+    }
+
+    // Build Mermaid flowchart definition
+    var lines = ["graph LR"];
+    var seen = {};
+
+    // Assign short IDs to character names
+    var chars = mapData.characters || [];
+    var idMap = {};
+    for (var i = 0; i < chars.length; i++) {
+      var id = "C" + i;
+      idMap[chars[i]] = id;
+      lines.push("    " + id + '["' + chars[i].replace(/"/g, "'") + '"]');
+    }
+
+    // Add relationships as edges
+    var rels = mapData.relationships || [];
+    for (var j = 0; j < rels.length; j++) {
+      var r = rels[j];
+      var fromId = idMap[r.from];
+      var toId = idMap[r.to];
+      if (!fromId || !toId) continue;
+      var edgeKey = fromId + "-" + toId;
+      if (seen[edgeKey]) continue;
+      seen[edgeKey] = true;
+
+      var label = (r.type || "").replace(/"/g, "'");
+      lines.push("    " + fromId + " -->|" + label + "| " + toId);
+    }
+
+    var mermaidCode = lines.join("\n");
+    $pre.removeAttr("data-processed").text(mermaidCode);
+
+    // Re-render with Mermaid
+    try {
+      if (typeof mermaid !== "undefined" && mermaid.run) {
+        mermaid.run({ nodes: [$pre[0]] });
+      }
+    } catch (e) {
+      // Fallback: show raw text
+    }
+
+    $panel.removeClass("d-none");
   }
 
   function _renderWritingStats(chapters) {
