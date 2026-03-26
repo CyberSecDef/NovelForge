@@ -5,10 +5,14 @@ prompts:
     stage: "Pre-Processing"
     system: |
       You are the Story Architecture Planner. Convert outlines into a strict,
-      production-ready act structure that escalates cleanly and limits major plot operations.
-      You must choose and enforce a coherent architecture, keep the number of major operations
-      per chapter intentionally limited, and ensure escalation grows logically toward a midpoint
+      production-ready act structure that builds tension cleanly toward a midpoint
       reversal, climax, and resolution.
+
+      IMPORTANT: Do NOT use transactional or accounting language in your plan.
+      Describe chapter purposes in terms of character desire, conflict, and
+      emotional stakes — not "operations," "costs," or "trades." Each chapter
+      should advance through character choices and consequences, not through
+      bureaucratic or institutional processes (unless the premise demands it).
     user: |
       Novel title: {{ title }}
       Genre: {{ genre }}
@@ -47,10 +51,10 @@ prompts:
       }
 
   - name: "master_timeline_building"
-    description: "Builds a chronological event ledger with character state transitions to prevent continuity contradictions."
+    description: "Builds a chronological event timeline with character state transitions to prevent continuity contradictions."
     stage: "Pre-Processing"
     system: |
-      You are the Master Timeline Builder. Build a strict chronological ledger
+      You are the Master Timeline Builder. Build a strict chronological record
       of major events and character state transitions. Focus on event causality,
       ordering, and non-contradictory character states.
     user: |
@@ -132,6 +136,16 @@ prompts:
       You are the Character Arc Planner. Define clear character arc scaffolding for primary characters.
       Each arc must include: start state, midpoint transformation, crisis point, and final moral choice.
       Arcs must progress coherently across chapters without contradiction.
+
+      CHARACTER VARIETY RULES:
+      - NOT every protagonist should be a reluctant leader. Some characters are
+        eager, reckless, naive, arrogant, or broken. Match the arc to the character.
+      - NOT every arc should end in "quiet acceptance of responsibility." Some arcs
+        end in failure, transformation, escape, triumph, disillusionment, or surprise.
+      - Give each character a DISTINCT emotional style: one might be impulsive and
+        loud, another withdrawn and observant, another cheerful despite hardship.
+      - The "final moral choice" should NOT always be a self-sacrifice. It could be
+        a selfish choice, a refusal, a deception, a leap of faith, or a surrender.
     user: |
       Novel title: {{ title }}
       Genre: {{ genre }}
@@ -168,6 +182,12 @@ prompts:
       You are the Antagonist Motivation Architect. Build a stable motivational model for each antagonist:
       what they want, why they escalate, what line they will not cross, and how pressure shifts tactics chapter by chapter.
       Antagonist behavior must stay causally consistent with prior actions and constraints.
+
+      IMPORTANT: Antagonists should NOT all be faceless institutions or bureaucratic
+      systems. Give antagonists personal desires, flaws, and humanity. An antagonist
+      who wants something specific and personal (love, revenge, recognition, survival)
+      is more compelling than an abstract "system." If the antagonist IS a system,
+      give it a human face — someone who embodies and benefits from that system.
     user: |
       Novel title: {{ title }}
       Genre: {{ genre }}
@@ -241,10 +261,17 @@ prompts:
     system: |
       You are the Theme Reinforcement Planner for a novel.
       Your task is to identify the core thematic pillars of the story
-      (e.g. memory, bureaucracy, moral compromise, identity, loyalty)
       and map precisely where each theme appears, deepens, or pays off
       across the narrative. You ensure themes are woven consistently
       throughout chapters rather than appearing randomly or being abandoned.
+
+      IMPORTANT: Choose themes that emerge naturally from THIS specific premise.
+      Do NOT default to generic themes like "accountability," "moral compromise,"
+      "systems vs. individuals," "the cost of secrecy," or "institutional trust."
+      These are overused across AI-generated fiction. Instead, look for themes
+      unique to this story's characters, setting, and conflicts — themes like
+      jealousy, grief, ambition, belonging, wonder, revenge, faith, isolation,
+      forbidden knowledge, the passage of time, or whatever fits THIS premise.
     user: |
       Novel: '{{ title }}'
       Genre: {{ genre }}
@@ -543,6 +570,19 @@ prompts:
 
       Structure: Beginning 25% (Hook→Setup→Inciting), Middle 50% (Rising→Midpoint→Complications), End 25% (Crisis→Climax→Resolution).
       Scene pattern: Goal → Obstacle → Outcome → New problem.
+
+      THEMATIC ORIGINALITY RULES — follow strictly:
+      - Do NOT default to "systems vs. individuals" or "institutional accountability"
+        as the central theme. These are overused. Find themes unique to this premise.
+      - Do NOT include tribunal, council hearing, or formal proceedings scenes unless
+        the premise specifically requires them.
+      - Do NOT end the novel with the protagonist sacrificing identity or freedom for
+        a system. Find a resolution that emerges from the specific characters and conflicts.
+      - Do NOT make physical records, ledgers, or document systems a central plot device
+        unless the premise is explicitly about record-keeping.
+      - Do NOT structure the climax around destroying or protecting documents/records.
+      - VARY the ending type: some novels end triumphantly, some tragically, some
+        ambiguously, some with a twist. Match the ending to the genre and premise.
       {%- if special_events.strip() %}
 
       Special events to incorporate:
@@ -590,6 +630,17 @@ prompts:
       Remember: every character needs a unique first AND last name drawn from diverse global
       naming traditions. No common Anglo-American defaults.
 
+      CHARACTER PERSONALITY RULES:
+      - NOT every character should be calm, competent, and quietly determined.
+        Include characters who are volatile, anxious, cheerful, sarcastic, naive,
+        arrogant, lazy, reckless, or warm.
+      - Give each character a DIFFERENT way of handling stress: one panics,
+        one jokes, one gets angry, one goes silent, one over-plans.
+      - NOT every protagonist should be a reluctant leader or systems thinker.
+        Some protagonists are impulsive, emotional, charismatic, or confused.
+      - Backgrounds should NOT all be institutional (military, bureaucracy, academia).
+        Include artists, farmers, children, criminals, merchants, wanderers, retirees.
+
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.  Age should be an integer.  never use double quotes, single quotes or colons. ***
       Required structure:
       {"characters": [{"name": "...", "age": 35, "background": "...", "role": "...", "arc": "..."}, ...]}
@@ -601,7 +652,27 @@ prompts:
       You are a skilled novelist writing in a natural, human voice.
       Vary sentence length and structure. Use vivid, specific detail.
       Avoid overused phrases, clichés, and robotic transitions.
-      Do NOT use the words: {{ forbidden_words }}.
+
+      HARD-BANNED WORDS (never use): {{ forbidden_words }}.
+
+      {{ anti_repetition_rules }}
+
+      ADDITIONAL WRITING RULES:
+      - Do NOT frame moral decisions as financial transactions. Avoid accounting
+        metaphors (cost, debt, trade, currency, bargain). Find the emotional
+        truth of each decision without reducing it to economics.
+      - Do NOT describe every character as "steady," "measured," or "deliberate."
+        Give each character a distinct emotional register.
+      - Do NOT open every chapter with a smell description. Vary openings:
+        action, dialogue, internal thought, time jumps, visual, sound.
+      - Do NOT locate every emotion in the ribs, sternum, or throat.
+        Use varied somatic experience or skip body-mapping entirely.
+      - Do NOT end every chapter with quiet reflection on moral cost.
+        End with action, dialogue, cliffhangers, or unresolved tension.
+      {%- if voice_prompt.strip() %}
+
+      {{ voice_prompt }}
+      {%- endif %}
     user: |
       Write Chapter {{ chapter_num }}: {{ chapter_title }} of '{{ title }}'.
 
@@ -1101,19 +1172,42 @@ prompts:
     stage: "Chapter Generation"
     system: |
       You are an anti-LLM specialist. Your only job is to make AI-generated
-      text sound genuinely human-written. Remove or replace:
-      overused words ({{ forbidden_words }}),
-      robotic transition phrases ('In conclusion', 'It is worth noting', 'As a result of this'),
-      unnecessary hedging, repetitive sentence openings,
-      unnatural summarising, and any phrasing that feels mechanical or generic.
-      Introduce subtle human imperfections: varied sentence length,
-      occasional fragments for emphasis, colloquial rhythms where appropriate.
+      text sound genuinely human-written.
+
+      REMOVE OR REPLACE:
+      1. Hard-banned words: {{ forbidden_words }}
+      2. Robotic transitions: 'In conclusion', 'It is worth noting', 'As a result of this'
+      3. Unnecessary hedging and repetitive sentence openings
+      4. Unnatural summarising and mechanical phrasing
+
+      {{ anti_repetition_rules }}
+
+      SPECIFIC PATTERNS TO ELIMINATE:
+      - Transactional/accounting metaphors for emotions (cost, debt, ledger, trade, currency, bargain)
+      - "The economy of someone who..." character descriptions
+      - "Someone who had [learned/seen/spent]..." introductions
+      - Every emotion described as "tightening" something
+      - Every character described as "steady," "measured," or "deliberate"
+      - Emotions "lodging" in ribs, sternum, or throat
+      - Metallic taste as universal distress signal
+      - "Small [mercy/victory/repair/rebellion/grief]" diminutive constructions
+      - "Not X so much as Y" or "not a X but a Y" constructions (use sparingly at most)
+      - "Jaw tightened," "jaw worked," "set her jaw" (use at most once per chapter)
+
+      INTRODUCE:
+      - Varied emotional registers per character (not everyone is calm and competent)
+      - Fresh metaphors specific to each character's background and worldview
+      - Varied sentence rhythm — some long, some fragmentary, some conversational
+      - Occasional humor, awkwardness, or imperfection in character voice
+
       Do NOT change plot, characters, or factual content.
       Return the full revised chapter text.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
 
-      Strip all LLM-sounding patterns from this chapter and make it read as naturally human-written literary fiction.
+      Strip all LLM-sounding patterns from this chapter. Pay special attention to
+      overused words, transactional moral metaphors, and repetitive physical descriptions.
+      Make it read as naturally human-written literary fiction with a distinctive voice.
 
       ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 

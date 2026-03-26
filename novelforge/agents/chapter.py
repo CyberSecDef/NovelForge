@@ -33,11 +33,97 @@ class ChapterContext:
     gatekeeper_brief: str = ""
 
 # Words indicative of LLM-generated text that the anti-LLM agent should remove
+# Hard-banned words: never use these — they are strong LLM fingerprints
 _FORBIDDEN_WORDS = [
+    # Original LLM tics
     "embark", "delve", "realm", "tapestry", "testament", "nuance",
     "beacon", "uncharted", "multifaceted", "leverage", "synergy",
     "pivotal", "groundbreaking", "commendable", "meticulous",
+    # Discovered cross-novel overuse
+    "provenance", "cadence", "choreography",
 ]
+
+# Soft-limited words: OK once or twice per novel, but the LLM wildly overuses them
+_SOFT_LIMITED_WORDS = [
+    "ledger", "brittle", "tighten", "tightened", "tightening",
+    "steady", "steadied", "steadiness", "deliberate", "measured",
+    "calculus", "arithmetic",
+]
+
+# Overused patterns: phrases and constructions to avoid
+_OVERUSED_PATTERNS = [
+    "the economy of", "with the economy of",
+    "someone who had", "the patience of someone",
+    "the particular steadiness of", "the flat gaze of someone",
+    "small mercy", "small victory", "small repair", "small rebellion",
+    "small grief", "small comfort", "small kindness", "small cruelty",
+    "sat behind her ribs", "sat behind his ribs",
+    "lodged in her sternum", "lodged in his sternum",
+    "lodged under her ribs", "lodged under his ribs",
+    "tasted like metal", "tasted of metal", "taste of iron",
+    "smelled of ozone", "jaw tightened", "jaw worked",
+    "not a victory", "not heroic", "not comfort",
+    "moral arithmetic", "moral calculus", "moral cost", "moral weight",
+    "a ledger of", "the ledger of", "ledger of compromises",
+]
+
+
+def _format_anti_repetition_rules() -> str:
+    """Format the soft-limited words and overused patterns for prompt injection."""
+    lines = []
+    lines.append("SOFT-LIMITED WORDS (use at most 2-3 times in the ENTIRE novel):")
+    lines.append(", ".join(_SOFT_LIMITED_WORDS))
+    lines.append("")
+    lines.append("OVERUSED PATTERNS (avoid entirely — find fresh alternatives):")
+    for p in _OVERUSED_PATTERNS:
+        lines.append(f'  - "{p}"')
+    return "\n".join(lines)
+
+
+# Maximum allowed occurrences per chapter for each word tier
+_HARD_BAN_THRESHOLD = 0        # hard-banned: never
+_SOFT_LIMIT_PER_CHAPTER = 1    # soft-limited: at most once per chapter
+_PATTERN_THRESHOLD = 0          # overused patterns: never
+
+
+def scan_vocabulary_overuse(chapter_text: str) -> list[str]:
+    """
+    Scan a chapter for overused vocabulary from the watchlists.
+
+    Returns a list of human-readable warnings for each violation found.
+    Pure Python — no LLM call. Fast enough to run after every chapter.
+    """
+    text_lower = chapter_text.lower()
+    warnings: list[str] = []
+
+    # Check hard-banned words
+    for word in _FORBIDDEN_WORDS:
+        count = text_lower.count(word.lower())
+        if count > _HARD_BAN_THRESHOLD:
+            warnings.append(
+                f'BANNED WORD "{word}" appears {count}x — must be removed entirely'
+            )
+
+    # Check soft-limited words
+    for word in _SOFT_LIMITED_WORDS:
+        count = text_lower.count(word.lower())
+        if count > _SOFT_LIMIT_PER_CHAPTER:
+            warnings.append(
+                f'OVERUSED WORD "{word}" appears {count}x in this chapter '
+                f'(limit: {_SOFT_LIMIT_PER_CHAPTER}) — replace most occurrences '
+                f'with varied alternatives'
+            )
+
+    # Check overused patterns
+    for pattern in _OVERUSED_PATTERNS:
+        count = text_lower.count(pattern.lower())
+        if count > _PATTERN_THRESHOLD:
+            warnings.append(
+                f'OVERUSED PATTERN "{pattern}" appears {count}x — '
+                f'rewrite with a fresh, specific alternative'
+            )
+
+    return warnings
 
 
 def _format_characters(character_list: list[dict]) -> str:
@@ -115,6 +201,7 @@ def build_chapter_draft_prompt(
     chapter_antagonist_context: str = "", chapter_technology_context: str = "",
     chapter_theme_context: str = "", gatekeeper_brief: str = "", compression_guidance: str = "",
     chapter_rhythm_shape: str = "", chapter_rhythm_reason: str = "", chapter_pov_context: str = "",
+    voice_prompt: str = "",
 ) -> list[dict[str, str]]:
     return render_prompt(
         "chapter_draft",
@@ -137,6 +224,8 @@ def build_chapter_draft_prompt(
         chapter_rhythm_shape=chapter_rhythm_shape or "",
         chapter_rhythm_reason=chapter_rhythm_reason or "",
         forbidden_words=", ".join(_FORBIDDEN_WORDS),
+        anti_repetition_rules=_format_anti_repetition_rules(),
+        voice_prompt=voice_prompt or "",
     )
 
 
@@ -252,7 +341,39 @@ def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str)
     return render_prompt(
         "anti_llm_agent", title=title, chapter_num=chapter_num,
         chapter_text=chapter_text, forbidden_words=", ".join(_FORBIDDEN_WORDS),
+        anti_repetition_rules=_format_anti_repetition_rules(),
     )
+
+
+def build_vocabulary_fix_prompt(
+    chapter_text: str, chapter_num: int, title: str, violations: list[str],
+) -> list[dict[str, str]]:
+    """Build a targeted fix-up prompt for vocabulary violations found by the scanner."""
+    violation_block = "\n".join(f"- {v}" for v in violations)
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are a prose editor. Your ONLY task is to fix specific vocabulary "
+                "problems listed below. For each flagged word or pattern, replace it "
+                "with a fresh, context-appropriate alternative. Do NOT change plot, "
+                "characters, meaning, or sentence structure beyond what's needed for "
+                "the replacement. Return the full revised chapter text."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Novel: '{title}' — Chapter {chapter_num}\n\n"
+                f"The following vocabulary problems were detected:\n{violation_block}\n\n"
+                f"Fix ONLY these specific problems. Replace each flagged word or pattern "
+                f"with a varied, natural alternative that fits the context.\n\n"
+                f"***Return ONLY the complete revised chapter text with NO introduction, "
+                f"NO explanation, NO markdown.***\n\n"
+                f"{chapter_text}"
+            ),
+        },
+    ]
 
 
 def build_chapter_summary_prompt(chapter_text: str, chapter_num: int) -> list[dict[str, str]]:
@@ -774,6 +895,18 @@ def _run_all_chapter_agents(
     if step_callback:
         step_callback(f"Chapter {chapter_num}: anti-LLM pass")
     text = call_llm(build_anti_llm_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: anti-LLM pass")
+
+    # Vocabulary diversity scan — pure Python, no LLM call
+    _check_deadline()
+    violations = scan_vocabulary_overuse(text)
+    if violations:
+        if step_callback:
+            step_callback(f"Chapter {chapter_num}: fixing {len(violations)} vocabulary issues")
+        logger.info("Chapter %d: vocabulary scan found %d violations", chapter_num, len(violations))
+        text = call_llm(
+            build_vocabulary_fix_prompt(text, chapter_num, title, violations),
+            action=f"Chapter {chapter_num}: vocabulary fix-up",
+        )
 
     _check_deadline()
     if step_callback:

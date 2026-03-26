@@ -62,6 +62,7 @@ _SESSION_SCHEMA: dict[str, tuple[type, object]] = {
     "progress_token":           (str,   ""),
     "completed_chapters":       (list,  []),
     "illustrations":            (list,  []),
+    "voice_seed":               (dict,  {}),
 }
 
 
@@ -187,6 +188,7 @@ def save_session_state() -> None:
             "progress_token": session.get("progress_token", ""),
             "completed_chapters": session.get("completed_chapters", []),
             "illustrations": session.get("illustrations", []),
+            "voice_seed": session.get("voice_seed", {}),
         }
 
         # Add progress store data if available
@@ -256,6 +258,7 @@ def restore_session_from_state(state: dict) -> None:
     session["progress_token"] = state.get("progress_token", "")
     session["completed_chapters"] = state.get("completed_chapters", [])
     session["illustrations"] = state.get("illustrations", [])
+    session["voice_seed"] = state.get("voice_seed", {})
 
     # Restore progress store if available
     if "progress_data" in state and state.get("progress_token"):

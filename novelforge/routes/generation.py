@@ -97,6 +97,7 @@ def generate_chapters() -> Response | tuple[Response, int]:
         "technology_rules": session.get("technology_rules", {}),
         "theme_reinforcement": session.get("theme_reinforcement", {}),
         "pov_focal_character_plan": session.get("pov_focal_character_plan", {}),
+        "voice_seed": session.get("voice_seed", {}),
     }
 
     thread = threading.Thread(
@@ -206,6 +207,11 @@ def _run_chapter_generation_internal(
     character_state_log: list[str] = []
     compression_guidance: str = ""
 
+    # Format voice seed for prompt injection
+    from novelforge.voice import format_voice_prompt
+    voice_seed = snap.get("voice_seed", {})
+    voice_prompt = format_voice_prompt(voice_seed) if voice_seed else ""
+
     _llm_circuit_breaker.reset()
     _reset_llm_usage()
     set_correlation_token(token)
@@ -284,6 +290,7 @@ def _run_chapter_generation_internal(
                     chapter_theme_context, gatekeeper_brief,
                     compression_guidance, chapter_rhythm_shape,
                     chapter_rhythm_reason, chapter_pov_context,
+                    voice_prompt,
                 ),
                 action=f"Chapter {chapter_num}: drafting"
             )

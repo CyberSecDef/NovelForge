@@ -11,6 +11,7 @@ from flask import Blueprint, Response, jsonify, request, session
 from novelforge import limiter
 from novelforge.validation import validate_outline_input
 from novelforge.llm.client import call_llm, parse_llm_json, _friendly_llm_error
+from novelforge.voice import select_voice_seed, format_voice_prompt
 from novelforge.agents.chapter import (
     build_title_prompt, build_outline_prompt, build_characters_prompt,
 )
@@ -61,6 +62,11 @@ def generate_outline() -> Response | tuple[Response, int]:
     session["word_count"] = word_count
     session["special_events"] = special_events
     session["special_instructions"] = special_instructions
+
+    # Select a voice seed for this novel — stored in session for all chapters
+    voice_seed = select_voice_seed(genre=genre, premise=str(premise))
+    session["voice_seed"] = voice_seed
+    logger.info("Selected voice seed: %s", voice_seed["name"])
 
     try:
         # 1. Generate title
