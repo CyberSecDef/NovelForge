@@ -74,7 +74,14 @@ def call_image_api(prompt: str, *, filename_prefix: str = "illustration") -> str
             save_path = Path(config.EXPORT_DIR) / "illustrations" / filename
 
             # Extract image data — OpenAI returns either url or b64_json
-            image_data = data.get("data", [{}])[0]
+            data_list = data.get("data")
+            if not isinstance(data_list, list) or len(data_list) == 0:
+                logger.error("Image API returned unexpected structure (missing 'data' array): %s", data)
+                return None
+            image_data = data_list[0]
+            if not isinstance(image_data, dict):
+                logger.error("Image API returned non-dict image entry: %s", image_data)
+                return None
 
             if "b64_json" in image_data:
                 # Decode base64 and save

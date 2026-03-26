@@ -2,6 +2,8 @@
 
 import json
 import logging
+import os
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -11,6 +13,26 @@ import novelforge.config as config
 from novelforge.progress import _progress_store, _progress_lock
 
 logger = logging.getLogger(__name__)
+
+
+def _atomic_write(filepath: Path, content: str) -> None:
+    """Write content to a file atomically using write-to-temp-then-rename."""
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(filepath.parent),
+        prefix=f".{filepath.stem}_",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_path, str(filepath))
+    except BaseException:
+        # Clean up temp file on any failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 # ---------------------------------------------------------------------------
 # Session state schema validation
@@ -181,8 +203,8 @@ def save_session_state() -> None:
         # Validate before writing
         state = validate_session_state(state)
 
-        # Write to file
-        session_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        # Write atomically (temp file + rename) to prevent corruption on crash
+        _atomic_write(session_file, json.dumps(state, indent=2))
         logger.info(f"Saved session state to {session_file}")
     except Exception as e:
         logger.error(f"Failed to save session state: {e}")
@@ -255,7 +277,7 @@ def _persist_completed_chapters(session_id: str, chapters_done: list[dict]) -> N
             return
         state = json.loads(session_file.read_text(encoding="utf-8"))
         state["completed_chapters"] = list(chapters_done)
-        session_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        _atomic_write(session_file, json.dumps(state, indent=2))
     except Exception as e:
         logger.error(f"Failed to persist completed chapters: {e}")
 

@@ -262,37 +262,49 @@ def parse_llm_json(response: str) -> dict:
     - BOM characters
     - Text before/after the JSON object
 
-    Raises json.JSONDecodeError if parsing fails.
+    Raises json.JSONDecodeError if parsing fails after all strategies.
     """
+    raw_preview = response[:200] if len(response) > 200 else response
+    strategy = "direct"
+
     # Strip BOM if present
     if response.startswith('\ufeff'):
         response = response[1:]
+        strategy = "bom-stripped"
+        logger.debug("parse_llm_json: stripped BOM")
 
     # Remove markdown code fences
     response = response.strip()
 
-    # Handle ```json\n...\n``` or ```\n...\n```
     if response.startswith('```'):
-        # Find the first newline after opening fence
+        strategy = "markdown-fence"
+        logger.debug("parse_llm_json: stripping markdown code fences")
         first_newline = response.find('\n')
         if first_newline != -1:
             response = response[first_newline + 1:]
-
-        # Remove closing fence
         if response.endswith('```'):
             response = response[:-3]
 
     response = response.strip()
 
-    # Try to extract JSON by finding first { or [ and last } or ]
-    # This handles cases where there's explanatory text before/after
+    # First attempt: try parsing cleaned response directly
+    try:
+        result = json.loads(response)
+        logger.debug("parse_llm_json: parsed via strategy=%s", strategy)
+        return result
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: extract JSON by finding first { or [ and last } or ]
     start_brace = response.find('{')
     start_bracket = response.find('[')
 
-    # Determine which comes first (or if only one exists)
     if start_brace == -1 and start_bracket == -1:
-        # No JSON structure found, try parsing as-is
-        return json.loads(response)
+        logger.warning(
+            "parse_llm_json: no JSON structure found in response (strategy=%s): %s",
+            strategy, raw_preview,
+        )
+        return json.loads(response)  # Will raise JSONDecodeError
 
     if start_brace == -1:
         start = start_bracket
@@ -304,10 +316,28 @@ def parse_llm_json(response: str) -> dict:
         start = min(start_brace, start_bracket)
         end_char = '}' if start == start_brace else ']'
 
-    # Find the matching closing character from the end
     end = response.rfind(end_char)
 
     if end != -1 and end > start:
-        response = response[start:end + 1]
+        extracted = response[start:end + 1]
+        skipped_before = response[:start].strip()
+        skipped_after = response[end + 1:].strip()
+        if skipped_before or skipped_after:
+            logger.info(
+                "parse_llm_json: extracted JSON via heuristic (chars %d-%d); "
+                "skipped prefix=%r suffix=%r",
+                start, end, skipped_before[:80], skipped_after[:80],
+            )
+        strategy = "heuristic-extraction"
+        response = extracted
 
-    return json.loads(response)
+    try:
+        result = json.loads(response)
+        logger.debug("parse_llm_json: parsed via strategy=%s", strategy)
+        return result
+    except json.JSONDecodeError:
+        logger.warning(
+            "parse_llm_json: all strategies failed (last=%s). Raw response: %s",
+            strategy, raw_preview,
+        )
+        raise
