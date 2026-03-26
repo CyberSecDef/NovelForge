@@ -24,258 +24,13 @@ export_bp = Blueprint("export", __name__)
 # Export format functions
 # ---------------------------------------------------------------------------
 
-def _build_manuscript(
-    title: str,
-    chapters_done: list[dict],
-    *,
-    header_fn: "None | callable" = None,
-    chapter_heading_fn: "None | callable" = None,
-    chapter_annotation_fn: "None | callable" = None,
-    footer_fn: "None | callable" = None,
-) -> str:
-    """
-    Shared manuscript builder.
-
-    Callbacks (all optional, receive relevant context):
-        header_fn(title, chapters_done) -> list[str]   — lines before chapters
-        chapter_heading_fn(ch)          -> list[str]   — heading for each chapter
-        chapter_annotation_fn(ch)       -> list[str]   — annotation block before content
-        footer_fn()                     -> list[str]   — lines after all chapters
-    """
-    lines: list[str] = []
-
-    # Header
-    if header_fn:
-        lines.extend(header_fn(title, chapters_done))
-    else:
-        lines.append(f"# {title}\n")
-
-    # Chapters
+def _format_manuscript(title: str, chapters_done: list[dict]) -> str:
+    """Format the completed novel as a clean Markdown manuscript."""
+    lines = [f"# {title}\n"]
     for ch in chapters_done:
-        if chapter_heading_fn:
-            lines.extend(chapter_heading_fn(ch))
-        else:
-            lines.append(f"\n## Chapter {ch['number']}: {ch['title']}\n")
-        if chapter_annotation_fn:
-            lines.extend(chapter_annotation_fn(ch))
+        lines.append(f"\n## Chapter {ch['number']}: {ch['title']}\n")
         lines.append(f"\n{ch['content']}\n")
-
-    # Footer
-    if footer_fn:
-        lines.extend(footer_fn())
-
     return "\n".join(lines)
-
-
-def _format_clean_manuscript(title: str, chapters_done: list[dict], **_kwargs) -> str:
-    """Clean manuscript: title + chapter text only. No summaries, no notes."""
-    return _build_manuscript(title, chapters_done)
-
-
-def _format_annotated_manuscript(
-    title: str, chapters_done: list[dict], progress_data: dict, **_kwargs,
-) -> str:
-    """Manuscript with inline editor notes per chapter from audit data."""
-    consistency = progress_data.get("consistency", {})
-    global_audit = progress_data.get("global_continuity_audit", {})
-    compression = progress_data.get("narrative_compression_report", {})
-    resolution = progress_data.get("character_resolution_report", {})
-
-    # Pre-compute per-chapter annotations
-    chapter_annotations: dict[int, list[str]] = {}
-    for c in global_audit.get("contradictions", []):
-        if not isinstance(c, dict):
-            continue
-        for ch_num in c.get("chapters", []):
-            chapter_annotations.setdefault(ch_num, []).append(
-                f"Continuity: {c.get('description', '')}"
-            )
-    for r in compression.get("redundant_sequences", []):
-        if not isinstance(r, dict):
-            continue
-        for ch_num in r.get("chapters", []):
-            chapter_annotations.setdefault(ch_num, []).append(
-                f"Redundancy: {r.get('pattern', '')} \u2014 {r.get('recommendation', '')}"
-            )
-    for ch_res in resolution.get("character_resolutions", []):
-        if not isinstance(ch_res, dict):
-            continue
-        if ch_res.get("arc_complete") is False or ch_res.get("final_state_clear") is False:
-            notes = ch_res.get("notes", "")
-            if notes:
-                last_ch = len(chapters_done)
-                chapter_annotations.setdefault(last_ch, []).append(
-                    f"Character: {ch_res.get('character', '?')} \u2014 {notes}"
-                )
-
-    def _header(title: str, _chapters: list[dict]) -> list[str]:
-        return [
-            f"# {title}\n",
-            "*This copy includes inline editor annotations from post-generation audits.*\n",
-        ]
-
-    def _annotate(ch: dict) -> list[str]:
-        annotations = chapter_annotations.get(ch["number"], [])
-        if not annotations:
-            return []
-        result = ["> **Editor Notes for this chapter:**"]
-        for note in annotations:
-            result.append(f"> - {note}")
-        result.append("")
-        return result
-
-    def _footer() -> list[str]:
-        if consistency.get("overall_assessment"):
-            return [
-                "\n---\n",
-                "## Overall Editor's Assessment\n",
-                f"{consistency['overall_assessment']}\n",
-            ]
-        return []
-
-    return _build_manuscript(
-        title, chapters_done,
-        header_fn=_header,
-        chapter_annotation_fn=_annotate,
-        footer_fn=_footer,
-    )
-
-
-def _format_publishing_manuscript(title: str, chapters_done: list[dict], **_kwargs) -> str:
-    """Publishing-ready: front matter, TOC, page breaks for Kindle/Word conversion."""
-
-    def _header(title: str, chapters: list[dict]) -> list[str]:
-        lines = [
-            f"# {title}\n",
-            "*By [Author Name]*\n",
-            "---\n",
-            "## Copyright\n",
-            "Copyright (c) [Year] [Author Name]. All rights reserved.\n",
-            "No part of this publication may be reproduced, distributed, or "
-            "transmitted in any form without prior written permission.\n",
-            "---\n",
-            "## Dedication\n",
-            "*[Your dedication here]*\n",
-            "---\n",
-            "## Table of Contents\n",
-        ]
-        for ch in chapters:
-            lines.append(f"- [Chapter {ch['number']}: {ch['title']}](#chapter-{ch['number']})\n")
-        lines.append("---\n")
-        return lines
-
-    def _heading(ch: dict) -> list[str]:
-        return [
-            '<div style="page-break-after: always;"></div>\n',
-            f'<a id="chapter-{ch["number"]}"></a>\n',
-            f"## Chapter {ch['number']}\n",
-            f"### {ch['title']}\n",
-        ]
-
-    def _footer() -> list[str]:
-        return [
-            '<div style="page-break-after: always;"></div>\n',
-            "## About the Author\n",
-            "*[Author bio here]*\n",
-        ]
-
-    return _build_manuscript(
-        title, chapters_done,
-        header_fn=_header,
-        chapter_heading_fn=_heading,
-        footer_fn=_footer,
-    )
-
-
-def _format_critique_manuscript(
-    title: str, chapters_done: list[dict], progress_data: dict, **_kwargs,
-) -> str:
-    """Critique copy: chapter text with tension/pacing annotations from heatmap."""
-    pacing_heatmap = progress_data.get("pacing_heatmap", {})
-    metrics_map: dict[int, dict] = {}
-    for m in pacing_heatmap.get("chapter_metrics", []):
-        if isinstance(m, dict):
-            metrics_map[int(m.get("chapter", 0))] = m
-    flat_chapters: set[int] = set()
-    for fs in pacing_heatmap.get("flat_sections", []):
-        if isinstance(fs, dict):
-            for ch_num in fs.get("chapters", []):
-                flat_chapters.add(int(ch_num))
-
-    immersion = progress_data.get("reader_immersion_report", {})
-    weak_map: dict[int, str] = {}
-    for w in immersion.get("weak_chapters", []):
-        if isinstance(w, dict):
-            weak_map[int(w.get("chapter", 0))] = w.get("issue", w.get("reason", ""))
-    break_map: dict[int, str] = {}
-    for b in immersion.get("immersion_breaks", []):
-        if isinstance(b, dict):
-            break_map[int(b.get("chapter", 0))] = b.get("description", b.get("issue", ""))
-
-    def _bar(value: int) -> str:
-        clamped = max(0, min(100, int(value)))
-        filled = round(clamped / 10)
-        return "\u2588" * filled + "\u2591" * (10 - filled)
-
-    def _header(title: str, _chapters: list[dict]) -> list[str]:
-        return [
-            f"# {title} \u2014 Critique Copy\n",
-            "*This copy includes pacing and tension annotations for revision guidance.*\n",
-        ]
-
-    def _annotate(ch: dict) -> list[str]:
-        ch_num = ch["number"]
-        result: list[str] = []
-        m = metrics_map.get(ch_num)
-        if m:
-            result.append("> **Pacing Metrics:**")
-            result.append(f"> - Tension:    `{_bar(m.get('tension_score', 0))}` {m.get('tension_score', 0)}")
-            result.append(f"> - Action:     `{_bar(m.get('action_density', 0))}` {m.get('action_density', 0)}")
-            result.append(f"> - Emotion:    `{_bar(m.get('emotional_intensity', 0))}` {m.get('emotional_intensity', 0)}")
-            result.append(f"> - Dialogue:   `{_bar(m.get('dialogue_ratio', 0))}` {m.get('dialogue_ratio', 0)}")
-            result.append(f"> - Description:`{_bar(m.get('description_ratio', 0))}` {m.get('description_ratio', 0)}")
-        warnings: list[str] = []
-        if ch_num in flat_chapters:
-            warnings.append("FLAT SECTION \u2014 tension stagnates here; consider raising stakes or compressing")
-        if ch_num in weak_map:
-            warnings.append(f"WEAK CHAPTER \u2014 {weak_map[ch_num]}")
-        if ch_num in break_map:
-            warnings.append(f"IMMERSION BREAK \u2014 {break_map[ch_num]}")
-        if warnings:
-            result.append(">")
-            for w in warnings:
-                result.append(f"> **{w}**")
-        if m or warnings:
-            result.append("")
-        return result
-
-    def _footer() -> list[str]:
-        overall = (pacing_heatmap.get("overall_pacing_assessment") or "").strip()
-        if overall:
-            return ["\n---\n", "## Overall Pacing Assessment\n", f"{overall}\n"]
-        return []
-
-    return _build_manuscript(
-        title, chapters_done,
-        header_fn=_header,
-        chapter_annotation_fn=_annotate,
-        footer_fn=_footer,
-    )
-
-
-_EXPORT_FORMATTERS = {
-    "clean": _format_clean_manuscript,
-    "annotated": _format_annotated_manuscript,
-    "publishing": _format_publishing_manuscript,
-    "critique": _format_critique_manuscript,
-}
-
-_EXPORT_SUFFIXES = {
-    "clean": "",
-    "annotated": "-Annotated",
-    "publishing": "-Publishing",
-    "critique": "-Critique",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -287,10 +42,6 @@ def export_novel() -> Response | tuple[Response, int]:
     """Compile the completed novel into a Markdown file and return a download URL."""
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
-    variant = data.get("variant", "clean").strip().lower()
-
-    if variant not in _EXPORT_FORMATTERS:
-        return jsonify({"error": f"Unknown export variant '{variant}'. Use: {', '.join(sorted(_EXPORT_FORMATTERS))}"}), 400
 
     with _progress_lock:
         progress_data = _progress_store.get(token)
@@ -301,12 +52,10 @@ def export_novel() -> Response | tuple[Response, int]:
     title = session.get("title", "Novel")
     chapters_done = progress_data.get("chapters_done", [])
 
-    formatter = _EXPORT_FORMATTERS[variant]
-    markdown_content = formatter(title=title, chapters_done=chapters_done, progress_data=progress_data)
+    markdown_content = _format_manuscript(title, chapters_done)
 
     safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in title)[:80]
-    suffix = _EXPORT_SUFFIXES.get(variant, "")
-    filename = f"{safe_title}{suffix}.md"
+    filename = f"{safe_title}.md"
     export_path = Path(config.EXPORT_DIR) / filename
 
     export_path.write_text(markdown_content, encoding="utf-8")

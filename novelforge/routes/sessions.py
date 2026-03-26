@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flask import Blueprint, Response, jsonify, request, session
 
+import novelforge.config as config
 from novelforge.progress import _progress_store, _progress_lock
 from novelforge.session.persistence import (
     get_session_file_path, restore_session_from_state, clear_session_state,
@@ -21,7 +22,7 @@ sessions_bp = Blueprint("sessions", __name__)
 @sessions_bp.route("/list_sessions")
 def list_sessions() -> Response:
     """Return a list of all saved sessions that have a book title."""
-    sessions_dir = Path("./sessions/novels")
+    sessions_dir = Path(config.NOVELS_DIR)
     result = []
     for session_file in sessions_dir.glob("*.json"):
         if session_file.name.endswith("_progress.json"):
@@ -48,7 +49,7 @@ def load_session() -> Response | tuple[Response, int]:
     if not target_id:
         return jsonify({"error": "session_id is required."}), 400
 
-    session_file = Path("./sessions/novels") / f"{target_id}.json"
+    session_file = Path(config.NOVELS_DIR) / f"{target_id}.json"
     if not session_file.exists():
         return jsonify({"error": "Session not found."}), 404
 
@@ -86,11 +87,11 @@ def delete_session() -> Response:
 @sessions_bp.route("/new_session", methods=["POST"])
 def new_session() -> Response:
     """Archive the current LLM log file and start a new session."""
-    llm_log = Path("./logs/llm.log")
+    llm_log = Path(config.LOGS_DIR) / "llm.log"
     if llm_log.exists():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         archive_name = f"llm_{timestamp}.log"
-        archive_path = Path("./logs") / archive_name
+        archive_path = Path(config.LOGS_DIR) / archive_name
         try:
             shutil.copy2(llm_log, archive_path)
             llm_log.write_text("", encoding="utf-8")
@@ -102,7 +103,7 @@ def new_session() -> Response:
     session.clear()
 
     try:
-        sessions_dir = Path("./sessions/novels")
+        sessions_dir = Path(config.NOVELS_DIR)
         for progress_file in sessions_dir.glob("*_progress.json"):
             progress_file.unlink()
     except Exception as e:

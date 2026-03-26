@@ -1075,7 +1075,7 @@ $(function () {
   // Export
   // -------------------------------------------------------------------
   // Selects all export-related buttons to disable/enable as a group
-  var _$exportButtons = $(".btn-export-variant, #btn-export-editors-notes, #btn-generate-illustrations");
+  var _$exportButtons = $("#btn-export-manuscript, #btn-export-editors-notes, #btn-generate-illustrations");
 
   function _disableExportButtons() {
     _$exportButtons.prop("disabled", true);
@@ -1085,18 +1085,16 @@ $(function () {
     _$exportButtons.prop("disabled", false);
   }
 
-  $(".btn-export-variant").on("click", function () {
+  $("#btn-export-manuscript").on("click", function () {
     clearAlerts();
-    var $btn = $(this);
-    var variant = $btn.data("variant") || "clean";
-    $btn.find(".export-spinner").removeClass("d-none");
+    $("#export-manuscript-spinner").removeClass("d-none");
     _disableExportButtons();
 
     $.ajax({
       url: "/export",
       method: "POST",
       contentType: "application/json",
-      data: JSON.stringify({ token: _progressToken, variant: variant }),
+      data: JSON.stringify({ token: _progressToken }),
       success: function (resp) {
         if (resp.download_url) {
           var $a = $("<a>")
@@ -1112,7 +1110,7 @@ $(function () {
         showAlert(msg);
       },
       complete: function () {
-        $btn.find(".export-spinner").addClass("d-none");
+        $("#export-manuscript-spinner").addClass("d-none");
         _enableExportButtons();
       },
     });

@@ -313,53 +313,25 @@ class TestExport:
         with client.session_transaction() as sess:
             sess["title"] = "Export Test Novel"
 
-    def test_export_clean(self, client):
-        token = "export-clean"
+    def test_export_manuscript(self, client):
+        token = "export-manuscript"
         self._seed_done(client, token)
         r = client.post(
             "/export",
-            data=json.dumps({"token": token, "variant": "clean"}),
+            data=json.dumps({"token": token}),
             content_type="application/json",
         )
         assert r.status_code == 200
         assert "download_url" in r.get_json()
 
-    def test_export_annotated(self, client):
-        token = "export-annotated"
-        self._seed_done(client, token)
+    def test_export_not_complete(self, client):
+        from novelforge.progress import _progress_store, _progress_lock
+        token = "export-incomplete"
+        with _progress_lock:
+            _progress_store[token] = {"status": "running", "current": 1, "total": 5}
         r = client.post(
             "/export",
-            data=json.dumps({"token": token, "variant": "annotated"}),
-            content_type="application/json",
-        )
-        assert r.status_code == 200
-
-    def test_export_publishing(self, client):
-        token = "export-publishing"
-        self._seed_done(client, token)
-        r = client.post(
-            "/export",
-            data=json.dumps({"token": token, "variant": "publishing"}),
-            content_type="application/json",
-        )
-        assert r.status_code == 200
-
-    def test_export_critique(self, client):
-        token = "export-critique"
-        self._seed_done(client, token)
-        r = client.post(
-            "/export",
-            data=json.dumps({"token": token, "variant": "critique"}),
-            content_type="application/json",
-        )
-        assert r.status_code == 200
-
-    def test_export_invalid_variant(self, client):
-        token = "export-bad"
-        self._seed_done(client, token)
-        r = client.post(
-            "/export",
-            data=json.dumps({"token": token, "variant": "nonexistent"}),
+            data=json.dumps({"token": token}),
             content_type="application/json",
         )
         assert r.status_code == 400
@@ -383,7 +355,7 @@ class TestExport:
         self._seed_done(client, token)
         r = client.post(
             "/export",
-            data=json.dumps({"token": token, "variant": "clean"}),
+            data=json.dumps({"token": token}),
             content_type="application/json",
         )
         assert r.status_code == 200

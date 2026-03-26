@@ -5,15 +5,27 @@ import pytest
 
 
 @pytest.fixture
-def app():
-    """Create a fresh Flask app instance for testing."""
+def app(tmp_path):
+    """Create a fresh Flask app instance for testing with isolated directories."""
+    import novelforge.config as config
+
+    # Redirect session/novel files to temp directory so tests don't pollute
+    original_novels_dir = config.NOVELS_DIR
+    test_novels_dir = str(tmp_path / "novels")
+    (tmp_path / "novels").mkdir()
+    config.NOVELS_DIR = test_novels_dir
+
     from novelforge import create_app, limiter
     flask_app = create_app(testing=True)
     flask_app.config["SECRET_KEY"] = "test-secret"
     flask_app.config["WTF_CSRF_ENABLED"] = False
     flask_app.config["RATELIMIT_ENABLED"] = False
     limiter.enabled = False
-    return flask_app
+
+    yield flask_app
+
+    # Restore original path
+    config.NOVELS_DIR = original_novels_dir
 
 
 @pytest.fixture

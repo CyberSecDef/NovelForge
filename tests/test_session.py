@@ -10,6 +10,7 @@ import json
 import pytest
 from pathlib import Path
 
+import novelforge.config as config
 from novelforge.progress import _progress_store, _progress_lock
 
 
@@ -60,7 +61,7 @@ class TestSaveAndLoadCycle:
             session_id = get_session_id()
 
             # Verify the file was written
-            session_file = Path("./sessions/novels") / f"{session_id}.json"
+            session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
             assert session_file.exists()
 
             # Load it back
@@ -106,7 +107,7 @@ class TestSaveAndLoadCycle:
             save_session_state()
             session_id = get_session_id()
 
-            session_file = Path("./sessions/novels") / f"{session_id}.json"
+            session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
             state = json.loads(session_file.read_text())
 
             assert "progress_data" in state
@@ -165,7 +166,7 @@ class TestCrashRecovery:
             _progress_store.clear()
 
         # Phase 3: Restore from file (simulates restart)
-        session_file = Path("./sessions/novels") / f"{session_id}.json"
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
         assert session_file.exists()
         state = json.loads(session_file.read_text())
 
@@ -231,7 +232,7 @@ class TestCrashRecovery:
             save_session_state()
             session_id = get_session_id()
 
-        session_file = Path("./sessions/novels") / f"{session_id}.json"
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
         state = json.loads(session_file.read_text())
 
         # Verify partial state on disk
@@ -272,7 +273,7 @@ class TestPersistCompletedChapters:
             save_session_state()
             session_id = get_session_id()
 
-        session_file = Path("./sessions/novels") / f"{session_id}.json"
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
 
         # Simulate background thread persisting chapters incrementally
         for i in range(1, 6):
@@ -318,7 +319,7 @@ class TestClearSession:
             save_session_state()
             session_id = get_session_id()
 
-            session_file = Path("./sessions/novels") / f"{session_id}.json"
+            session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
             assert session_file.exists()
 
             clear_session_state()
@@ -376,4 +377,4 @@ class TestLoadSessionViaRoute:
             assert len(sess["completed_chapters"]) == 2
 
         # Cleanup
-        Path(f"./sessions/novels/{session_id}.json").unlink(missing_ok=True)
+        (Path(config.NOVELS_DIR) / f"{session_id}.json").unlink(missing_ok=True)

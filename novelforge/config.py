@@ -8,6 +8,10 @@ and fill in your values before running the application.
 import logging
 import os
 import sys
+from pathlib import Path
+
+# Project root: parent of the novelforge/ package directory
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 # LLM API endpoint (default: OpenAI chat completions)
@@ -66,10 +70,16 @@ MAX_WORD_COUNT = int(os.environ.get("MAX_WORD_COUNT", "500000"))
 SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
 
 # Directory where Flask-Session stores server-side session files
-SESSION_FILE_DIR = os.environ.get("SESSION_FILE_DIR", "./sessions/flask")
+SESSION_FILE_DIR = str(PROJECT_ROOT / os.environ.get("SESSION_FILE_DIR", "sessions/flask"))
 
 # Directory where exported novel files are stored temporarily
-EXPORT_DIR = os.environ.get("EXPORT_DIR", "./exports")
+EXPORT_DIR = str(PROJECT_ROOT / os.environ.get("EXPORT_DIR", "exports"))
+
+# Directory where novel session JSON files are stored
+NOVELS_DIR = str(PROJECT_ROOT / os.environ.get("NOVELS_DIR", "sessions/novels"))
+
+# Directory for log files
+LOGS_DIR = str(PROJECT_ROOT / os.environ.get("LOGS_DIR", "logs"))
 
 
 def validate_config(*, debug: bool = False) -> None:

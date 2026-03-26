@@ -173,6 +173,18 @@ The following items were implemented during the current development session and 
 
 ### Medium Priority
 
+- [ ] **Novel Sessions** - Because the app is now multithreaded, upon generation multiple session novel json files are created for just the one novel session.  either ensure all threads use the same json session file or after each major step remove the ones no longer needed.
+
+- [ ] **Remove multiple export formats** - Just export the story and the editors notes as separate items.
+
+- [ ] **manuscript downloads arent working** - The files are saved in the exports folder, but the download says the site is unavailable even though its running.  i believe it is looking for the exports folder within the novelforge package subfolder.
+
+- [ ] **image generations isnt working** - i believe it is looking for the exports folder within the novelforge package subfolder.
+
+- [ ] **Commonaliies between novels** - all novels seem to have common themes like ledgers.  find out why and stop.  each novel should be unique.
+
+- [ ] **Name Generations** - There are name collisions between stories.  make sure all names are sufficiently randomized
+
 - [ ] **Add Health Check Endpoint** - Create a `/health` route returning `{"status": "ok", "version": "..."}` for load balancer monitoring and uptime checks. Should return `503` if any critical dependency is unreachable.
   - Location: `novelforge/__init__.py` or `novelforge/routes/` (new)
 

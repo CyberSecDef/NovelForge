@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import session
 
+import novelforge.config as config
 from novelforge.progress import _progress_store, _progress_lock
 
 logger = logging.getLogger(__name__)
@@ -130,7 +131,7 @@ def get_session_id() -> str:
 def get_session_file_path() -> Path:
     """Get the file path for the current session's persistence data."""
     session_id = get_session_id()
-    return Path("./sessions/novels") / f"{session_id}.json"
+    return Path(config.NOVELS_DIR) / f"{session_id}.json"
 
 
 def save_session_state() -> None:
@@ -249,7 +250,7 @@ def _persist_completed_chapters(session_id: str, chapters_done: list[dict]) -> N
     This runs outside a Flask request context, so it writes directly to the file.
     """
     try:
-        session_file = Path("./sessions/novels") / f"{session_id}.json"
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
         if not session_file.exists():
             return
         state = json.loads(session_file.read_text(encoding="utf-8"))

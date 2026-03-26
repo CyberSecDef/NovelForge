@@ -412,28 +412,11 @@
                   </div>
 
                   <div class="mb-3">
-                    <h6 class="text-muted mb-2">Export Manuscript</h6>
-                    <div class="btn-group-vertical d-flex flex-wrap flex-sm-row gap-2" role="group">
-                      <button class="btn btn-success btn-export-variant" data-variant="clean">
-                        <span class="spinner-border spinner-border-sm d-none me-2 export-spinner"></span>
-                        <i class="bi bi-file-earmark-text me-1"></i>Clean Manuscript
+                    <div class="d-flex flex-wrap gap-2">
+                      <button class="btn btn-success" id="btn-export-manuscript">
+                        <span class="spinner-border spinner-border-sm d-none me-2" id="export-manuscript-spinner"></span>
+                        <i class="bi bi-file-earmark-text me-1"></i>Download Manuscript
                       </button>
-                      <button class="btn btn-outline-success btn-export-variant" data-variant="annotated">
-                        <span class="spinner-border spinner-border-sm d-none me-2 export-spinner"></span>
-                        <i class="bi bi-chat-square-text me-1"></i>With Inline Notes
-                      </button>
-                      <button class="btn btn-outline-success btn-export-variant" data-variant="publishing">
-                        <span class="spinner-border spinner-border-sm d-none me-2 export-spinner"></span>
-                        <i class="bi bi-book me-1"></i>Publishing-Ready
-                      </button>
-                      <button class="btn btn-outline-success btn-export-variant" data-variant="critique">
-                        <span class="spinner-border spinner-border-sm d-none me-2 export-spinner"></span>
-                        <i class="bi bi-bar-chart-line me-1"></i>Critique Copy
-                      </button>
-                    </div>
-                  </div>
-                  <div class="mb-3">
-                    <div class="btn-group gap-2" role="group">
                       <button class="btn btn-outline-info" id="btn-export-editors-notes">
                         <span class="spinner-border spinner-border-sm d-none me-2" id="export-editors-notes-spinner"></span>
                         <i class="bi bi-clipboard-check me-1"></i>Download Editor's Notes

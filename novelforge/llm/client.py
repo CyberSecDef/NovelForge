@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import threading
 import time
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 # Set up dedicated LLM logger that writes JSON objects to logs/llm.log
 llm_logger = logging.getLogger("llm_requests")
 llm_logger.setLevel(logging.INFO)
-llm_handler = logging.FileHandler("./logs/llm.log")
+llm_handler = logging.FileHandler(os.path.join(config.LOGS_DIR, "llm.log"))
 llm_handler.setFormatter(logging.Formatter("%(message)s"))
 llm_logger.addHandler(llm_handler)
 llm_logger.propagate = False

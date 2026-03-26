@@ -39,8 +39,8 @@ def create_app(*, testing: bool = False) -> Flask:
     Path(config.SESSION_FILE_DIR).mkdir(parents=True, exist_ok=True)
     Path(config.EXPORT_DIR).mkdir(parents=True, exist_ok=True)
     Path(config.EXPORT_DIR, "illustrations").mkdir(parents=True, exist_ok=True)
-    Path("./logs").mkdir(parents=True, exist_ok=True)
-    Path("./sessions/novels").mkdir(parents=True, exist_ok=True)
+    Path(config.LOGS_DIR).mkdir(parents=True, exist_ok=True)
+    Path(config.NOVELS_DIR).mkdir(parents=True, exist_ok=True)
 
     # Configure filesystem-based sessions
     app.config["SESSION_TYPE"] = "filesystem"
@@ -149,7 +149,7 @@ def create_app(*, testing: bool = False) -> Flask:
         if not app.debug:
             from flask import abort
             abort(404)
-        log_path = Path(__file__).resolve().parent.parent / "logs" / "llm.log"
+        log_path = Path(config.LOGS_DIR) / "llm.log"
 
         if not log_path.exists():
             logger.warning(f"LLM log file not found at {log_path}")
@@ -198,7 +198,7 @@ def create_app(*, testing: bool = False) -> Flask:
         if not app.debug:
             from flask import abort
             abort(404)
-        log_path = Path(__file__).resolve().parent.parent / "logs" / "llm.log"
+        log_path = Path(config.LOGS_DIR) / "llm.log"
         try:
             log_path.write_text("", encoding="utf-8")
             logger.info("LLM log cleared by user")

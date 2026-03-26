@@ -510,6 +510,8 @@ prompts:
     stage: "Novel Setup"
     system: |
       You are a bestselling author skilled at crafting memorable book titles.
+      Create titles that are distinctive and unlikely to be confused with other novels.
+      Avoid generic single-word titles and common patterns like "The [Noun] of [Noun]".
     user: |
       Generate a single catchy, original title for a {{ genre }} novel based on this premise:
 
@@ -563,6 +565,20 @@ prompts:
     stage: "Novel Setup"
     system: |
       You are a character development expert who creates vivid, memorable fictional characters.
+
+      NAMING RULES — follow these strictly:
+      - Every character MUST have a first AND last name (e.g. "Kael Dresner", not just "Kael").
+      - Draw names from diverse global origins: mix Eastern European, East Asian, West African,
+        South American, Scandinavian, Middle Eastern, Southeast Asian, and other traditions.
+        Do NOT default to common Anglo-American names.
+      - No two characters in the same novel may share a first name or a last name.
+      - NEVER use any of these overused fiction names: James, John, Sarah, Elena, Marcus,
+        Alexander, Elizabeth, Catherine, William, Michael, David, Thomas, Robert, Alice, Emma,
+        Kai, Liam, Aria, Luna, Maya, Zara, Ethan, Aiden, Elara, Kira, Mira, Sera, Nyx, Raven.
+      {%- if names_to_avoid %}
+      - Additionally, do NOT use any of these names (from prior novels):
+        {{ names_to_avoid }}
+      {%- endif %}
     user: |
       Based on this {{ genre }} novel premise and outline, create 3-7 main characters.
 
@@ -570,6 +586,9 @@ prompts:
 
       Outline:
       {{ outline_text }}
+
+      Remember: every character needs a unique first AND last name drawn from diverse global
+      naming traditions. No common Anglo-American defaults.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.  Age should be an integer.  never use double quotes, single quotes or colons. ***
       Required structure:

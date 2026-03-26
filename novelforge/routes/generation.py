@@ -11,6 +11,7 @@ import requests
 from flask import Blueprint, Response, jsonify, request, session
 
 from novelforge import limiter
+import novelforge.config as config
 from novelforge.progress import (
     _progress_store, _progress_lock,
     set_correlation_token, clear_correlation_token,
@@ -212,7 +213,7 @@ def _run_chapter_generation_internal(
         with _progress_lock:
             _progress_store[token]["step"] = step_label
         try:
-            save_file = Path("./sessions/novels") / f"{token}_progress.json"
+            save_file = Path(config.NOVELS_DIR) / f"{token}_progress.json"
             with _progress_lock:
                 progress_data = dict(_progress_store[token])
             save_data = {

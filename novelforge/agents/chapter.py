@@ -72,8 +72,35 @@ def build_outline_prompt(
     )
 
 
+def _collect_existing_names() -> str:
+    """Scan existing session files to collect character names from prior novels."""
+    import novelforge.config as config
+    from pathlib import Path
+    names: set[str] = set()
+    novels_dir = Path(config.NOVELS_DIR)
+    if not novels_dir.exists():
+        return ""
+    for f in novels_dir.glob("*.json"):
+        if f.name.endswith("_progress.json"):
+            continue
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            for char in data.get("character_list", []):
+                if isinstance(char, dict):
+                    name = char.get("name", "").strip()
+                    if name:
+                        names.add(name)
+        except Exception:
+            continue
+    return ", ".join(sorted(names)) if names else ""
+
+
 def build_characters_prompt(premise: str, genre: str, outline_text: str) -> list[dict[str, str]]:
-    return render_prompt("characters", premise=premise, genre=genre, outline_text=outline_text)
+    names_to_avoid = _collect_existing_names()
+    return render_prompt(
+        "characters", premise=premise, genre=genre,
+        outline_text=outline_text, names_to_avoid=names_to_avoid,
+    )
 
 
 # ---------------------------------------------------------------------------
