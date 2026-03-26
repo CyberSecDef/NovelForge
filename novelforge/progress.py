@@ -29,8 +29,10 @@ def clear_correlation_token() -> None:
 
 
 class CorrelationFilter(logging.Filter):
-    """Logging filter that injects ``correlation_token`` into every record."""
+    """Logging filter that prepends the correlation token to log messages."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.correlation_token = get_correlation_token()  # type: ignore[attr-defined]
+        token = get_correlation_token()
+        if token:
+            record.msg = f"[token={token}] {record.msg}"
         return True
