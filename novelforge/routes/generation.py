@@ -204,7 +204,7 @@ def _run_chapter_generation_internal(
         snap.get("pov_focal_character_plan", {}), character_list, chapter_list,
     )
 
-    target_per_chapter = max(500, word_count // total_chapters)
+    target_per_chapter = min(3000, max(500, word_count // total_chapters))
     characters_text = _format_characters(character_list)
     character_state_log: list[str] = []
     compression_guidance: str = ""

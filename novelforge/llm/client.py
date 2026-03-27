@@ -7,6 +7,7 @@ import threading
 import time
 
 import requests
+from unidecode import unidecode
 
 import novelforge.config as config
 
@@ -227,6 +228,22 @@ def _log_llm_error(
     )
 
 
+def _to_ascii(text: str) -> str:
+    """Transliterate Unicode to ASCII equivalents (curly quotes, em-dashes, accents, etc.)."""
+    return unidecode(text)
+
+
+def _sanitize_messages(messages: list[dict]) -> list[dict]:
+    """Return a copy of *messages* with all string content transliterated to ASCII."""
+    out = []
+    for msg in messages:
+        cleaned = dict(msg)
+        if isinstance(cleaned.get("content"), str):
+            cleaned["content"] = _to_ascii(cleaned["content"])
+        out.append(cleaned)
+    return out
+
+
 def _call_single_provider(
     provider: config.ProviderConfig,
     provider_idx: int,
@@ -245,13 +262,16 @@ def _call_single_provider(
     breaker = _get_circuit_breaker(provider_idx)
     breaker.check()
 
+    # Transliterate all outbound message content to ASCII
+    ascii_messages = _sanitize_messages(messages)
+
     headers = {
         "Authorization": f"Bearer {provider.api_key}",
         "Content-Type": "application/json",
     }
     payload: dict = {
         "model": provider.model,
-        "messages": messages,
+        "messages": ascii_messages,
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
@@ -345,7 +365,8 @@ def _call_single_provider(
                     )
 
             breaker.record_success()
-            return data["choices"][0]["message"]["content"]
+            # Transliterate response content to ASCII before returning
+            return _to_ascii(data["choices"][0]["message"]["content"])
         except requests.exceptions.Timeout:
             logger.warning(
                 "LLM request timed out [%s] (attempt %d/%d)",

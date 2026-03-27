@@ -721,7 +721,7 @@ prompts:
       {%- endif %}
 
       ***CRITICAL: You are writing CHAPTER {{ chapter_num }}. Keep this chapter number in mind throughout.***
-      Target: approximately {{ target_words }} words. Write immersive, human-sounding prose. 
+      Target: approximately {{ target_words }} words. Do NOT exceed 3,000 words. Write immersive, human-sounding prose.
 
       {%- if chapter_rhythm_shape.strip() %}
       CRITICAL RHYTHM DIRECTIVE: You MUST write this chapter using the narrative rhythm: "{{ chapter_rhythm_shape }}".
