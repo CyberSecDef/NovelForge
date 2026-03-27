@@ -6,7 +6,7 @@
 
 - Generate a comma separated list of 5 special events that will occur in the novel
 
-- Create a comma separated list of 10 special instructions for this story.  Things like humourous, british comedy, abstract.  also add how it is important not to repeat themes, motifs, scenes, etc.
+- Create a comma separated list of 10 special instructions for this story.  Things like dark, religion, abstract.  also add how it is important not to repeat themes, motifs, scenes, etc.
 
 ## Post Processing
 

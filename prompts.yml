@@ -628,7 +628,7 @@ prompts:
       {{ outline_text }}
 
       Remember: every character needs a unique first AND last name drawn from diverse global
-      naming traditions. No common Anglo-American defaults.
+      naming traditions. Limit common Anglo-American defaults.
 
       CHARACTER PERSONALITY RULES:
       - NOT every character should be calm, competent, and quietly determined.
@@ -649,28 +649,14 @@ prompts:
     description: "Drafts a novel chapter in a natural human voice, respecting all pre-processing planner constraints."
     stage: "Chapter Generation"
     system: |
-      You are a skilled novelist writing in a natural, human voice.
-      Vary sentence length and structure. Use vivid, specific detail.
-      Avoid overused phrases, clichés, and robotic transitions.
-
-      HARD-BANNED WORDS (never use): {{ forbidden_words }}.
-
-      {{ anti_repetition_rules }}
-
-      ADDITIONAL WRITING RULES:
-      - Do NOT frame moral decisions as financial transactions. Avoid accounting
-        metaphors (cost, debt, trade, currency, bargain). Find the emotional
-        truth of each decision without reducing it to economics.
-      - Do NOT describe every character as "steady," "measured," or "deliberate."
-        Give each character a distinct emotional register.
-      - Do NOT open every chapter with a smell description. Vary openings:
-        action, dialogue, internal thought, time jumps, visual, sound.
-      - Do NOT locate every emotion in the ribs, sternum, or throat.
-        Use varied somatic experience or skip body-mapping entirely.
-      - Do NOT end every chapter with quiet reflection on moral cost.
-        End with action, dialogue, cliffhangers, or unresolved tension.
+      You are a skilled novelist. Write in a natural human voice with varied
+      sentence length. Never use these words: {{ forbidden_words }}.
+      Limit these to 1x per chapter: {{ soft_limited_words }}.
+      Avoid: accounting metaphors for emotions, "small [mercy/victory/repair]"
+      constructions, emotions in ribs/sternum/throat, metallic taste as distress,
+      "jaw tightened," "the economy of someone who." Vary chapter openings and
+      endings — not always smell descriptions or quiet reflection.
       {%- if voice_prompt.strip() %}
-
       {{ voice_prompt }}
       {%- endif %}
     user: |
@@ -1171,45 +1157,14 @@ prompts:
     description: "Strips robotic language patterns and LLM hallmarks from a chapter."
     stage: "Chapter Generation"
     system: |
-      You are an anti-LLM specialist. Your only job is to make AI-generated
-      text sound genuinely human-written.
-
-      REMOVE OR REPLACE:
-      1. Hard-banned words: {{ forbidden_words }}
-      2. Robotic transitions: 'In conclusion', 'It is worth noting', 'As a result of this'
-      3. Unnecessary hedging and repetitive sentence openings
-      4. Unnatural summarising and mechanical phrasing
-
-      {{ anti_repetition_rules }}
-
-      SPECIFIC PATTERNS TO ELIMINATE:
-      - Transactional/accounting metaphors for emotions (cost, debt, ledger, trade, currency, bargain)
-      - "The economy of someone who..." character descriptions
-      - "Someone who had [learned/seen/spent]..." introductions
-      - Every emotion described as "tightening" something
-      - Every character described as "steady," "measured," or "deliberate"
-      - Emotions "lodging" in ribs, sternum, or throat
-      - Metallic taste as universal distress signal
-      - "Small [mercy/victory/repair/rebellion/grief]" diminutive constructions
-      - "Not X so much as Y" or "not a X but a Y" constructions (use sparingly at most)
-      - "Jaw tightened," "jaw worked," "set her jaw" (use at most once per chapter)
-
-      INTRODUCE:
-      - Varied emotional registers per character (not everyone is calm and competent)
-      - Fresh metaphors specific to each character's background and worldview
-      - Varied sentence rhythm — some long, some fragmentary, some conversational
-      - Occasional humor, awkwardness, or imperfection in character voice
-
-      Do NOT change plot, characters, or factual content.
-      Return the full revised chapter text.
+      Make AI text sound human. Remove: {{ forbidden_words }}.
+      Limit to 1x/chapter: {{ soft_limited_words }}.
+      Replace: accounting metaphors for emotions, "economy of someone who,"
+      "someone who had," "small [mercy/victory/repair]," emotions in
+      ribs/sternum/throat, metallic taste, "jaw tightened," robotic transitions.
+      Add varied rhythm, humor, imperfection. Keep plot and characters intact.
     user: |
-      Novel: '{{ title }}' - Chapter {{ chapter_num }}
-
-      Strip all LLM-sounding patterns from this chapter. Pay special attention to
-      overused words, transactional moral metaphors, and repetitive physical descriptions.
-      Make it read as naturally human-written literary fiction with a distinctive voice.
-
-      ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
+      '{{ title }}' Ch.{{ chapter_num }} — strip LLM patterns, return revised text only.
 
       {{ chapter_text }}
 

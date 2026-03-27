@@ -224,7 +224,7 @@ def build_chapter_draft_prompt(
         chapter_rhythm_shape=chapter_rhythm_shape or "",
         chapter_rhythm_reason=chapter_rhythm_reason or "",
         forbidden_words=", ".join(_FORBIDDEN_WORDS),
-        anti_repetition_rules=_format_anti_repetition_rules(),
+        soft_limited_words=", ".join(_SOFT_LIMITED_WORDS),
         voice_prompt=voice_prompt or "",
     )
 
@@ -341,7 +341,7 @@ def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str)
     return render_prompt(
         "anti_llm_agent", title=title, chapter_num=chapter_num,
         chapter_text=chapter_text, forbidden_words=", ".join(_FORBIDDEN_WORDS),
-        anti_repetition_rules=_format_anti_repetition_rules(),
+        soft_limited_words=", ".join(_SOFT_LIMITED_WORDS),
     )
 
 
