@@ -11,7 +11,7 @@ from flask import Blueprint, Response, jsonify, request, session
 import novelforge.config as config
 from novelforge.progress import _progress_store, _progress_lock
 from novelforge.session.persistence import (
-    get_session_file_path, restore_session_from_state, clear_session_state,
+    get_session_file_path, restore_session_from_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -99,14 +99,6 @@ def new_session() -> Response:
         except Exception as e:
             logger.error(f"Failed to archive LLM log: {e}")
 
-    clear_session_state()
     session.clear()
-
-    try:
-        sessions_dir = Path(config.NOVELS_DIR)
-        for progress_file in sessions_dir.glob("*_progress.json"):
-            progress_file.unlink()
-    except Exception as e:
-        logger.error(f"Failed to clear progress files: {e}")
 
     return jsonify({"status": "success", "message": "New session started"})

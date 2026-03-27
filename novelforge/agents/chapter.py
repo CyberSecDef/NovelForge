@@ -9,10 +9,115 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from novelforge.llm.client import call_llm, parse_llm_json, ChapterTimeoutError, PER_CHAPTER_TIMEOUT
+from novelforge.llm.client import call_llm, parse_llm_json, ChapterTimeoutError, ContentRejectionError, PER_CHAPTER_TIMEOUT
 from novelforge.llm.prompts import render_prompt
 
 logger = logging.getLogger(__name__)
+
+# Maximum number of content-sanitization retries per LLM call
+_CONTENT_RETRY_LIMIT = 2
+
+
+def _sanitize_for_content_policy(
+    text: str, chapter_num: int, title: str, rejection_reason: str,
+) -> str:
+    """
+    Ask the LLM to rewrite passages that triggered a content-policy filter.
+
+    The sanitisation prompt is deliberately clinical and unlikely to trip
+    the same filter.  If even the sanitisation call is rejected, a second,
+    more aggressive rewrite is attempted.
+    """
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an editorial assistant. A chapter of fiction was rejected by an "
+                "automated content filter. Identify the specific passages that most likely "
+                "triggered the rejection and rewrite ONLY those passages so they convey the "
+                "same narrative events through implication, atmosphere, and restraint rather "
+                "than explicit detail.\n\n"
+                "Rules:\n"
+                "- Preserve the chapter's narrative arc, characters, pacing, tone, and "
+                "approximate word count.\n"
+                "- Change as little as possible — only the passages that likely caused the "
+                "rejection.\n"
+                "- Return the COMPLETE chapter text."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Chapter {chapter_num} of \"{title}\" was rejected by a content filter.\n\n"
+                f"Filter response:\n{rejection_reason}\n\n"
+                f"Rewrite only the problematic passages and return the complete chapter.\n\n"
+                f"---\n\n{text}"
+            ),
+        },
+    ]
+    try:
+        sanitized = call_llm(messages, action=f"Chapter {chapter_num}: content sanitization")
+        logger.info(
+            "Chapter %d: content sanitization complete (%d chars → %d chars)",
+            chapter_num, len(text), len(sanitized),
+        )
+        return sanitized
+    except ContentRejectionError:
+        # The sanitisation request itself was rejected — try a more aggressive rewrite
+        logger.warning(
+            "Chapter %d: sanitization request also rejected, attempting aggressive rewrite",
+            chapter_num,
+        )
+        messages[0]["content"] = (
+            "You are an editorial assistant. Rewrite the following chapter so that all "
+            "mature themes (violence, horror, psychological distress, etc.) are conveyed "
+            "through implication and atmosphere rather than direct description. Replace "
+            "any graphic or disturbing imagery with restrained literary alternatives. "
+            "Keep all character names, plot points, and chapter structure intact. "
+            "Return the COMPLETE rewritten chapter."
+        )
+        messages[1]["content"] = (
+            f"Rewrite Chapter {chapter_num} of \"{title}\" with literary restraint "
+            f"for all mature content. Return the complete chapter.\n\n---\n\n{text}"
+        )
+        return call_llm(messages, action=f"Chapter {chapter_num}: aggressive content rewrite")
+
+
+def _call_with_content_retry(
+    build_messages: Callable[[str], list[dict]],
+    text: str,
+    *,
+    action: str,
+    chapter_num: int,
+    title: str,
+    json_mode: bool = False,
+) -> str:
+    """
+    Call the LLM with automatic content-rejection retry.
+
+    On ``ContentRejectionError`` the chapter *text* (which is the most likely
+    trigger) is sanitised and the prompt is rebuilt. Up to
+    ``_CONTENT_RETRY_LIMIT`` sanitisation attempts are made before the error
+    is re-raised.
+
+    Returns the LLM response string.
+    """
+    current_text = text
+    for attempt in range(_CONTENT_RETRY_LIMIT + 1):
+        try:
+            return call_llm(build_messages(current_text), action=action, json_mode=json_mode)
+        except ContentRejectionError as exc:
+            if attempt >= _CONTENT_RETRY_LIMIT:
+                raise
+            logger.warning(
+                "Content rejection on '%s' (attempt %d/%d), sanitizing chapter text…",
+                action, attempt + 1, _CONTENT_RETRY_LIMIT,
+            )
+            current_text = _sanitize_for_content_policy(
+                current_text, chapter_num, title, str(exc),
+            )
+    # Unreachable, but keeps the type checker happy
+    raise ContentRejectionError(f"Content retry limit exceeded for {action}")
 
 
 @dataclass
@@ -809,10 +914,20 @@ def _run_all_chapter_agents(
                 f"Chapter {chapter_num} exceeded the {PER_CHAPTER_TIMEOUT // 60}-minute time limit."
             )
 
+    # Local shorthand: every agent call goes through the content-retry wrapper
+    def _safe(build_msgs: Callable[[str], list[dict]], txt: str, *, action: str, json_mode: bool = False) -> str:
+        return _call_with_content_retry(
+            build_msgs, txt, action=action,
+            chapter_num=chapter_num, title=title, json_mode=json_mode,
+        )
+
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: prose refinement (dialogue + scenes)")
-    text = call_llm(build_prose_refinement_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: prose refinement")
+    text = _safe(
+        lambda t: build_prose_refinement_agent_prompt(t, chapter_num, title),
+        text, action=f"Chapter {chapter_num}: prose refinement",
+    )
 
     _check_deadline()
     if step_callback:
@@ -825,76 +940,86 @@ def _run_all_chapter_agents(
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: verifying continuity")
-    text = call_llm(
-        build_context_analyzer_prompt(
-            text, previous_summaries, chapter_num, title,
-            ctx.timeline, ctx.technology,
-            ctx.theme,
+    text = _safe(
+        lambda t: build_context_analyzer_prompt(
+            t, previous_summaries, chapter_num, title,
+            ctx.timeline, ctx.technology, ctx.theme,
         ),
-        action=f"Chapter {chapter_num}: verifying continuity"
+        text, action=f"Chapter {chapter_num}: verifying continuity",
     )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: editing")
-    text = call_llm(build_editing_agent_prompt(text, chapter_outline_summary, chapter_num, title, scene_audit_directives), action=f"Chapter {chapter_num}: editing")
+    text = _safe(
+        lambda t: build_editing_agent_prompt(t, chapter_outline_summary, chapter_num, title, scene_audit_directives),
+        text, action=f"Chapter {chapter_num}: editing",
+    )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: momentum & distinctiveness check")
-    text = call_llm(
-        build_narrative_momentum_distinctiveness_prompt(
-            text, previous_summaries, chapter_outline_summary, chapter_num, title, total_chapters,
+    text = _safe(
+        lambda t: build_narrative_momentum_distinctiveness_prompt(
+            t, previous_summaries, chapter_outline_summary, chapter_num, title, total_chapters,
         ),
-        action=f"Chapter {chapter_num}: momentum & distinctiveness"
+        text, action=f"Chapter {chapter_num}: momentum & distinctiveness",
     )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: checking structure")
-    text = call_llm(
-        build_structure_agent_prompt(
-            text, chapter_num, total_chapters, chapter_outline_summary, ctx.architecture,
+    text = _safe(
+        lambda t: build_structure_agent_prompt(
+            t, chapter_num, total_chapters, chapter_outline_summary, ctx.architecture,
         ),
-        action=f"Chapter {chapter_num}: checking structure"
+        text, action=f"Chapter {chapter_num}: checking structure",
     )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: verifying operational distinctiveness")
-    text = call_llm(
-        build_operational_distinctiveness_prompt(
-            text, previous_summaries, chapter_outline_summary, chapter_num, title,
+    text = _safe(
+        lambda t: build_operational_distinctiveness_prompt(
+            t, previous_summaries, chapter_outline_summary, chapter_num, title,
         ),
-        action=f"Chapter {chapter_num}: verifying operational distinctiveness"
+        text, action=f"Chapter {chapter_num}: verifying operational distinctiveness",
     )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: deepening characters")
-    text = call_llm(
-        build_character_agent_prompt(
-            text, characters_text, chapter_num, title,
-            ctx.fate, ctx.arc,
-            ctx.antagonist, ctx.pov,
+    text = _safe(
+        lambda t: build_character_agent_prompt(
+            t, characters_text, chapter_num, title,
+            ctx.fate, ctx.arc, ctx.antagonist, ctx.pov,
         ),
-        action=f"Chapter {chapter_num}: deepening characters"
+        text, action=f"Chapter {chapter_num}: deepening characters",
     )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: synthesizing")
-    text = call_llm(build_synthesizer_prompt(text, chapter_num, title, genre), action=f"Chapter {chapter_num}: synthesizing")
+    text = _safe(
+        lambda t: build_synthesizer_prompt(t, chapter_num, title, genre),
+        text, action=f"Chapter {chapter_num}: synthesizing",
+    )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: polishing")
-    text = call_llm(build_polish_agent_prompt(text, chapter_num, title, genre), action=f"Chapter {chapter_num}: polishing")
+    text = _safe(
+        lambda t: build_polish_agent_prompt(t, chapter_num, title, genre),
+        text, action=f"Chapter {chapter_num}: polishing",
+    )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: anti-LLM pass")
-    text = call_llm(build_anti_llm_agent_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: anti-LLM pass")
+    text = _safe(
+        lambda t: build_anti_llm_agent_prompt(t, chapter_num, title),
+        text, action=f"Chapter {chapter_num}: anti-LLM pass",
+    )
 
     # Vocabulary diversity scan — pure Python, no LLM call
     _check_deadline()
@@ -903,19 +1028,25 @@ def _run_all_chapter_agents(
         if step_callback:
             step_callback(f"Chapter {chapter_num}: fixing {len(violations)} vocabulary issues")
         logger.info("Chapter %d: vocabulary scan found %d violations", chapter_num, len(violations))
-        text = call_llm(
-            build_vocabulary_fix_prompt(text, chapter_num, title, violations),
-            action=f"Chapter {chapter_num}: vocabulary fix-up",
+        text = _safe(
+            lambda t: build_vocabulary_fix_prompt(t, chapter_num, title, violations),
+            text, action=f"Chapter {chapter_num}: vocabulary fix-up",
         )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: quality control")
-    text = call_llm(build_quality_controller_prompt(text, chapter_num, title), action=f"Chapter {chapter_num}: quality control")
+    text = _safe(
+        lambda t: build_quality_controller_prompt(t, chapter_num, title),
+        text, action=f"Chapter {chapter_num}: quality control",
+    )
 
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: summarising")
-    summary = call_llm(build_chapter_summary_prompt(text, chapter_num), action=f"Chapter {chapter_num}: summarising")
+    summary = _safe(
+        lambda t: build_chapter_summary_prompt(t, chapter_num),
+        text, action=f"Chapter {chapter_num}: summarising",
+    )
 
     return text, summary

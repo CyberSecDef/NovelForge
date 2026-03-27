@@ -257,8 +257,9 @@ def mock_llm(mocker):
     ):
         mocker.patch(f"{module}.call_llm", side_effect=_canned_llm_response)
 
-    # Reset the circuit breaker so mocked calls aren't blocked by prior failures
-    from novelforge.llm.client import _llm_circuit_breaker
-    _llm_circuit_breaker.reset()
+    # Reset all circuit breakers so mocked calls aren't blocked by prior failures
+    from novelforge.llm.client import _llm_circuit_breakers
+    for cb in _llm_circuit_breakers.values():
+        cb.reset()
 
     return mock

@@ -19,7 +19,9 @@ from novelforge.progress import (
 from novelforge.llm.client import (
     call_llm, parse_llm_json, _friendly_llm_error,
     _reset_llm_usage, _get_llm_usage, _llm_circuit_breaker,
-    CircuitBreakerError, ChapterTimeoutError, PER_CHAPTER_TIMEOUT,
+    _llm_circuit_breakers, _get_circuit_breaker,
+    CircuitBreakerError, ChapterTimeoutError, ContentRejectionError,
+    AllProvidersExhaustedError, PER_CHAPTER_TIMEOUT,
 )
 from novelforge.agents.planning import (
     normalise_story_architecture, normalise_master_timeline,
@@ -32,7 +34,7 @@ from novelforge.agents.planning import (
     get_chapter_theme_context, get_chapter_pov_context,
 )
 from novelforge.agents.chapter import (
-    _format_characters,
+    _format_characters, _call_with_content_retry,
     build_chapter_draft_prompt, build_chapter_revision_prompt,
     build_consistency_pass_prompt, build_global_continuity_auditor_prompt,
     build_narrative_compression_editor_prompt,
@@ -212,7 +214,9 @@ def _run_chapter_generation_internal(
     voice_seed = snap.get("voice_seed", {})
     voice_prompt = format_voice_prompt(voice_seed) if voice_seed else ""
 
-    _llm_circuit_breaker.reset()
+    # Reset circuit breakers for all providers at the start of generation
+    for cb in _llm_circuit_breakers.values():
+        cb.reset()
     _reset_llm_usage()
     set_correlation_token(token)
 
@@ -277,23 +281,47 @@ def _run_chapter_generation_internal(
             chapter_rhythm_shape = str(rhythm_result.get("recommended_shape_for_this_chapter", "")).strip()
             chapter_rhythm_reason = str(rhythm_result.get("recommendation_reason", "")).strip()
 
-            # 1. Draft
+            # 1. Draft (with content-rejection retry)
             _set_step(f"Chapter {chapter_num}: drafting")
-            text = call_llm(
-                build_chapter_draft_prompt(
-                    premise, genre, title, chapter_num, chapter_title,
-                    chapter_outline_summary, characters_text,
-                    previous_summaries, target_per_chapter, special_instructions,
-                    chapter_architecture_context, chapter_timeline_context,
-                    chapter_fate_context, chapter_arc_context,
-                    chapter_antagonist_context, chapter_technology_context,
-                    chapter_theme_context, gatekeeper_brief,
-                    compression_guidance, chapter_rhythm_shape,
-                    chapter_rhythm_reason, chapter_pov_context,
-                    voice_prompt,
-                ),
-                action=f"Chapter {chapter_num}: drafting"
-            )
+            _draft_content_note = ""
+            for _draft_attempt in range(3):
+                try:
+                    _draft_instructions = special_instructions
+                    if _draft_content_note:
+                        _draft_instructions = f"{special_instructions}\n\n{_draft_content_note}" if special_instructions else _draft_content_note
+                    text = call_llm(
+                        build_chapter_draft_prompt(
+                            premise, genre, title, chapter_num, chapter_title,
+                            chapter_outline_summary, characters_text,
+                            previous_summaries, target_per_chapter, _draft_instructions,
+                            chapter_architecture_context, chapter_timeline_context,
+                            chapter_fate_context, chapter_arc_context,
+                            chapter_antagonist_context, chapter_technology_context,
+                            chapter_theme_context, gatekeeper_brief,
+                            compression_guidance, chapter_rhythm_shape,
+                            chapter_rhythm_reason, chapter_pov_context,
+                            voice_prompt,
+                        ),
+                        action=f"Chapter {chapter_num}: drafting"
+                    )
+                    break
+                except ContentRejectionError as _draft_exc:
+                    if _draft_attempt >= 2:
+                        raise
+                    logger.warning(
+                        "Chapter %d draft rejected by content filter (attempt %d/2), "
+                        "adding content guidance and retrying",
+                        chapter_num, _draft_attempt + 1,
+                    )
+                    _draft_content_note = (
+                        "CONTENT NOTE: A previous draft attempt was rejected by a content "
+                        "filter. Handle all mature themes (violence, horror, psychological "
+                        "distress, body horror, etc.) through implication, atmosphere, "
+                        "tension, and literary restraint rather than graphic or explicit "
+                        "description. Show emotional and psychological impact. The story's "
+                        "dark tone must be preserved but conveyed through what is suggested "
+                        "and felt, not what is shown in detail."
+                    )
 
             ch_ctx = ChapterContext(
                 architecture=chapter_architecture_context,
@@ -574,6 +602,25 @@ def _run_chapter_generation_internal(
         if session_id:
             _persist_completed_chapters(session_id, chapters_done)
 
+    except ContentRejectionError as exc:
+        logger.error(
+            "Content rejection during generation for token %s (after retries exhausted): %s",
+            token, exc,
+        )
+        with _progress_lock:
+            _progress_store[token]["status"] = "error"
+            _progress_store[token]["error"] = (
+                "The AI service rejected chapter content due to content policy, even after "
+                "automatic sanitisation retries. This can happen with horror, violence, or "
+                "other mature themes. Your progress has been saved — you can try resuming "
+                "or revising the chapter outline to use less explicit language."
+            )
+            _progress_store[token]["error_code"] = "content_rejection"
+        session_id = snap.get("session_id")
+        if session_id and chapters_done:
+            _persist_completed_chapters(session_id, chapters_done)
+        _set_step("Error: content policy rejection")
+
     except ChapterTimeoutError as exc:
         logger.error("Chapter timeout during generation for token %s: %s", token, exc)
         with _progress_lock:
@@ -598,6 +645,21 @@ def _run_chapter_generation_internal(
         if session_id and chapters_done:
             _persist_completed_chapters(session_id, chapters_done)
         _set_step("Error: LLM API circuit breaker tripped")
+
+    except AllProvidersExhaustedError as exc:
+        logger.error("All LLM providers exhausted for token %s: %s", token, exc)
+        with _progress_lock:
+            _progress_store[token]["status"] = "error"
+            _progress_store[token]["error"] = (
+                "All configured LLM providers failed. Check your API keys, "
+                "endpoints, and rate limits, then try again. "
+                "Your progress has been saved."
+            )
+            _progress_store[token]["error_code"] = "all_providers_exhausted"
+        session_id = snap.get("session_id")
+        if session_id and chapters_done:
+            _persist_completed_chapters(session_id, chapters_done)
+        _set_step("Error: all LLM providers exhausted")
 
     except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.error("Chapter generation failed for token %s: %s", token, exc)
@@ -762,6 +824,13 @@ def revise_chapter() -> Response | tuple[Response, int]:
 
         return jsonify(response_payload)
 
+    except ContentRejectionError as exc:
+        logger.error("Content rejection during revision for token %s: %s", token, exc)
+        return jsonify({
+            "error": "The AI service rejected the chapter content due to content policy, "
+                     "even after automatic sanitisation retries. Try revising the chapter "
+                     "with instructions to tone down explicit content."
+        }), 502
     except RuntimeError as exc:
         logger.error("Chapter revision failed for token %s: %s", token, exc)
         return jsonify({"error": _friendly_llm_error(exc)}), 502

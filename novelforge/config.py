@@ -8,22 +8,66 @@ and fill in your values before running the application.
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # Project root: parent of the novelforge/ package directory
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
-# LLM API endpoint (default: OpenAI chat completions)
-LLM_API_URL = os.environ.get(
-    "LLM_API_URL", "https://api.openai.com/v1/chat/completions"
-)
+# ---------------------------------------------------------------------------
+# LLM provider configuration (supports fallback chain)
+# ---------------------------------------------------------------------------
 
-# LLM API key – REQUIRED in production. Set the LLM_API_KEY environment variable.
-LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+@dataclass(frozen=True)
+class ProviderConfig:
+    """A single LLM provider's connection settings."""
+    url: str
+    api_key: str
+    model: str
+    label: str  # human-readable label for logging (e.g. "primary", "provider_2")
 
-# LLM model name to request
-LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
+
+def _parse_llm_providers() -> list[ProviderConfig]:
+    """
+    Build an ordered list of LLM providers from environment variables.
+
+    The primary provider uses LLM_API_URL / LLM_API_KEY / LLM_MODEL.
+    Fallbacks use numbered suffixes: LLM_API_URL_2, LLM_API_KEY_2, LLM_MODEL_2, etc.
+    A fallback is only added if at least its URL is set.
+    """
+    providers: list[ProviderConfig] = []
+
+    # Primary (no suffix)
+    primary_url = os.environ.get("LLM_API_URL", "https://api.openai.com/v1/chat/completions")
+    primary_key = os.environ.get("LLM_API_KEY", "")
+    primary_model = os.environ.get("LLM_MODEL", "gpt-4o")
+    providers.append(ProviderConfig(
+        url=primary_url, api_key=primary_key, model=primary_model, label="primary",
+    ))
+
+    # Numbered fallbacks (_2, _3, …)
+    idx = 2
+    while True:
+        url = os.environ.get(f"LLM_API_URL_{idx}", "")
+        if not url:
+            break
+        key = os.environ.get(f"LLM_API_KEY_{idx}", "")
+        model = os.environ.get(f"LLM_MODEL_{idx}", primary_model)
+        providers.append(ProviderConfig(
+            url=url, api_key=key, model=model, label=f"provider_{idx}",
+        ))
+        idx += 1
+
+    return providers
+
+
+LLM_PROVIDERS: list[ProviderConfig] = _parse_llm_providers()
+
+# Backward-compatible aliases — always point to the primary provider
+LLM_API_URL = LLM_PROVIDERS[0].url
+LLM_API_KEY = LLM_PROVIDERS[0].api_key
+LLM_MODEL = LLM_PROVIDERS[0].model
 
 # Image generation API endpoint (default: OpenAI image generations)
 IMAGE_API_URL = os.environ.get("IMAGE_API_URL", "https://api.openai.com/v1/images/generations")
@@ -93,16 +137,26 @@ def validate_config(*, debug: bool = False) -> None:
     errors: list[str] = []
     warnings: list[str] = []
 
-    # LLM_API_KEY is required to do anything useful
-    if not LLM_API_KEY:
-        errors.append(
-            "LLM_API_KEY is not set. Set the LLM_API_KEY environment variable."
-        )
+    # Validate all configured LLM providers
+    for i, provider in enumerate(LLM_PROVIDERS):
+        suffix = "" if i == 0 else f"_{i + 1}"
+        label = provider.label
 
-    # LLM_API_URL must look like a URL
-    if not LLM_API_URL.startswith(("http://", "https://")):
-        errors.append(
-            f"LLM_API_URL is not a valid URL: {LLM_API_URL!r}"
+        if not provider.api_key:
+            errors.append(
+                f"LLM_API_KEY{suffix} is not set ({label}). "
+                f"Set the LLM_API_KEY{suffix} environment variable."
+            )
+
+        if not provider.url.startswith(("http://", "https://")):
+            errors.append(
+                f"LLM_API_URL{suffix} is not a valid URL ({label}): {provider.url!r}"
+            )
+
+    if len(LLM_PROVIDERS) > 1:
+        _logger.info(
+            "LLM fallback chain configured: %s",
+            " → ".join(p.label for p in LLM_PROVIDERS),
         )
 
     # SECRET_KEY must be changed in production
