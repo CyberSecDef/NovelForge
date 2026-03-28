@@ -1,5 +1,6 @@
 """LLM API client: call_llm, circuit breaker, JSON parsing, usage tracking."""
 
+import html
 import json
 import logging
 import os
@@ -234,12 +235,13 @@ def _to_ascii(text: str) -> str:
 
 
 def _sanitize_messages(messages: list[dict]) -> list[dict]:
-    """Return a copy of *messages* with all string content transliterated to ASCII."""
+    """Return a copy of *messages* with HTML entities unescaped and content transliterated to ASCII."""
     out = []
     for msg in messages:
         cleaned = dict(msg)
         if isinstance(cleaned.get("content"), str):
-            cleaned["content"] = _to_ascii(cleaned["content"])
+            # Unescape HTML entities that may be baked into older session data
+            cleaned["content"] = _to_ascii(html.unescape(cleaned["content"]))
         out.append(cleaned)
     return out
 

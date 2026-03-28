@@ -5,7 +5,6 @@ import json
 import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 
-import markupsafe
 from flask import Blueprint, Response, jsonify, request, session
 
 from novelforge import limiter
@@ -48,7 +47,7 @@ def generate_outline() -> Response | tuple[Response, int]:
     if not ok:
         return jsonify({"error": err}), 400
 
-    premise = markupsafe.escape(data["premise"].strip())
+    premise = data["premise"].strip()
     genre = data["genre"].strip()
     chapters = int(data["chapters"])
     word_count = int(data["word_count"])
@@ -225,9 +224,10 @@ def approve_outline() -> Response | tuple[Response, int]:
                 label = char.get("name", f"Character {i}")
                 return jsonify({"error": f"{label}: {field} must be {limit:,} characters or fewer."}), 400
 
-    # Sanitise string fields to prevent XSS leaking into stored session data
+    # String fields are stored as plain text; XSS escaping is handled at
+    # render time by Jinja2 auto-escape and jQuery .text().
     def sanitise_str(v: object) -> object:
-        return str(markupsafe.escape(v)) if isinstance(v, str) else v
+        return v
 
     session["title"] = sanitise_str(title)
 
