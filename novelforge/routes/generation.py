@@ -115,9 +115,16 @@ def generate_chapters() -> Response | tuple[Response, int]:
     return jsonify({"token": token})
 
 
-def _resume_chapter_generation(token: str, snap: dict, chapters_done: list[dict], summaries: list[str], start_idx: int) -> None:
+def _resume_chapter_generation(
+    token: str, snap: dict, chapters_done: list[dict],
+    summaries: list[str], start_idx: int,
+    character_state_log: list[str] | None = None,
+) -> None:
     """Resume chapter generation from a specific chapter index after a crash."""
-    _run_chapter_generation_internal(token, snap, chapters_done, summaries, start_idx)
+    _run_chapter_generation_internal(
+        token, snap, chapters_done, summaries, start_idx,
+        character_state_log=character_state_log,
+    )
 
 
 def _run_chapter_generation(token: str, snap: dict) -> None:
@@ -165,7 +172,8 @@ def _run_chapter_generation_internal(
     snap: dict,
     chapters_done: list[dict],
     summaries: list[str],
-    start_idx: int
+    start_idx: int,
+    character_state_log: list[str] | None = None,
 ) -> None:
     """
     Internal function that performs the actual chapter generation.
@@ -206,7 +214,7 @@ def _run_chapter_generation_internal(
 
     target_per_chapter = min(3000, max(500, word_count // total_chapters))
     characters_text = _format_characters(character_list)
-    character_state_log: list[str] = []
+    character_state_log: list[str] = list(character_state_log) if character_state_log else []
     compression_guidance: str = ""
 
     # Format voice seed for prompt injection
@@ -379,10 +387,11 @@ def _run_chapter_generation_internal(
                 _progress_store[token]["current"] = idx + 1
                 _progress_store[token]["step"] = f"Chapter {chapter_num}: complete"
                 _progress_store[token]["chapters_done"] = list(chapters_done)
+                _progress_store[token]["character_state_log"] = list(character_state_log)
 
             session_id = snap.get("session_id")
             if session_id:
-                _persist_completed_chapters(session_id, chapters_done)
+                _persist_completed_chapters(session_id, chapters_done, token)
 
         # --- Final consistency pass ---
         with _progress_lock:
@@ -600,7 +609,7 @@ def _run_chapter_generation_internal(
 
         session_id = snap.get("session_id")
         if session_id:
-            _persist_completed_chapters(session_id, chapters_done)
+            _persist_completed_chapters(session_id, chapters_done, token)
 
     except ContentRejectionError as exc:
         logger.error(
@@ -618,7 +627,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error_code"] = "content_rejection"
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done)
+            _persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: content policy rejection")
 
     except ChapterTimeoutError as exc:
@@ -629,7 +638,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error_code"] = "chapter_timeout"
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done)
+            _persist_completed_chapters(session_id, chapters_done, token)
         _set_step(f"Error: {exc}")
 
     except CircuitBreakerError as exc:
@@ -643,7 +652,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error_code"] = "circuit_breaker"
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done)
+            _persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: LLM API circuit breaker tripped")
 
     except AllProvidersExhaustedError as exc:
@@ -658,7 +667,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error_code"] = "all_providers_exhausted"
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done)
+            _persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: all LLM providers exhausted")
 
     except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
@@ -668,7 +677,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error"] = _friendly_llm_error(exc)
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done)
+            _persist_completed_chapters(session_id, chapters_done, token)
         _set_step(f"Error: {str(exc)}")
 
     finally:

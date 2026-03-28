@@ -269,10 +269,18 @@ def restore_session_from_state(state: dict) -> None:
     logger.info("Restored session from saved state")
 
 
-def _persist_completed_chapters(session_id: str, chapters_done: list[dict]) -> None:
+def _persist_completed_chapters(
+    session_id: str,
+    chapters_done: list[dict],
+    progress_token: str = "",
+) -> None:
     """
-    Persist completed chapters to the session JSON file from a background thread.
-    This runs outside a Flask request context, so it writes directly to the file.
+    Persist completed chapters and progress data to the session JSON file.
+
+    Called from the background generation thread (no Flask request context).
+    If *progress_token* is provided, the current in-memory progress snapshot
+    is written into the ``progress_data`` field so that audit reports,
+    status, and chapter data stay in sync on disk.
     """
     try:
         session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
@@ -280,6 +288,13 @@ def _persist_completed_chapters(session_id: str, chapters_done: list[dict]) -> N
             return
         state = json.loads(session_file.read_text(encoding="utf-8"))
         state["completed_chapters"] = list(chapters_done)
+
+        if progress_token:
+            with _progress_lock:
+                progress = _progress_store.get(progress_token)
+                if progress is not None:
+                    state["progress_data"] = dict(progress)
+
         _atomic_write(session_file, json.dumps(state, indent=2))
     except Exception as e:
         logger.error(f"Failed to persist completed chapters: {e}")
