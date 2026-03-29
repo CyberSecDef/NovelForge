@@ -59,6 +59,7 @@ _SESSION_SCHEMA: dict[str, tuple[type, object]] = {
     "technology_rules":         (dict,  {}),
     "theme_reinforcement":      (dict,  {}),
     "pov_focal_character_plan": (dict,  {}),
+    "narrative_perspective":    (str,   "third_person"),
     "progress_token":           (str,   ""),
     "completed_chapters":       (list,  []),
     "illustrations":            (list,  []),

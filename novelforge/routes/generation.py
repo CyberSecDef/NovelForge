@@ -100,6 +100,7 @@ def generate_chapters() -> Response | tuple[Response, int]:
         "theme_reinforcement": session.get("theme_reinforcement", {}),
         "pov_focal_character_plan": session.get("pov_focal_character_plan", {}),
         "voice_seed": session.get("voice_seed", {}),
+        "narrative_perspective": session.get("narrative_perspective", "third_person"),
     }
 
     thread = threading.Thread(
@@ -212,7 +213,7 @@ def _run_chapter_generation_internal(
         snap.get("pov_focal_character_plan", {}), character_list, chapter_list,
     )
 
-    target_per_chapter = min(3000, max(500, word_count // total_chapters))
+    target_per_chapter = min(4500, max(2500, word_count // total_chapters))
     characters_text = _format_characters(character_list)
     character_state_log: list[str] = list(character_state_log) if character_state_log else []
     compression_guidance: str = ""
@@ -221,6 +222,10 @@ def _run_chapter_generation_internal(
     from novelforge.voice import format_voice_prompt
     voice_seed = snap.get("voice_seed", {})
     voice_prompt = format_voice_prompt(voice_seed) if voice_seed else ""
+
+    # Build narrative perspective prompt
+    from novelforge.agents.chapter import build_perspective_prompt
+    perspective_prompt = build_perspective_prompt(snap.get("narrative_perspective", "third_person"))
 
     # Reset circuit breakers for all providers at the start of generation
     for cb in _llm_circuit_breakers.values():
@@ -308,7 +313,7 @@ def _run_chapter_generation_internal(
                             chapter_theme_context, gatekeeper_brief,
                             compression_guidance, chapter_rhythm_shape,
                             chapter_rhythm_reason, chapter_pov_context,
-                            voice_prompt,
+                            voice_prompt, perspective_prompt,
                         ),
                         action=f"Chapter {chapter_num}: drafting"
                     )
@@ -341,6 +346,7 @@ def _run_chapter_generation_internal(
                 theme=chapter_theme_context,
                 pov=chapter_pov_context,
                 gatekeeper_brief=gatekeeper_brief,
+                perspective_prompt=perspective_prompt,
             )
             text, summary = _run_all_chapter_agents(
                 text=text, chapter_num=chapter_num, title=title,
@@ -763,6 +769,9 @@ def revise_chapter() -> Response | tuple[Response, int]:
     chapter_theme_context = get_chapter_theme_context(theme_reinforcement, chapter_number)
     chapter_pov_context = get_chapter_pov_context(pov_focal_character_plan, chapter_number)
 
+    from novelforge.agents.chapter import build_perspective_prompt
+    perspective_prompt = build_perspective_prompt(session.get("narrative_perspective", "third_person"))
+
     gatekeeper_brief = run_continuity_gatekeeper(
         chapter_num=chapter_number,
         chapter_title=target_chapter.get("title", f"Chapter {chapter_number}"),
@@ -788,6 +797,7 @@ def revise_chapter() -> Response | tuple[Response, int]:
                 chapter_technology_context=chapter_technology_context,
                 chapter_theme_context=chapter_theme_context,
                 gatekeeper_brief=gatekeeper_brief,
+                perspective_prompt=perspective_prompt,
             ),
             action=f"Chapter {chapter_number}: applying revision instructions"
         )
@@ -802,6 +812,7 @@ def revise_chapter() -> Response | tuple[Response, int]:
             theme=chapter_theme_context,
             pov=chapter_pov_context,
             gatekeeper_brief=gatekeeper_brief,
+            perspective_prompt=perspective_prompt,
         )
         revised_text, revised_summary = _run_all_chapter_agents(
             text=revised_text, chapter_num=chapter_number,

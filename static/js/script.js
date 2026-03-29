@@ -174,6 +174,11 @@ $(function () {
   // Contenteditable cell edits
   $(document).on("input", "#chapter-tbody .editable-cell, #characters-tbody .editable-cell", markOutlineDirty);
 
+  // When a character name is edited, sync the perspective dropdown
+  $(document).on("input", "#characters-tbody .editable-cell[data-field='name']", function () {
+    syncPerspectiveDropdown();
+  });
+
   // Outline title edits
   $(document).on("input", "#outline-title", markOutlineDirty);
 
@@ -485,6 +490,9 @@ $(function () {
       addCharacterRow(c.name || "", c.age || "", c.role || "", c.background || "", c.arc || "");
     });
 
+    // Sync perspective dropdown with newly rendered characters
+    syncPerspectiveDropdown();
+
     // Freshly rendered outline is clean — no unsaved changes
     clearOutlineDirty();
   }
@@ -508,10 +516,39 @@ $(function () {
     $("#characters-tbody").append(row);
   }
 
+  // Sync the Narrative Perspective dropdown with current character names
+  function syncPerspectiveDropdown() {
+    var $select = $("#narrative-perspective");
+    var currentVal = $select.val();
+    // Remove all first-person options (keep third_person)
+    $select.find("option[value!='third_person']").remove();
+    // Add an option for each character
+    $("#characters-tbody tr").each(function () {
+      var name = $(this).find("[data-field='name']").text().trim();
+      if (name) {
+        $select.append(
+          $("<option></option>").val("first_person:" + name).text("First Person – " + name)
+        );
+      }
+    });
+    // Restore previous selection if it still exists
+    if ($select.find("option[value='" + currentVal + "']").length) {
+      $select.val(currentVal);
+    } else {
+      $select.val("third_person");
+    }
+  }
+
+  // Update perspective dropdown whenever characters change
+  $("#narrative-perspective").on("change", function () {
+    markOutlineDirty();
+  });
+
   // Add Character button
   $("#btn-add-character").on("click", function () {
     addCharacterRow("New Character", "", "Protagonist/Antagonist/Supporting", "Enter background...", "Enter character arc...");
     markOutlineDirty();
+    syncPerspectiveDropdown();
   });
 
   // Delete Character button (delegated event)
@@ -527,6 +564,7 @@ $(function () {
     if (confirm("Delete character '" + characterName + "'?")) {
       $row.remove();
       markOutlineDirty();
+      syncPerspectiveDropdown();
     }
   });
 
@@ -698,6 +736,8 @@ $(function () {
       });
     });
 
+    var narrativePerspective = $("#narrative-perspective").val() || "third_person";
+
     $("#approve-spinner").removeClass("d-none");
     $("#btn-approve-outline").prop("disabled", true);
 
@@ -708,7 +748,7 @@ $(function () {
       url: "/approve_outline",
       method: "POST",
       contentType: "application/json",
-      data: JSON.stringify({ title: title, chapters: chapters, characters: characters }),
+      data: JSON.stringify({ title: title, chapters: chapters, characters: characters, narrative_perspective: narrativePerspective }),
       success: function () {
         clearOutlineDirty();
         startChapterGeneration();
@@ -1537,6 +1577,10 @@ $(function () {
           chapters: sd.chapter_list,
           characters: sd.character_list || [],
         });
+        // Restore narrative perspective after characters are rendered
+        if (sd.narrative_perspective) {
+          $("#narrative-perspective").val(sd.narrative_perspective);
+        }
       }
 
       // Step 4 completion data — restore progress token and show done step

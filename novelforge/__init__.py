@@ -108,6 +108,7 @@ def create_app(*, testing: bool = False) -> Flask:
                 "title": sess.get("title", ""),
                 "chapter_list": sess.get("chapter_list", []),
                 "character_list": sess.get("character_list", []),
+                "narrative_perspective": sess.get("narrative_perspective", "third_person"),
             }
             token = sess.get("progress_token", "")
             if token:

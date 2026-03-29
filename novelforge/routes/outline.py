@@ -265,9 +265,29 @@ def approve_outline() -> Response | tuple[Response, int]:
                 for old_name, new_name in rename_map.items():
                     text = text.replace(old_name, new_name)
                 session[session_field] = text
+        # Update narrative perspective if the POV character was renamed
+        cur_persp = session.get("narrative_perspective", "third_person")
+        if cur_persp.startswith("first_person:"):
+            cur_pov_name = cur_persp[len("first_person:"):].strip()
+            if cur_pov_name in rename_map:
+                session["narrative_perspective"] = f"first_person:{rename_map[cur_pov_name]}"
+
+    # Validate and store narrative perspective
+    narrative_perspective = str(data.get("narrative_perspective", "third_person")).strip()
+    if narrative_perspective != "third_person" and not narrative_perspective.startswith("first_person:"):
+        narrative_perspective = "third_person"
+    if narrative_perspective.startswith("first_person:"):
+        pov_char_name = narrative_perspective[len("first_person:"):].strip()
+        if len(pov_char_name) > 100:
+            return jsonify({"error": "Perspective character name too long."}), 400
+        # Verify the character exists in the list
+        char_names = [str(c.get("name", "")).strip() for c in new_characters]
+        if pov_char_name not in char_names:
+            narrative_perspective = "third_person"
 
     session["chapter_list"] = sanitised_chapters
     session["character_list"] = new_characters
+    session["narrative_perspective"] = narrative_perspective
 
     # Common kwargs shared by all planning agents
     _title = session["title"]
@@ -358,13 +378,14 @@ def approve_outline() -> Response | tuple[Response, int]:
     if skipped_g2:
         logger.info("Skipped %d unchanged Group 2 planning agents", skipped_g2)
 
-    # --- Group 3: depends on Group 2 (character_arc_plan) ---
-    pov_hash = _input_hash(*char_inputs, session.get("character_arc_plan", {}))
+    # --- Group 3: depends on Group 2 (character_arc_plan) + narrative perspective ---
+    pov_hash = _input_hash(*char_inputs, session.get("character_arc_plan", {}), narrative_perspective)
     new_hashes["pov_focal_character_plan"] = pov_hash
     if pov_hash != prev_hashes.get("pov_focal_character_plan"):
         session["pov_focal_character_plan"] = plan_pov_focal_character(
             character_list=_characters,
-            character_arc_plan=session["character_arc_plan"], **common,
+            character_arc_plan=session["character_arc_plan"],
+            narrative_perspective=narrative_perspective, **common,
         )
     else:
         logger.info("Skipped unchanged POV & Focal Character Planner")

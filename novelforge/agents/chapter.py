@@ -136,6 +136,7 @@ class ChapterContext:
     theme: str = ""
     pov: str = ""
     gatekeeper_brief: str = ""
+    perspective_prompt: str = ""
 
 # Words indicative of LLM-generated text that the anti-LLM agent should remove
 # Hard-banned words: never use these — they are strong LLM fingerprints
@@ -146,11 +147,14 @@ _FORBIDDEN_WORDS = [
     "pivotal", "groundbreaking", "commendable", "meticulous",
     # Discovered cross-novel overuse
     "provenance", "cadence", "choreography",
+    # Bookkeeping / accounting metaphors used as emotional shorthand
+    "ledger", "tally", "inventory", "audit", "balance sheet",
+    "debit", "dividend",
 ]
 
 # Soft-limited words: OK once or twice per novel, but the LLM wildly overuses them
 _SOFT_LIMITED_WORDS = [
-    "ledger", "brittle", "tighten", "tightened", "tightening",
+    "brittle", "tighten", "tightened", "tightening",
     "steady", "steadied", "steadiness", "deliberate", "measured",
     "calculus", "arithmetic",
 ]
@@ -169,7 +173,6 @@ _OVERUSED_PATTERNS = [
     "smelled of ozone", "jaw tightened", "jaw worked",
     "not a victory", "not heroic", "not comfort",
     "moral arithmetic", "moral calculus", "moral cost", "moral weight",
-    "a ledger of", "the ledger of", "ledger of compromises",
 ]
 
 
@@ -229,6 +232,30 @@ def scan_vocabulary_overuse(chapter_text: str) -> list[str]:
             )
 
     return warnings
+
+
+def build_perspective_prompt(narrative_perspective: str) -> str:
+    """Build a perspective directive string from the session's narrative_perspective value."""
+    if not narrative_perspective or narrative_perspective == "third_person":
+        return (
+            "NARRATIVE PERSPECTIVE: Write this chapter in THIRD PERSON narration. "
+            "Use \"he/she/they\" pronouns for all characters. The narrator is omniscient "
+            "but should primarily follow the assigned POV character's experience. "
+            "Do NOT use first person (\"I/me/my\") for any narration."
+        )
+    if narrative_perspective.startswith("first_person:"):
+        pov_name = narrative_perspective[len("first_person:"):].strip()
+        return (
+            f"NARRATIVE PERSPECTIVE: Write this chapter in FIRST PERSON narration "
+            f"from the perspective of {pov_name}. Use \"I/me/my\" pronouns for {pov_name}. "
+            f"Everything must be filtered through {pov_name}'s direct experience — "
+            f"the reader can only know what {pov_name} sees, hears, thinks, and feels. "
+            f"{pov_name} cannot know other characters' unspoken thoughts or events "
+            f"happening outside their presence. Maintain {pov_name}'s unique voice, "
+            f"vocabulary, and worldview consistently throughout. "
+            f"Do NOT switch to third person or any other character's perspective."
+        )
+    return ""
 
 
 def _format_characters(character_list: list[dict]) -> str:
@@ -306,7 +333,7 @@ def build_chapter_draft_prompt(
     chapter_antagonist_context: str = "", chapter_technology_context: str = "",
     chapter_theme_context: str = "", gatekeeper_brief: str = "", compression_guidance: str = "",
     chapter_rhythm_shape: str = "", chapter_rhythm_reason: str = "", chapter_pov_context: str = "",
-    voice_prompt: str = "",
+    voice_prompt: str = "", perspective_prompt: str = "",
 ) -> list[dict[str, str]]:
     return render_prompt(
         "chapter_draft",
@@ -331,6 +358,7 @@ def build_chapter_draft_prompt(
         forbidden_words=", ".join(_FORBIDDEN_WORDS),
         soft_limited_words=", ".join(_SOFT_LIMITED_WORDS),
         voice_prompt=voice_prompt or "",
+        perspective_prompt=perspective_prompt or "",
     )
 
 
@@ -373,7 +401,8 @@ def build_structure_agent_prompt(chapter_text: str, chapter_num: int, total_chap
 
 def build_character_agent_prompt(chapter_text: str, characters_text: str, chapter_num: int, title: str,
                                   chapter_fate_context: str = "", chapter_arc_context: str = "",
-                                  chapter_antagonist_context: str = "", chapter_pov_context: str = "") -> list[dict[str, str]]:
+                                  chapter_antagonist_context: str = "", chapter_pov_context: str = "",
+                                  perspective_prompt: str = "") -> list[dict[str, str]]:
     return render_prompt(
         "character_agent", title=title, chapter_num=chapter_num,
         characters_text=characters_text,
@@ -381,6 +410,7 @@ def build_character_agent_prompt(chapter_text: str, characters_text: str, chapte
         chapter_arc_context=chapter_arc_context or "",
         chapter_antagonist_context=chapter_antagonist_context or "",
         chapter_pov_context=chapter_pov_context or "",
+        perspective_prompt=perspective_prompt or "",
         chapter_text=chapter_text,
     )
 
@@ -399,8 +429,10 @@ def build_context_analyzer_prompt(chapter_text: str, previous_summaries: str, ch
     )
 
 
-def build_synthesizer_prompt(chapter_text: str, chapter_num: int, title: str, genre: str) -> list[dict[str, str]]:
-    return render_prompt("synthesizer", title=title, genre=genre, chapter_num=chapter_num, chapter_text=chapter_text)
+def build_synthesizer_prompt(chapter_text: str, chapter_num: int, title: str, genre: str,
+                              perspective_prompt: str = "") -> list[dict[str, str]]:
+    return render_prompt("synthesizer", title=title, genre=genre, chapter_num=chapter_num,
+                         perspective_prompt=perspective_prompt or "", chapter_text=chapter_text)
 
 
 def build_quality_controller_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
@@ -615,6 +647,7 @@ def build_chapter_revision_prompt(
     chapter_fate_context: str = "", chapter_arc_context: str = "",
     chapter_antagonist_context: str = "", chapter_technology_context: str = "",
     chapter_theme_context: str = "", gatekeeper_brief: str = "",
+    perspective_prompt: str = "",
 ) -> list[dict[str, str]]:
     return render_prompt(
         "chapter_revision", title=title, chapter_num=chapter_num,
@@ -628,6 +661,7 @@ def build_chapter_revision_prompt(
         chapter_technology_context=chapter_technology_context or "",
         chapter_theme_context=chapter_theme_context or "",
         gatekeeper_brief=gatekeeper_brief or "",
+        perspective_prompt=perspective_prompt or "",
         chapter_text=chapter_text,
     )
 
@@ -992,7 +1026,7 @@ def _run_all_chapter_agents(
     text = _safe(
         lambda t: build_character_agent_prompt(
             t, characters_text, chapter_num, title,
-            ctx.fate, ctx.arc, ctx.antagonist, ctx.pov,
+            ctx.fate, ctx.arc, ctx.antagonist, ctx.pov, ctx.perspective_prompt,
         ),
         text, action=f"Chapter {chapter_num}: deepening characters",
     )
@@ -1001,7 +1035,7 @@ def _run_all_chapter_agents(
     if step_callback:
         step_callback(f"Chapter {chapter_num}: synthesizing")
     text = _safe(
-        lambda t: build_synthesizer_prompt(t, chapter_num, title, genre),
+        lambda t: build_synthesizer_prompt(t, chapter_num, title, genre, ctx.perspective_prompt),
         text, action=f"Chapter {chapter_num}: synthesizing",
     )
 

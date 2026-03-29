@@ -364,6 +364,11 @@ prompts:
       {{ special_instructions }}
       {%- endif %}
 
+      {%- if perspective_override.strip() %}
+
+      {{ perspective_override }}
+      {%- endif %}
+
       Create a POV & Focal Character plan for every chapter. Assign the primary
       POV, secondary observers, and focal internal character for each chapter.
       Enforce rotation so the reader gets varied emotional and perceptual
@@ -656,6 +661,10 @@ prompts:
       constructions, emotions in ribs/sternum/throat, metallic taste as distress,
       "jaw tightened," "the economy of someone who." Vary chapter openings and
       endings — not always smell descriptions or quiet reflection.
+      {%- if perspective_prompt.strip() %}
+
+      {{ perspective_prompt }}
+      {%- endif %}
       {%- if voice_prompt.strip() %}
       {{ voice_prompt }}
       {%- endif %}
@@ -721,7 +730,7 @@ prompts:
       {%- endif %}
 
       ***CRITICAL: You are writing CHAPTER {{ chapter_num }}. Keep this chapter number in mind throughout.***
-      Target: approximately {{ target_words }} words. Do NOT exceed 3,000 words. Write immersive, human-sounding prose.
+      Target: approximately {{ target_words }} words. Aim for at least 2,500 words and do NOT exceed 4,500 words. Write immersive, human-sounding prose.
 
       {%- if chapter_rhythm_shape.strip() %}
       CRITICAL RHYTHM DIRECTIVE: You MUST write this chapter using the narrative rhythm: "{{ chapter_rhythm_shape }}".
@@ -887,6 +896,11 @@ prompts:
       in exactly the same state as they entered it. For any character who
       appears but remains static, add or strengthen a beat that advances their
       thread without breaking continuity or inventing new plot events.
+      {%- if perspective_prompt.strip() %}
+
+      {{ perspective_prompt }}
+      When deepening characters, respect the narrative perspective. If first person, other characters' inner thoughts can only be revealed through dialogue, behaviour, or the narrator's interpretation.
+      {%- endif %}
 
       Return the full revised chapter text.
     user: |
@@ -1084,6 +1098,11 @@ prompts:
       narrative voice, reinforce the thematic thread, and guarantee the chapter
       reads as a single, coherent piece of literary fiction.
       Do not add new plot events. Return the full synthesized chapter text.
+      {%- if perspective_prompt.strip() %}
+
+      {{ perspective_prompt }}
+      Ensure the entire chapter maintains this perspective consistently — fix any sections where the narration drifts into a different perspective.
+      {%- endif %}
     user: |
       Novel: '{{ title }}' (Genre: {{ genre }})
       Chapter {{ chapter_num }}
@@ -1249,6 +1268,10 @@ prompts:
       You are a senior developmental editor revising an existing chapter.
       Apply requested changes precisely while preserving coherence, voice,
       and continuity with the larger novel. Return the full revised chapter text only.
+      {%- if perspective_prompt.strip() %}
+
+      {{ perspective_prompt }}
+      {%- endif %}
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
 

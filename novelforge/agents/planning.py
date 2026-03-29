@@ -1751,6 +1751,7 @@ class PovFocalCharacterAgent(BaseAgent):
         chapter_list = ctx["chapter_list"]
         character_arc_plan = ctx.get("character_arc_plan")
         special_instructions = ctx.get("special_instructions", "")
+        narrative_perspective = ctx.get("narrative_perspective", "third_person")
 
         characters_text = "\n".join(
             f"- {c.get('name', '?')}: role={c.get('role', '')}; arc={c.get('arc', '')}; background={c.get('background', '')}"
@@ -1776,11 +1777,22 @@ class PovFocalCharacterAgent(BaseAgent):
                     )
         arc_text = "\n".join(arc_lines)
 
+        # Build perspective override for POV planning
+        perspective_override = ""
+        if isinstance(narrative_perspective, str) and narrative_perspective.startswith("first_person:"):
+            pov_name = narrative_perspective[len("first_person:"):].strip()
+            perspective_override = (
+                f"IMPORTANT: The author has chosen FIRST PERSON narration from {pov_name}'s perspective. "
+                f"{pov_name} MUST be the primary POV character for EVERY chapter. Secondary observers "
+                f"and focal internal characters can vary, but primary_pov must always be \"{pov_name}\"."
+            )
+
         return render_prompt(
             "pov_focal_character_planner",
             title=title, premise=premise, genre=genre,
             characters_text=characters_text, chapters_text=chapters_text,
             arc_text=arc_text, special_instructions=special_instructions or "",
+            perspective_override=perspective_override,
         )
 
     def build_fallback(self, **ctx) -> dict:
