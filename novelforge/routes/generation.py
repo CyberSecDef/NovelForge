@@ -215,7 +215,7 @@ def _run_chapter_generation_internal(
 
     target_per_chapter = min(4500, max(2500, word_count // total_chapters))
     characters_text = _format_characters(character_list)
-    character_state_log: list[str] = list(character_state_log) if character_state_log else []
+    character_state_log = list(character_state_log) if character_state_log else []
     compression_guidance: str = ""
 
     # Format voice seed for prompt injection

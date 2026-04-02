@@ -319,7 +319,7 @@ def approve_outline() -> Response | tuple[Response, int]:
     # These depend on Group 1 outputs — hash computed after Group 1 runs
 
     def _needs_regen(agent_key: str) -> bool:
-        return new_hashes.get(agent_key) != prev_hashes.get(agent_key)
+        return bool(new_hashes.get(agent_key) != prev_hashes.get(agent_key))
 
     # --- Group 1: independent agents (run in parallel, skip if unchanged) ---
     g1_agents: dict[str, Future[dict]] = {}
