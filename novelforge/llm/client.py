@@ -6,6 +6,7 @@ import logging
 import os
 import threading
 import time
+from typing import Any
 
 import requests
 from unidecode import unidecode
@@ -562,7 +563,7 @@ def parse_llm_json(response: str) -> dict:
 
     # First attempt: try parsing cleaned response directly
     try:
-        result = json.loads(response)
+        result: dict[Any, Any] = json.loads(response)
         logger.debug("parse_llm_json: parsed via strategy=%s", strategy)
         return result
     except json.JSONDecodeError:
@@ -577,7 +578,7 @@ def parse_llm_json(response: str) -> dict:
             "parse_llm_json: no JSON structure found in response (strategy=%s): %s",
             strategy, raw_preview,
         )
-        return json.loads(response)  # Will raise JSONDecodeError
+        return json.loads(response)  # type: ignore[no-any-return]  # Will raise JSONDecodeError
 
     if start_brace == -1:
         start = start_bracket

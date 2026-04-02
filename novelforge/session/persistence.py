@@ -149,7 +149,7 @@ def get_session_id() -> str:
     """Get or create a unique session ID for this user session."""
     if "session_id" not in session:
         session["session_id"] = str(uuid.uuid4())
-    return session["session_id"]
+    return str(session["session_id"])
 
 
 def get_session_file_path() -> Path:
