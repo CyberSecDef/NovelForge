@@ -198,7 +198,7 @@ Post-Manuscript Audits (after all chapters):
 - **Markdown Export** – Compiled novel (title, chapters as `##` headings, inline summaries, and optional editor's notes) is saved server-side and served as a downloadable `.md` file.
 - **AJAX-only UI** – All form submissions and data fetches use jQuery AJAX; the page never reloads.
 - **Input Validation** – Both client-side (jQuery) and server-side (Python) validation with Bootstrap feedback messages.
-- **XSS Protection** – All user-supplied content is escaped with `markupsafe.escape` before storage and with jQuery's `.text()` before rendering.
+- **XSS Protection** – User-supplied content is stored as plain text in the session and rendered safely using Jinja2 auto-escaping (server-side) and jQuery's `.text()` exclusively (client-side; `.html()` is never used for dynamic content).
 - **Flask-Session** – Server-side filesystem sessions keep user data across the multi-step workflow.
 
 ---
@@ -740,12 +740,12 @@ Session files are written to `SESSION_FILE_DIR` (default: `./sessions/flask`). N
 
 | Concern | Mitigation |
 |---|---|
-| **XSS via user input** | All user-supplied strings are escaped with `markupsafe.escape` before being stored in the session and rendered. jQuery's `.text()` method is used exclusively (never `.html()`) when inserting dynamic content into the DOM. |
+| **XSS via user input** | User-supplied strings are stored as plain text in the session. XSS is prevented at render time: Jinja2 auto-escaping covers all server-rendered HTML, and jQuery's `.text()` method is used exclusively (never `.html()`) when inserting dynamic content into the DOM. |
 | **Input validation** | Server-side validation (`validate_outline_input`) rejects empty premises, premises over 2,000 characters, unrecognised genre values, chapter counts below 3, and word counts below 1,000. Mirrored client-side with jQuery. |
 | **Directory traversal** | The `/download/<filename>` route strips any path components using `Path(filename).name` before building the export path. |
 | **Secret key** | Flask's `SECRET_KEY` must be set to a long random string via environment variable in production. The default value `change-me-in-production` is intentionally insecure and must not be used outside local development. |
 | **API key exposure** | The LLM API key is read from an environment variable and never returned to the client. Keys are sanitized in log files. |
-| **Session file permissions** | Session files are created with mode `0o600` (owner read/write only). |
+| **Session file permissions** | Novel persistence files (under `sessions/novels/`) are written atomically via a temp file; `os.chmod(0o600)` is applied explicitly before the rename so files are always owner-read/write only, regardless of the process umask. |
 | **No `debug=True` in production** | `app.run()` is called with `debug=False`. The interactive debugger is never exposed. |
 
 ---

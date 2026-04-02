@@ -16,13 +16,19 @@ logger = logging.getLogger(__name__)
 
 
 def _atomic_write(filepath: Path, content: str) -> None:
-    """Write content to a file atomically using write-to-temp-then-rename."""
+    """Write content to a file atomically using write-to-temp-then-rename.
+
+    The temp file is created with mode 0o600 by ``tempfile.mkstemp``; the
+    explicit ``os.chmod`` call below enforces this regardless of the process
+    umask before the atomic rename.
+    """
     fd, tmp_path = tempfile.mkstemp(
         dir=str(filepath.parent),
         prefix=f".{filepath.stem}_",
         suffix=".tmp",
     )
     try:
+        os.chmod(tmp_path, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
         os.replace(tmp_path, str(filepath))
