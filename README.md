@@ -365,7 +365,7 @@ python app.py
 
 The application starts on `http://127.0.0.1:5000` by default. Open this URL in your browser.
 
-> **Note:** `python app.py` uses Flask's built-in development server (`debug=False`). For production, use a WSGI server such as **Gunicorn** behind a reverse proxy (e.g., Nginx):
+> **Note:** `python app.py` uses Flask's built-in development server with debug mode **disabled** by default. Set `NOVELFORGE_DEBUG=true` in your `.env` file to enable debug mode for local development. For production, use a WSGI server such as **Gunicorn** behind a reverse proxy (e.g., Nginx):
 >
 > ```bash
 > gunicorn -w 4 -b 0.0.0.0:8000 "app:app"
@@ -746,7 +746,7 @@ Session files are written to `SESSION_FILE_DIR` (default: `./sessions/flask`). N
 | **Secret key** | Flask's `SECRET_KEY` must be set to a long random string via environment variable in production. The default value `change-me-in-production` is intentionally insecure and must not be used outside local development. |
 | **API key exposure** | The LLM API key is read from an environment variable and never returned to the client. Keys are sanitized in log files. |
 | **Session file permissions** | Novel persistence files (under `sessions/novels/`) are written atomically via a temp file; `os.chmod(0o600)` is applied explicitly before the rename so files are always owner-read/write only, regardless of the process umask. |
-| **No `debug=True` in production** | `app.run()` is called with `debug=False`. The interactive debugger is never exposed. |
+| **No `debug=True` in production** | Debug mode is controlled by the `NOVELFORGE_DEBUG` environment variable, which defaults to `false`. Set `NOVELFORGE_DEBUG=true` only for local development. The interactive debugger is never exposed unless explicitly enabled. |
 
 ---
 

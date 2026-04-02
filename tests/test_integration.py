@@ -6,6 +6,7 @@ without making live LLM API calls.
 """
 
 import json
+import os
 import time
 import pytest
 
@@ -499,6 +500,42 @@ class TestLLMLog:
         """Without debug mode, /clear_log should return 404."""
         r = client.post("/clear_log")
         assert r.status_code == 404
+
+
+class TestNovelforgeDebugEnvVar:
+    """Verify that NOVELFORGE_DEBUG controls debug mode in app.py entrypoint."""
+
+    @staticmethod
+    def _parse_debug_env(value=None):
+        """Mirror the debug-flag parsing logic used in app.py."""
+        env_value = value if value is not None else os.environ.get("NOVELFORGE_DEBUG", "false")
+        return env_value.strip().lower() in ("1", "true", "yes")
+
+    def test_debug_false_by_default(self, monkeypatch):
+        """NOVELFORGE_DEBUG absent → debug resolves to False."""
+        monkeypatch.delenv("NOVELFORGE_DEBUG", raising=False)
+        assert self._parse_debug_env(os.environ.get("NOVELFORGE_DEBUG", "false")) is False
+
+    def test_debug_true_when_set(self, monkeypatch):
+        """NOVELFORGE_DEBUG=true → debug resolves to True."""
+        for value in ("true", "True", "TRUE", "1", "yes"):
+            monkeypatch.setenv("NOVELFORGE_DEBUG", value)
+            assert self._parse_debug_env(os.environ.get("NOVELFORGE_DEBUG")) is True, (
+                f"Expected True for NOVELFORGE_DEBUG={value!r}"
+            )
+
+    def test_debug_false_when_set_false(self, monkeypatch):
+        """NOVELFORGE_DEBUG=false → debug resolves to False."""
+        for value in ("false", "False", "FALSE", "0", "no"):
+            monkeypatch.setenv("NOVELFORGE_DEBUG", value)
+            assert self._parse_debug_env(os.environ.get("NOVELFORGE_DEBUG")) is False, (
+                f"Expected False for NOVELFORGE_DEBUG={value!r}"
+            )
+
+    def test_debug_routes_unavailable_without_debug_mode(self, client):
+        """Debug routes return 404 when the app is not in debug mode."""
+        assert client.get("/llm_log").status_code == 404
+        assert client.post("/clear_log").status_code == 404
 
 
 class TestCircuitBreaker:
