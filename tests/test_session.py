@@ -7,6 +7,7 @@ from background threads, and clear/delete operations.
 """
 
 import json
+import stat
 import pytest
 from pathlib import Path
 
@@ -333,6 +334,37 @@ class TestClearSession:
             flask.session["session_id"] = "nonexistent-clear-test"
             # Should not raise
             clear_session_state()
+
+
+class TestFilePermissions:
+    """Test that saved session files have mode 0o600."""
+
+    def test_session_file_mode_is_0o600(self, app):
+        """Novel persistence files must be owner-read/write only (0o600)."""
+        from novelforge.session.persistence import save_session_state, get_session_id
+
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["title"] = "Permission Test Novel"
+            sess["premise"] = "Testing file permissions"
+            sess["genre"] = "Fantasy"
+            sess["chapters"] = 3
+            sess["word_count"] = 5000
+
+            save_session_state()
+            session_id = get_session_id()
+
+            session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+            assert session_file.exists()
+
+            file_mode = stat.S_IMODE(session_file.stat().st_mode)
+            assert file_mode == 0o600, (
+                f"Expected session file mode 0o600, got 0o{file_mode:o}"
+            )
+
+            # Cleanup
+            session_file.unlink(missing_ok=True)
 
 
 class TestLoadSessionViaRoute:
