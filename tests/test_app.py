@@ -308,18 +308,27 @@ class TestRoutes:
                     {"number": 2, "title": "Ch2", "content": "Old chapter 2", "summary": "Old summary 2"},
                 ],
                 "consistency": {"issues": [], "overall_assessment": ""},
+                "snapshot": {
+                    "title": "My Novel",
+                    "genre": "Fantasy",
+                    "chapters": 2,
+                    "chapter_list": [
+                        {"number": 1, "title": "Ch1", "summary": "Outline 1"},
+                        {"number": 2, "title": "Ch2", "summary": "Outline 2"},
+                    ],
+                    "character_list": [],
+                    "special_instructions": "",
+                    "story_architecture": {},
+                    "master_timeline": {},
+                    "character_fate_registry": {},
+                    "character_arc_plan": {},
+                    "antagonist_motivation_plan": {},
+                    "technology_rules": {},
+                    "theme_reinforcement": {},
+                    "pov_focal_character_plan": {},
+                    "narrative_perspective": "third_person",
+                },
             }
-
-        with client.session_transaction() as sess:
-            sess["title"] = "My Novel"
-            sess["genre"] = "Fantasy"
-            sess["chapters"] = 2
-            sess["chapter_list"] = [
-                {"number": 1, "title": "Ch1", "summary": "Outline 1"},
-                {"number": 2, "title": "Ch2", "summary": "Outline 2"},
-            ]
-            sess["character_list"] = []
-            sess["special_instructions"] = ""
 
         def fake_call_llm(messages, json_mode=False, **kwargs):
             user_content = messages[-1]["content"]
@@ -352,6 +361,81 @@ class TestRoutes:
         assert payload["chapters_done"][0]["content"] == "Updated chapter content"
         assert payload["chapters_done"][0]["summary"] == "Updated summary"
         assert payload["consistency"]["overall_assessment"] == "Revised consistency"
+
+    def test_revise_chapter_uses_snapshot_not_live_session(self, client, monkeypatch):
+        """Editing the session after generation must not affect revision semantics."""
+        from novelforge.progress import _progress_lock, _progress_store
+
+        token = "test-token-snapshot-isolation"
+        original_title = "Original Title"
+        changed_title = "Completely Different Title"
+
+        with _progress_lock:
+            _progress_store[token] = {
+                "status": "done",
+                "current": 1,
+                "total": 1,
+                "step": "Complete",
+                "chapters_done": [
+                    {"number": 1, "title": "Ch1", "content": "Chapter content", "summary": "Summary"},
+                ],
+                "consistency": {"issues": [], "overall_assessment": ""},
+                "snapshot": {
+                    "title": original_title,
+                    "genre": "Fantasy",
+                    "chapters": 1,
+                    "chapter_list": [{"number": 1, "title": "Ch1", "summary": "Outline 1"}],
+                    "character_list": [],
+                    "special_instructions": "Original instructions",
+                    "story_architecture": {},
+                    "master_timeline": {},
+                    "character_fate_registry": {},
+                    "character_arc_plan": {},
+                    "antagonist_motivation_plan": {},
+                    "technology_rules": {},
+                    "theme_reinforcement": {},
+                    "pov_focal_character_plan": {},
+                    "narrative_perspective": "first_person",
+                },
+            }
+
+        # Simulate a session edit that diverges from the original snapshot
+        with client.session_transaction() as sess:
+            sess["title"] = changed_title
+            sess["genre"] = "Horror"
+            sess["chapters"] = 1
+            sess["chapter_list"] = [{"number": 1, "title": "NewCh1", "summary": "New outline"}]
+            sess["character_list"] = []
+            sess["special_instructions"] = "New instructions"
+            sess["narrative_perspective"] = "third_person"
+
+        captured_prompts: list[str] = []
+
+        def fake_call_llm(messages, json_mode=False, **kwargs):
+            user_content = messages[-1]["content"]
+            captured_prompts.append(user_content)
+            if "Write a 100-200 word summary" in user_content:
+                return "Revised summary"
+            if "Required structure" in user_content and '"issues"' in user_content:
+                return '{"issues": [], "overall_assessment": "ok"}'
+            return "Revised chapter content"
+
+        monkeypatch.setattr("novelforge.llm.client.call_llm", fake_call_llm)
+        monkeypatch.setattr("novelforge.agents.chapter.call_llm", fake_call_llm)
+        monkeypatch.setattr("novelforge.routes.generation.call_llm", fake_call_llm)
+
+        r = client.post(
+            "/revise_chapter",
+            data=json.dumps({"token": token, "chapter_number": 1, "instructions": "Add drama."}),
+            content_type="application/json",
+        )
+
+        assert r.status_code == 200
+        # The prompts sent to the LLM must reference the original snapshot title,
+        # not the changed session title.
+        all_prompts = "\n".join(captured_prompts)
+        assert original_title in all_prompts, "Revision must use snapshot title, not live session title"
+        assert changed_title not in all_prompts, "Live session edits must not bleed into revision"
 
     def test_download_path_traversal(self, client):
         """Directory traversal attempt should 404 (file won't exist)."""

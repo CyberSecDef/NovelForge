@@ -334,23 +334,24 @@ class TestReviseChapter:
                     {"number": 1, "title": "Ch1", "content": "Original text.", "summary": "Old summary"},
                 ],
                 "consistency": {"issues": [], "overall_assessment": ""},
+                "snapshot": {
+                    "title": "Test",
+                    "genre": "Fantasy",
+                    "chapters": 1,
+                    "chapter_list": [{"number": 1, "title": "Ch1", "summary": "Outline"}],
+                    "character_list": [],
+                    "special_instructions": "",
+                    "story_architecture": {},
+                    "master_timeline": {},
+                    "character_fate_registry": {},
+                    "character_arc_plan": {},
+                    "antagonist_motivation_plan": {},
+                    "technology_rules": {},
+                    "theme_reinforcement": {},
+                    "pov_focal_character_plan": {},
+                    "narrative_perspective": "third_person",
+                },
             }
-
-        with client.session_transaction() as sess:
-            sess["title"] = "Test"
-            sess["genre"] = "Fantasy"
-            sess["chapters"] = 1
-            sess["chapter_list"] = [{"number": 1, "title": "Ch1", "summary": "Outline"}]
-            sess["character_list"] = []
-            sess["special_instructions"] = ""
-            sess["story_architecture"] = {}
-            sess["master_timeline"] = {}
-            sess["character_fate_registry"] = {}
-            sess["character_arc_plan"] = {}
-            sess["antagonist_motivation_plan"] = {}
-            sess["technology_rules"] = {}
-            sess["theme_reinforcement"] = {}
-            sess["pov_focal_character_plan"] = {}
 
         r = client.post(
             "/revise_chapter",

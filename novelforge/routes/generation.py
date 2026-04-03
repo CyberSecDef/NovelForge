@@ -82,17 +82,6 @@ def generate_chapters() -> Response | tuple[Response, int]:
             }), 409
 
     token = str(uuid.uuid4())
-    with _progress_lock:
-        _progress_store[token] = {
-            "status": "running",
-            "current": 0,
-            "total": session["chapters"],
-            "step": "Preparing\u2026",
-            "chapters_done": [],
-            "error": None,
-            "_live": True,
-        }
-
     snapshot = {
         "session_id": get_session_id(),
         "premise": session["premise"],
@@ -114,6 +103,17 @@ def generate_chapters() -> Response | tuple[Response, int]:
         "voice_seed": session.get("voice_seed", {}),
         "narrative_perspective": session.get("narrative_perspective", "third_person"),
     }
+    with _progress_lock:
+        _progress_store[token] = {
+            "status": "running",
+            "current": 0,
+            "total": session["chapters"],
+            "step": "Preparing\u2026",
+            "chapters_done": [],
+            "error": None,
+            "_live": True,
+            "snapshot": snapshot,
+        }
 
     thread = threading.Thread(
         target=_run_chapter_generation,
@@ -741,20 +741,21 @@ def revise_chapter() -> Response | tuple[Response, int]:
     if target_idx is None:
         return jsonify({"error": "Selected chapter was not found."}), 404
 
-    title = session.get("title", "Novel")
-    genre = session.get("genre", "")
-    total_chapters = int(session.get("chapters", len(chapters_done) or 1))
-    chapter_list = session.get("chapter_list", [])
-    character_list = session.get("character_list", [])
-    special_instructions = session.get("special_instructions", "")
-    story_architecture = normalise_story_architecture(session.get("story_architecture", {}), chapter_list, total_chapters)
-    master_timeline = normalise_master_timeline(session.get("master_timeline", {}), chapter_list, character_list)
-    character_fate_registry = normalise_character_fate_registry(session.get("character_fate_registry", {}), character_list, total_chapters)
-    character_arc_plan = normalise_character_arc_plan(session.get("character_arc_plan", {}), character_list, chapter_list)
-    antagonist_motivation_plan = normalise_antagonist_motivation_plan(session.get("antagonist_motivation_plan", {}), character_list, chapter_list)
-    technology_rules = normalise_technology_rules(session.get("technology_rules", {}), chapter_list)
-    theme_reinforcement = normalise_theme_reinforcement(session.get("theme_reinforcement", {}), chapter_list)
-    pov_focal_character_plan = normalise_pov_focal_character_plan(session.get("pov_focal_character_plan", {}), character_list, chapter_list)
+    snap = progress_data.get("snapshot", {})
+    title = snap.get("title", "Novel")
+    genre = snap.get("genre", "")
+    total_chapters = int(snap.get("chapters", len(chapters_done) or 1))
+    chapter_list = snap.get("chapter_list", [])
+    character_list = snap.get("character_list", [])
+    special_instructions = snap.get("special_instructions", "")
+    story_architecture = normalise_story_architecture(snap.get("story_architecture", {}), chapter_list, total_chapters)
+    master_timeline = normalise_master_timeline(snap.get("master_timeline", {}), chapter_list, character_list)
+    character_fate_registry = normalise_character_fate_registry(snap.get("character_fate_registry", {}), character_list, total_chapters)
+    character_arc_plan = normalise_character_arc_plan(snap.get("character_arc_plan", {}), character_list, chapter_list)
+    antagonist_motivation_plan = normalise_antagonist_motivation_plan(snap.get("antagonist_motivation_plan", {}), character_list, chapter_list)
+    technology_rules = normalise_technology_rules(snap.get("technology_rules", {}), chapter_list)
+    theme_reinforcement = normalise_theme_reinforcement(snap.get("theme_reinforcement", {}), chapter_list)
+    pov_focal_character_plan = normalise_pov_focal_character_plan(snap.get("pov_focal_character_plan", {}), character_list, chapter_list)
 
     chapter_outline_summary = ""
     for chapter_outline in chapter_list:
@@ -781,7 +782,7 @@ def revise_chapter() -> Response | tuple[Response, int]:
     chapter_pov_context = get_chapter_pov_context(pov_focal_character_plan, chapter_number)
 
     from novelforge.agents.chapter import build_perspective_prompt
-    perspective_prompt = build_perspective_prompt(session.get("narrative_perspective", "third_person"))
+    perspective_prompt = build_perspective_prompt(snap.get("narrative_perspective", "third_person"))
 
     gatekeeper_brief = run_continuity_gatekeeper(
         chapter_num=chapter_number,
