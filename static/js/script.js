@@ -756,10 +756,13 @@ $(function () {
       error: function (xhr) {
         var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to save outline. The AI service may be unavailable — your edits are preserved.";
         showAlert(msg);
+        // Re-enable the button so the user can try again
+        $("#btn-approve-outline").prop("disabled", false);
       },
       complete: function () {
         $("#approve-spinner").addClass("d-none");
-        $("#btn-approve-outline").prop("disabled", false);
+        // Button stays disabled while chapter generation is running;
+        // it will be re-enabled when generation completes or errors.
       },
     });
   });
@@ -772,6 +775,8 @@ $(function () {
     showStep("#step-progress");
     $("#chapter-progress-list").empty();
     updateProgressBar(0, 0, "Preparing…");
+    // Ensure the approve button stays disabled while generation runs
+    $("#btn-approve-outline").prop("disabled", true);
 
     $.ajax({
       url: "/generate_chapters",
@@ -793,9 +798,28 @@ $(function () {
         _schedulePoll();
       },
       error: function (xhr) {
-        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to start chapter generation. Please check your connection and try again.";
-        showAlert(msg);
-        showStep("#step-outline");
+        var json = xhr.responseJSON || {};
+        if (xhr.status === 409 && json.error_code === "generation_in_progress") {
+          // A generation is already running — attach to it and start polling
+          _progressToken = json.token;
+          _totalChapters = parseInt($("#chapters").val(), 10) || 20;
+          _pollDelay = _pollDelayMin;
+          _lastPollStep = "";
+          _pollFailures = 0;
+          _lastCompletedCount = 0;
+          _chapterCompletionTimes = [];
+          _generationStartTime = Date.now();
+          _latestFullData = {};
+          _lastFullFetchTime = 0;
+          $("#progress-time-estimate").addClass("d-none").text("");
+          _schedulePoll();
+        } else {
+          var msg = json.error || "Failed to start chapter generation. Please check your connection and try again.";
+          showAlert(msg);
+          showStep("#step-outline");
+          // Re-enable button so the user can retry
+          $("#btn-approve-outline").prop("disabled", false);
+        }
       },
     });
   }
@@ -917,6 +941,8 @@ $(function () {
             showAlert("Chapter generation failed: " + (data.error || "Unknown error"));
           }
           showStep("#step-outline");
+          // Re-enable the approve button so the user can retry
+          $("#btn-approve-outline").prop("disabled", false);
         } else {
           // Trigger a full fetch when a chapter just completed or every 2 minutes
           var timeSinceFullFetch = Date.now() - _lastFullFetchTime;
@@ -1068,6 +1094,8 @@ $(function () {
     _renderRelationshipMap(data.character_relationship_map);
 
     showStep("#step-done");
+    // Generation complete — re-enable the approve button for potential future use
+    $("#btn-approve-outline").prop("disabled", false);
   }
 
   function _renderRelationshipMap(mapData) {
