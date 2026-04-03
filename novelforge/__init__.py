@@ -2,6 +2,7 @@
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 import flask
@@ -17,6 +18,59 @@ from novelforge.routes import register_blueprints
 
 # Module-level limiter, initialised without app (attached in create_app)
 limiter = Limiter(get_remote_address, default_limits=["60 per minute"])
+
+# Sentinel flag: ensures _bootstrap_logging() is fully idempotent across
+# repeated create_app() calls (e.g. in tests or multi-app scenarios).
+_logging_bootstrapped: bool = False
+_logging_bootstrap_lock = threading.Lock()
+
+
+def _bootstrap_logging() -> None:
+    """Configure root logging once; subsequent calls are safe no-ops.
+
+    Configures the root logger directly rather than relying on
+    ``logging.basicConfig()``, which becomes a no-op once any handler has
+    already been attached to the root logger (regardless of whether *our*
+    handler was the one that did it).  Attaches ``CorrelationFilter`` to the
+    root logger so background-thread messages are tagged with a correlation
+    token.
+
+    This function is thread-safe: a lock ensures that concurrent
+    ``create_app()`` calls cannot both execute the setup body simultaneously.
+    """
+    global _logging_bootstrapped
+    # Fast path: no locking overhead after first successful bootstrap.
+    if _logging_bootstrapped:
+        return
+    with _logging_bootstrap_lock:
+        # Re-check inside the lock to handle concurrent first callers.
+        if _logging_bootstrapped:
+            return
+
+        root_logger = logging.getLogger()
+
+        # Set level unconditionally – idempotent and cheap.
+        root_logger.setLevel(logging.INFO)
+
+        # Only add our StreamHandler when the root logger has no handlers yet,
+        # to avoid duplicating output when a test framework (or the host process)
+        # already installed its own handler.
+        if not root_logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(
+                logging.Formatter(
+                    fmt="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                )
+            )
+            root_logger.addHandler(handler)
+
+        # Attach the correlation filter exactly once.
+        if not any(isinstance(f, CorrelationFilter) for f in root_logger.filters):
+            root_logger.addFilter(CorrelationFilter())
+
+        _logging_bootstrapped = True
 
 
 def create_app(*, testing: bool = False) -> Flask:
@@ -56,18 +110,8 @@ def create_app(*, testing: bool = False) -> Flask:
     CSRFProtect(app)
     limiter.init_app(app)
 
-    # Set up logging
-    # Set up logging with correlation ID support.
-    # The CorrelationFilter prepends [token=...] to messages from background
-    # generation threads, so no special format field is needed.
-    root_logger = logging.getLogger()
-    if not any(isinstance(f, CorrelationFilter) for f in root_logger.filters):
-        root_logger.addFilter(CorrelationFilter())
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    # Bootstrap logging once, idempotently (safe for repeated create_app calls).
+    _bootstrap_logging()
     logger = logging.getLogger(__name__)
 
     if testing:
