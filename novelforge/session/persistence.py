@@ -238,6 +238,37 @@ def load_session_state() -> dict | None:
         return None
 
 
+def rebuild_stale_progress(
+    completed_chapters: list,
+    total_chapters: int,
+    progress_token: str,
+) -> dict:
+    """Rebuild a completed-generation progress snapshot and persist it to the
+    in-memory store.
+
+    Called from the session-restore path so that recovery happens once, in a
+    dedicated lifecycle hook, rather than on every GET /.
+
+    Returns the rebuilt progress dict.
+    """
+    rebuilt = {
+        "status": "done",
+        "current": len(completed_chapters),
+        "total": total_chapters or len(completed_chapters),
+        "step": "Complete",
+        "chapters_done": completed_chapters,
+        "error": None,
+    }
+    with _progress_lock:
+        _progress_store[progress_token] = rebuilt
+    logger.info(
+        "Rebuilt stale progress snapshot for token %s (%d chapters)",
+        progress_token,
+        len(completed_chapters),
+    )
+    return rebuilt
+
+
 def restore_session_from_state(state: dict) -> None:
     """
     Restore session and progress store from saved state dict.
@@ -267,11 +298,19 @@ def restore_session_from_state(state: dict) -> None:
     session["illustrations"] = state.get("illustrations", [])
     session["voice_seed"] = state.get("voice_seed", {})
 
-    # Restore progress store if available
-    if "progress_data" in state and state.get("progress_token"):
-        token = state["progress_token"]
-        with _progress_lock:
-            _progress_store[token] = state["progress_data"]
+    # Restore progress store if available, rebuilding stale snapshots in one place
+    token = state.get("progress_token", "")
+    pd = state.get("progress_data")
+    completed = state.get("completed_chapters", [])
+    if token:
+        if completed and (
+            not pd
+            or (pd.get("status") == "running" and not pd.get("_live"))
+        ):
+            rebuild_stale_progress(completed, state.get("chapters", 0), token)
+        elif pd:
+            with _progress_lock:
+                _progress_store[token] = pd
 
     logger.info("Restored session from saved state")
 
