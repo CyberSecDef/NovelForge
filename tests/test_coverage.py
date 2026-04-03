@@ -214,22 +214,22 @@ class TestLLMClientEdgeCases:
             parse_llm_json("This is not JSON at all")
 
     def test_friendly_error_timeout(self):
-        from novelforge.llm.client import _friendly_llm_error
+        from novelforge.llm.client import friendly_llm_error
         err = RuntimeError("LLM_TIMEOUT: The AI service is taking too long.")
-        msg = _friendly_llm_error(err)
+        msg = friendly_llm_error(err)
         assert "taking too long" in msg
         assert "LLM_TIMEOUT" not in msg
 
     def test_friendly_error_auth(self):
-        from novelforge.llm.client import _friendly_llm_error
+        from novelforge.llm.client import friendly_llm_error
         err = RuntimeError("LLM_AUTH_FAILURE: API key rejected.")
-        msg = _friendly_llm_error(err)
+        msg = friendly_llm_error(err)
         assert "API key rejected" in msg
 
     def test_friendly_error_unknown(self):
-        from novelforge.llm.client import _friendly_llm_error
+        from novelforge.llm.client import friendly_llm_error
         err = RuntimeError("Something unexpected")
-        msg = _friendly_llm_error(err)
+        msg = friendly_llm_error(err)
         assert "went wrong" in msg
 
     def test_circuit_breaker_lifecycle(self):
@@ -257,9 +257,9 @@ class TestLLMClientEdgeCases:
         assert cb.failure_count == 0
 
     def test_usage_tracking(self):
-        from novelforge.llm.client import _reset_llm_usage, _get_llm_usage
-        _reset_llm_usage()
-        usage = _get_llm_usage()
+        from novelforge.llm.client import reset_llm_usage, get_llm_usage
+        reset_llm_usage()
+        usage = get_llm_usage()
         assert usage["prompt_tokens"] == 0
         assert usage["completion_tokens"] == 0
         assert usage["total_tokens"] == 0

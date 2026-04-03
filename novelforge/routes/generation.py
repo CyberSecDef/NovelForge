@@ -17,9 +17,9 @@ from novelforge.progress import (
     set_correlation_token, clear_correlation_token,
 )
 from novelforge.llm.client import (
-    call_llm, parse_llm_json, _friendly_llm_error,
-    _reset_llm_usage, _get_llm_usage, _llm_circuit_breaker,
-    _llm_circuit_breakers, _get_circuit_breaker,
+    call_llm, parse_llm_json, friendly_llm_error,
+    reset_llm_usage, get_llm_usage,
+    reset_circuit_breakers,
     CircuitBreakerError, ChapterTimeoutError, ContentRejectionError,
     AllProvidersExhaustedError, PER_CHAPTER_TIMEOUT,
 )
@@ -50,7 +50,7 @@ from novelforge.agents.chapter import (
     _run_all_chapter_agents, ChapterContext,
 )
 from novelforge.session.persistence import (
-    get_session_id, save_session_state, _persist_completed_chapters,
+    get_session_id, save_session_state, persist_completed_chapters,
 )
 
 logger = logging.getLogger(__name__)
@@ -228,9 +228,8 @@ def _run_chapter_generation_internal(
     perspective_prompt = build_perspective_prompt(snap.get("narrative_perspective", "third_person"))
 
     # Reset circuit breakers for all providers at the start of generation
-    for cb in _llm_circuit_breakers.values():
-        cb.reset()
-    _reset_llm_usage()
+    reset_circuit_breakers()
+    reset_llm_usage()
     set_correlation_token(token)
 
     def _set_step(step_label: str) -> None:
@@ -256,7 +255,7 @@ def _run_chapter_generation_internal(
         for idx, ch in enumerate(chapter_list[start_idx:], start=start_idx):
             chapter_deadline = time.monotonic() + PER_CHAPTER_TIMEOUT
             chapter_start_time = time.monotonic()
-            _reset_llm_usage()
+            reset_llm_usage()
             chapter_num = ch.get("number", idx + 1)
             chapter_title = ch.get("title", f"Chapter {chapter_num}")
             chapter_outline_summary = ch.get("summary", "")
@@ -373,7 +372,7 @@ def _run_chapter_generation_internal(
             )
 
             chapter_elapsed = round(time.monotonic() - chapter_start_time, 1)
-            chapter_usage = _get_llm_usage()
+            chapter_usage = get_llm_usage()
             chapter_word_count = len(text.split())
 
             chapters_done.append({
@@ -397,7 +396,7 @@ def _run_chapter_generation_internal(
 
             session_id = snap.get("session_id")
             if session_id:
-                _persist_completed_chapters(session_id, chapters_done, token)
+                persist_completed_chapters(session_id, chapters_done, token)
 
         # --- Final consistency pass ---
         with _progress_lock:
@@ -615,7 +614,7 @@ def _run_chapter_generation_internal(
 
         session_id = snap.get("session_id")
         if session_id:
-            _persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(session_id, chapters_done, token)
 
     except ContentRejectionError as exc:
         logger.error(
@@ -633,7 +632,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error_code"] = "content_rejection"
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: content policy rejection")
 
     except ChapterTimeoutError as exc:
@@ -644,7 +643,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error_code"] = "chapter_timeout"
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(session_id, chapters_done, token)
         _set_step(f"Error: {exc}")
 
     except CircuitBreakerError as exc:
@@ -658,7 +657,7 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error_code"] = "circuit_breaker"
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: LLM API circuit breaker tripped")
 
     except AllProvidersExhaustedError as exc:
@@ -673,17 +672,17 @@ def _run_chapter_generation_internal(
             _progress_store[token]["error_code"] = "all_providers_exhausted"
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: all LLM providers exhausted")
 
     except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.error("Chapter generation failed for token %s: %s", token, exc)
         with _progress_lock:
             _progress_store[token]["status"] = "error"
-            _progress_store[token]["error"] = _friendly_llm_error(exc)
+            _progress_store[token]["error"] = friendly_llm_error(exc)
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            _persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(session_id, chapters_done, token)
         _set_step(f"Error: {str(exc)}")
 
     finally:
@@ -853,7 +852,7 @@ def revise_chapter() -> Response | tuple[Response, int]:
         }), 502
     except RuntimeError as exc:
         logger.error("Chapter revision failed for token %s: %s", token, exc)
-        return jsonify({"error": _friendly_llm_error(exc)}), 502
+        return jsonify({"error": friendly_llm_error(exc)}), 502
 
 
 @generation_bp.route("/progress/<token>")

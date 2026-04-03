@@ -2,7 +2,7 @@
 Session persistence tests for NovelForge.
 
 Tests the full save → crash-simulate → load → restore cycle,
-including partial generation state, _persist_completed_chapters
+including partial generation state, persist_completed_chapters
 from background threads, and clear/delete operations.
 """
 
@@ -250,12 +250,12 @@ class TestCrashRecovery:
 
 
 class TestPersistCompletedChapters:
-    """Test _persist_completed_chapters called from background threads."""
+    """Test persist_completed_chapters called from background threads."""
 
     def test_incremental_persist(self, app):
         """Simulate background thread persisting chapters one at a time."""
         from novelforge.session.persistence import (
-            save_session_state, _persist_completed_chapters, get_session_id,
+            save_session_state, persist_completed_chapters, get_session_id,
         )
 
         with app.test_request_context():
@@ -279,7 +279,7 @@ class TestPersistCompletedChapters:
         # Simulate background thread persisting chapters incrementally
         for i in range(1, 6):
             chapters_so_far = _make_chapters(i)
-            _persist_completed_chapters(session_id, chapters_so_far)
+            persist_completed_chapters(session_id, chapters_so_far)
 
             # Verify file updated
             state = json.loads(session_file.read_text())
@@ -295,9 +295,9 @@ class TestPersistCompletedChapters:
 
     def test_persist_to_nonexistent_file(self):
         """Persisting to a missing session file should not crash."""
-        from novelforge.session.persistence import _persist_completed_chapters
+        from novelforge.session.persistence import persist_completed_chapters
         # Should silently return without error
-        _persist_completed_chapters("nonexistent-uuid", _make_chapters(3))
+        persist_completed_chapters("nonexistent-uuid", _make_chapters(3))
 
 
 class TestClearSession:
