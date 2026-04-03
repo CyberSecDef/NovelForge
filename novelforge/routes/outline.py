@@ -165,6 +165,9 @@ def generate_outline() -> Response | tuple[Response, int]:
         session["theme_reinforcement"] = theme_reinforcement
         session["pov_focal_character_plan"] = pov_focal_character_plan
 
+        # Auto-save session state after outline generation for crash recovery
+        save_session_state()
+
         return jsonify({
             "title": title,
             "chapters": chapter_list,

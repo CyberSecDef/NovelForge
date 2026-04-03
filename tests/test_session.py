@@ -410,3 +410,110 @@ class TestLoadSessionViaRoute:
 
         # Cleanup
         (Path(config.NOVELS_DIR) / f"{session_id}.json").unlink(missing_ok=True)
+
+
+class TestGenerateOutlinePersistence:
+    """Verify that /generate_outline persists session state immediately."""
+
+    def test_session_file_created_after_generate_outline(self, client, mock_llm):
+        """A session file must exist on disk after a successful /generate_outline."""
+        from novelforge.session.persistence import get_session_id
+
+        r = client.post(
+            "/generate_outline",
+            data=json.dumps({
+                "premise": "A hero discovers a hidden world",
+                "genre": "Fantasy",
+                "chapters": 3,
+                "word_count": 10000,
+            }),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+
+        with client.session_transaction() as sess:
+            session_id = sess.get("session_id")
+
+        assert session_id is not None
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+        assert session_file.exists(), "Session file must be created after /generate_outline"
+
+        state = json.loads(session_file.read_text())
+        assert state["title"] != ""
+        assert len(state["chapter_list"]) == 3
+        assert len(state["character_list"]) >= 1
+        assert state["genre"] == "Fantasy"
+
+        # Cleanup
+        session_file.unlink(missing_ok=True)
+
+    def test_generate_outline_state_is_recoverable(self, client, mock_llm):
+        """State persisted after /generate_outline can be restored without /approve_outline."""
+        from novelforge.session.persistence import restore_session_from_state
+
+        r = client.post(
+            "/generate_outline",
+            data=json.dumps({
+                "premise": "A detective solves an ancient mystery",
+                "genre": "Mystery",
+                "chapters": 3,
+                "word_count": 20000,
+            }),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+
+        with client.session_transaction() as sess:
+            session_id = sess.get("session_id")
+
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+        assert session_file.exists()
+
+        state = json.loads(session_file.read_text())
+
+        # Verify all expected planning artifacts are persisted
+        assert state["story_architecture"] != {}
+        assert state["master_timeline"] != {}
+        assert state["character_arc_plan"] != {}
+        assert state["technology_rules"] != {}
+        assert state["theme_reinforcement"] != {}
+        assert state["pov_focal_character_plan"] != {}
+        assert isinstance(state["voice_seed"], dict)
+
+        # Simulate restart: restore session from the persisted file
+        with client.application.test_request_context():
+            import flask
+            restore_session_from_state(state)
+            sess = flask.session
+            assert sess["title"] == state["title"]
+            assert sess["genre"] == "Mystery"
+            assert len(sess["chapter_list"]) == len(state["chapter_list"])
+            assert len(sess["character_list"]) == len(state["character_list"])
+
+        # Cleanup
+        session_file.unlink(missing_ok=True)
+
+    def test_generate_outline_persists_voice_seed(self, client, mock_llm):
+        """The voice seed selected during outline generation is persisted."""
+        r = client.post(
+            "/generate_outline",
+            data=json.dumps({
+                "premise": "A romance across time",
+                "genre": "Romance",
+                "chapters": 3,
+                "word_count": 15000,
+            }),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+
+        with client.session_transaction() as sess:
+            session_id = sess.get("session_id")
+
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+        state = json.loads(session_file.read_text())
+        assert isinstance(state["voice_seed"], dict)
+        assert state["voice_seed"] != {}
+
+        # Cleanup
+        session_file.unlink(missing_ok=True)
