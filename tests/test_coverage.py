@@ -451,6 +451,83 @@ class TestPromptsLoading:
         p2 = _load_prompts()
         assert p1 is p2  # Same object — cached
 
+    # ------------------------------------------------------------------
+    # Schema-validation tests (exercise _validate_prompts directly)
+    # ------------------------------------------------------------------
+
+    def test_validate_missing_name_raises(self):
+        from novelforge.llm.prompts import _validate_prompts
+        with pytest.raises(ValueError, match="missing required field 'name'"):
+            _validate_prompts([{"system": "sys", "user": "usr"}])
+
+    def test_validate_missing_system_raises(self):
+        from novelforge.llm.prompts import _validate_prompts
+        with pytest.raises(ValueError, match="missing required field 'system'"):
+            _validate_prompts([{"name": "x", "user": "usr"}])
+
+    def test_validate_missing_user_raises(self):
+        from novelforge.llm.prompts import _validate_prompts
+        with pytest.raises(ValueError, match="missing required field 'user'"):
+            _validate_prompts([{"name": "x", "system": "sys"}])
+
+    def test_validate_non_string_field_raises(self):
+        from novelforge.llm.prompts import _validate_prompts
+        with pytest.raises(ValueError, match="field 'system' must be a string"):
+            _validate_prompts([{"name": "x", "system": 42, "user": "usr"}])
+
+    def test_validate_non_dict_entry_raises(self):
+        from novelforge.llm.prompts import _validate_prompts
+        with pytest.raises(ValueError, match="must be a mapping"):
+            _validate_prompts(["not-a-dict"])
+
+    def test_validate_duplicate_name_raises(self):
+        from novelforge.llm.prompts import _validate_prompts
+        entries = [
+            {"name": "dup", "system": "s1", "user": "u1"},
+            {"name": "dup", "system": "s2", "user": "u2"},
+        ]
+        with pytest.raises(ValueError, match="duplicate prompt name 'dup'"):
+            _validate_prompts(entries)
+
+    def test_validate_valid_entries_returns_dict(self):
+        from novelforge.llm.prompts import _validate_prompts
+        entries = [
+            {"name": "a", "system": "sys_a", "user": "usr_a"},
+            {"name": "b", "system": "sys_b", "user": "usr_b"},
+        ]
+        result = _validate_prompts(entries)
+        assert set(result.keys()) == {"a", "b"}
+        assert result["a"]["system"] == "sys_a"
+
+    def test_load_prompts_rejects_non_list_prompts_key(self, monkeypatch):
+        import novelforge.llm.prompts as prompts_mod
+        monkeypatch.setattr(prompts_mod, "_prompts_cache", None)
+        import yaml
+        monkeypatch.setattr(
+            yaml,
+            "safe_load",
+            lambda _f: {"prompts": "not-a-list"},
+        )
+        with pytest.raises(ValueError, match="'prompts' key must be a list"):
+            prompts_mod._load_prompts()
+
+    def test_load_prompts_validates_on_load(self, monkeypatch):
+        import novelforge.llm.prompts as prompts_mod
+        monkeypatch.setattr(prompts_mod, "_prompts_cache", None)
+        import yaml
+        monkeypatch.setattr(
+            yaml,
+            "safe_load",
+            lambda _f: {
+                "prompts": [
+                    {"name": "dup", "system": "s", "user": "u"},
+                    {"name": "dup", "system": "s2", "user": "u2"},
+                ]
+            },
+        )
+        with pytest.raises(ValueError, match="duplicate prompt name"):
+            prompts_mod._load_prompts()
+
 
 # ---------------------------------------------------------------------------
 # Session routes coverage
