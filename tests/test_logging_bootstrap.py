@@ -4,7 +4,12 @@ import logging
 
 import pytest
 
-from novelforge.progress import CorrelationFilter
+from novelforge.progress import (
+    CorrelationFilter,
+    CorrelationFormatter,
+    set_correlation_token,
+    clear_correlation_token,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -185,3 +190,119 @@ class TestRepeatedCreateApp:
         finally:
             root.setLevel(original_level)
             root.filters = original_filters
+
+
+# ---------------------------------------------------------------------------
+# CorrelationFilter structured-metadata tests
+# ---------------------------------------------------------------------------
+
+def _make_record(msg: str = "test message") -> logging.LogRecord:
+    """Return a minimal LogRecord with the given message."""
+    return logging.LogRecord(
+        name="test.logger",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=0,
+        msg=msg,
+        args=(),
+        exc_info=None,
+    )
+
+
+class TestCorrelationFilterStructuredMetadata:
+    """CorrelationFilter must attach token as metadata without mutating record.msg."""
+
+    def setup_method(self):
+        clear_correlation_token()
+
+    def teardown_method(self):
+        clear_correlation_token()
+
+    def test_msg_not_mutated_when_token_set(self):
+        set_correlation_token("tok-001")
+        record = _make_record("original message")
+        original_msg = record.msg
+
+        cf = CorrelationFilter()
+        cf.filter(record)
+
+        assert record.msg == original_msg, (
+            "CorrelationFilter must not modify record.msg"
+        )
+
+    def test_msg_not_mutated_when_no_token(self):
+        record = _make_record("no token here")
+        original_msg = record.msg
+
+        cf = CorrelationFilter()
+        cf.filter(record)
+
+        assert record.msg == original_msg
+
+    def test_correlation_token_attribute_set_when_token_present(self):
+        set_correlation_token("tok-abc")
+        record = _make_record()
+
+        CorrelationFilter().filter(record)
+
+        assert record.correlation_token == "tok-abc"  # type: ignore[attr-defined]
+
+    def test_correlation_token_attribute_empty_when_no_token(self):
+        record = _make_record()
+
+        CorrelationFilter().filter(record)
+
+        assert record.correlation_token == ""  # type: ignore[attr-defined]
+
+    def test_no_double_prefixing_with_multiple_filter_passes(self):
+        """Applying the filter multiple times (e.g. multiple handlers) must not duplicate."""
+        set_correlation_token("tok-dup")
+        record = _make_record("some log line")
+        original_msg = record.msg
+
+        cf = CorrelationFilter()
+        cf.filter(record)
+        cf.filter(record)
+        cf.filter(record)
+
+        assert record.msg == original_msg, (
+            "Multiple filter passes must not duplicate content in record.msg"
+        )
+        assert record.correlation_token == "tok-dup"  # type: ignore[attr-defined]
+
+    def test_token_present_in_formatted_output(self):
+        """CorrelationFormatter renders the token in formatted text without mutating msg."""
+        set_correlation_token("tok-fmt")
+        record = _make_record("hello world")
+
+        CorrelationFilter().filter(record)
+        formatter = CorrelationFormatter(fmt="%(correlation_token)s %(message)s")
+        output = formatter.format(record)
+
+        assert "tok-fmt" in output, "Formatted output must contain the correlation token"
+        assert "hello world" in output, "Formatted output must contain the original message"
+        assert record.msg == "hello world", "record.msg must not be mutated after formatting"
+
+    def test_formatter_output_unchanged_when_no_token(self):
+        """CorrelationFormatter output is identical to base Formatter when no token is set."""
+        record = _make_record("plain message")
+
+        CorrelationFilter().filter(record)
+        fmt_str = "%(message)s"
+        result = CorrelationFormatter(fmt=fmt_str).format(record)
+        expected = logging.Formatter(fmt=fmt_str).format(record)
+
+        assert result == expected
+
+    def test_formatter_does_not_leave_record_mutated(self):
+        """CorrelationFormatter.format() must restore record state even after rendering."""
+        set_correlation_token("tok-restore")
+        record = _make_record("restore check")
+
+        CorrelationFilter().filter(record)
+        formatter = CorrelationFormatter(fmt="%(message)s")
+        formatter.format(record)
+
+        # After formatting the record.msg and record.args must be untouched.
+        assert record.msg == "restore check"
+        assert record.args == ()
