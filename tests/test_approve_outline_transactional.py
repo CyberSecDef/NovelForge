@@ -149,7 +149,7 @@ class TestApproveOutlineTransactionalGroup1Failure:
             data=json.dumps(_approve_payload(title="Should Not Stick")),
             content_type="application/json",
         )
-        # The route must return an error (500 from the unhandled RuntimeError)
+        # The route must return a 502 error (handled RuntimeError)
         assert r.status_code == 502
 
         after = _read_session(client)

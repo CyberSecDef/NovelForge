@@ -299,17 +299,17 @@ def approve_outline() -> Response | tuple[Response, int]:
     working["narrative_perspective"] = narrative_perspective
 
     # Helper: read a key from the working copy, falling back to the live session
-    def _w(key: str, default: object = "") -> object:
+    def _from_working(key: str, default: object = "") -> object:
         return working.get(key, session.get(key, default))
 
     # Common kwargs shared by all planning agents (use working-copy values so
     # rename propagation is reflected even before session is committed)
-    _title = str(_w("title"))
-    _premise = str(_w("premise"))
-    _genre = str(_w("genre", ""))
-    _chapters = list(_w("chapter_list", []))  # type: ignore[arg-type]
-    _characters = list(_w("character_list", []))  # type: ignore[arg-type]
-    _instructions = str(_w("special_instructions"))
+    _title = str(_from_working("title"))
+    _premise = str(_from_working("premise"))
+    _genre = str(_from_working("genre", ""))
+    _chapters = list(_from_working("chapter_list", []))  # type: ignore[arg-type]
+    _characters = list(_from_working("character_list", []))  # type: ignore[arg-type]
+    _instructions = str(_from_working("special_instructions"))
     common = dict(
         title=_title, premise=_premise, genre=_genre,
         chapter_list=_chapters, special_instructions=_instructions,
