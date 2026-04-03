@@ -273,7 +273,7 @@ class TestConcurrentGenerationRequests:
         with _progress_lock:
             _progress_store.clear()
 
-    def _seed(self, client):
+    def _setup_session_data(self, client):
         with client.session_transaction() as sess:
             sess["premise"] = "A test"
             sess["genre"] = "Fantasy"
@@ -302,7 +302,7 @@ class TestConcurrentGenerationRequests:
         monkeypatch.setattr(gen_mod.threading, "Thread",
                             lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
 
-        self._seed(client)
+        self._setup_session_data(client)
         r = client.post("/generate_chapters", data=json.dumps({}),
                         content_type="application/json")
         assert r.status_code == 200
@@ -318,7 +318,7 @@ class TestConcurrentGenerationRequests:
         monkeypatch.setattr(gen_mod.threading, "Thread",
                             lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
 
-        self._seed(client)
+        self._setup_session_data(client)
         r1 = client.post("/generate_chapters", data=json.dumps({}),
                          content_type="application/json")
         assert r1.status_code == 200
@@ -344,7 +344,7 @@ class TestConcurrentGenerationRequests:
         monkeypatch.setattr(gen_mod.threading, "Thread",
                             lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
 
-        self._seed(client)
+        self._setup_session_data(client)
         r1 = client.post("/generate_chapters", data=json.dumps({}),
                          content_type="application/json")
         assert r1.status_code == 200
@@ -354,7 +354,7 @@ class TestConcurrentGenerationRequests:
         with _progress_lock:
             _progress_store[token1]["status"] = "done"
 
-        self._seed(client)
+        # Session data persists; no need to re-seed before the second request
         r2 = client.post("/generate_chapters", data=json.dumps({}),
                          content_type="application/json")
         assert r2.status_code == 200
@@ -371,7 +371,7 @@ class TestConcurrentGenerationRequests:
         monkeypatch.setattr(gen_mod.threading, "Thread",
                             lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
 
-        self._seed(client)
+        self._setup_session_data(client)
         responses = []
         for _ in range(5):
             r = client.post("/generate_chapters", data=json.dumps({}),
