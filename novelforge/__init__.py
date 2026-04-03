@@ -13,7 +13,7 @@ from flask_session import Session
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 
 import novelforge.config as config
-from novelforge.progress import _progress_store, _progress_lock, CorrelationFilter
+from novelforge.progress import _progress_store, _progress_lock, CorrelationFilter, CorrelationFormatter
 from novelforge.routes import register_blueprints
 
 # Module-level limiter, initialised without app (attached in create_app)
@@ -59,7 +59,7 @@ def _bootstrap_logging() -> None:
             handler = logging.StreamHandler()
             handler.setLevel(logging.INFO)
             handler.setFormatter(
-                logging.Formatter(
+                CorrelationFormatter(
                     fmt="%(asctime)s %(levelname)s [%(name)s] %(message)s",
                     datefmt="%Y-%m-%d %H:%M:%S",
                 )
