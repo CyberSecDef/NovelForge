@@ -139,9 +139,8 @@ def create_app(*, testing: bool = False) -> Flask:
                     "error": None,
                 }
                 session_data["progress_data"] = rebuilt
-                if token:
-                    with _progress_lock:
-                        _progress_store[token] = rebuilt
+                # Progress-store recovery is handled in restore_session_from_state(),
+                # not here, so that GET / remains free of write side-effects.
 
             illustrations = sess.get("illustrations", [])
             if illustrations:

@@ -114,6 +114,59 @@ class TestRoutes:
         assert r.status_code == 200
         assert b"NovelForge" in r.data
 
+    def test_index_does_not_mutate_progress_store_with_stale_progress(self, client):
+        """GET / must not write to _progress_store even when progress is stale."""
+        from novelforge.progress import _progress_store, _progress_lock
+
+        token = "test-index-no-write-stale"
+        with _progress_lock:
+            _progress_store[token] = {
+                "status": "running",
+                "current": 3,
+                "total": 5,
+                "step": "Chapter 3: drafting",
+                "chapters_done": [{"number": i + 1} for i in range(3)],
+            }
+
+        try:
+            with client.session_transaction() as sess:
+                sess["title"] = "Test Novel"
+                sess["progress_token"] = token
+                sess["chapters"] = 5
+                sess["completed_chapters"] = [{"number": i + 1} for i in range(5)]
+
+            with _progress_lock:
+                store_snapshot = {k: dict(v) for k, v in _progress_store.items()}
+
+            r = client.get("/")
+            assert r.status_code == 200
+
+            with _progress_lock:
+                store_after = {k: dict(v) for k, v in _progress_store.items()}
+            assert store_after == store_snapshot, "GET / must not mutate _progress_store"
+        finally:
+            with _progress_lock:
+                _progress_store.pop(token, None)
+
+    def test_index_does_not_insert_into_progress_store_without_token(self, client):
+        """GET / must not insert new keys into _progress_store when no token."""
+        from novelforge.progress import _progress_store, _progress_lock
+
+        with client.session_transaction() as sess:
+            sess["title"] = "No Token Novel"
+            sess["chapters"] = 3
+            sess["completed_chapters"] = [{"number": i + 1} for i in range(3)]
+
+        with _progress_lock:
+            before_keys = set(_progress_store.keys())
+
+        r = client.get("/")
+        assert r.status_code == 200
+
+        with _progress_lock:
+            after_keys = set(_progress_store.keys())
+        assert after_keys == before_keys, "GET / must not insert into _progress_store"
+
     def test_generate_outline_empty_body(self, client):
         r = client.post(
             "/generate_outline",

@@ -517,3 +517,223 @@ class TestGenerateOutlinePersistence:
 
         # Cleanup
         session_file.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# rebuild_stale_progress tests
+# ---------------------------------------------------------------------------
+
+class TestRebuildStaleProgress:
+    """Tests for the rebuild_stale_progress helper in persistence."""
+
+    def test_rebuilds_from_completed_chapters(self):
+        """rebuild_stale_progress returns a 'done' snapshot and updates the store."""
+        from novelforge.session.persistence import rebuild_stale_progress
+
+        token = "rebuild-test-basic"
+        chapters = [{"number": i + 1, "title": f"Ch{i + 1}"} for i in range(5)]
+        try:
+            result = rebuild_stale_progress(chapters, 5, token)
+
+            assert result["status"] == "done"
+            assert result["current"] == 5
+            assert result["total"] == 5
+            assert result["step"] == "Complete"
+            assert result["chapters_done"] == chapters
+            assert result["error"] is None
+
+            with _progress_lock:
+                stored = _progress_store.get(token)
+            assert stored == result
+        finally:
+            with _progress_lock:
+                _progress_store.pop(token, None)
+
+    def test_uses_total_chapters_param(self):
+        """total_chapters parameter is reflected in the rebuilt snapshot."""
+        from novelforge.session.persistence import rebuild_stale_progress
+
+        token = "rebuild-test-total"
+        chapters = [{"number": 1}]
+        try:
+            result = rebuild_stale_progress(chapters, 10, token)
+            assert result["total"] == 10
+        finally:
+            with _progress_lock:
+                _progress_store.pop(token, None)
+
+    def test_fallback_total_when_zero(self):
+        """When total_chapters is 0, total falls back to len(completed_chapters)."""
+        from novelforge.session.persistence import rebuild_stale_progress
+
+        token = "rebuild-test-fallback"
+        chapters = [{"number": i + 1} for i in range(4)]
+        try:
+            result = rebuild_stale_progress(chapters, 0, token)
+            assert result["total"] == 4
+        finally:
+            with _progress_lock:
+                _progress_store.pop(token, None)
+
+
+# ---------------------------------------------------------------------------
+# restore_session_from_state: stale-progress rebuild tests
+# ---------------------------------------------------------------------------
+
+class TestRestoreSessionRebuildsBrokenProgress:
+    """restore_session_from_state must rebuild stale progress, not leave it as-is."""
+
+    def test_restore_rebuilds_stale_running_progress(self, app):
+        """Stale 'running' progress (no _live flag) is rebuilt to 'done' on restore."""
+        from novelforge.session.persistence import restore_session_from_state
+
+        token = "restore-stale-running"
+        chapters = _make_chapters(5)
+        state = {
+            "title": "Stale Running Novel",
+            "premise": "Test",
+            "genre": "Fantasy",
+            "chapters": 5,
+            "word_count": 5000,
+            "progress_token": token,
+            "completed_chapters": chapters,
+            "progress_data": {
+                "status": "running",
+                "current": 3,
+                "total": 5,
+                "step": "Chapter 3: drafting",
+                "chapters_done": chapters[:3],
+                # No "_live" flag → stale snapshot
+            },
+        }
+
+        with app.test_request_context():
+            with _progress_lock:
+                _progress_store.pop(token, None)
+            restore_session_from_state(state)
+            with _progress_lock:
+                rebuilt = _progress_store.get(token)
+
+        try:
+            assert rebuilt is not None
+            assert rebuilt["status"] == "done"
+            assert rebuilt["current"] == 5
+            assert rebuilt["step"] == "Complete"
+            assert len(rebuilt["chapters_done"]) == 5
+        finally:
+            with _progress_lock:
+                _progress_store.pop(token, None)
+
+    def test_restore_rebuilds_when_no_progress_data(self, app):
+        """Missing progress_data with completed chapters triggers a rebuild."""
+        from novelforge.session.persistence import restore_session_from_state
+
+        token = "restore-no-pd"
+        chapters = _make_chapters(3)
+        state = {
+            "title": "Missing PD Novel",
+            "premise": "Test",
+            "genre": "Mystery",
+            "chapters": 3,
+            "word_count": 3000,
+            "progress_token": token,
+            "completed_chapters": chapters,
+            # No "progress_data" key
+        }
+
+        with app.test_request_context():
+            with _progress_lock:
+                _progress_store.pop(token, None)
+                assert token not in _progress_store, "token must be absent before restore"
+            restore_session_from_state(state)
+            with _progress_lock:
+                rebuilt = _progress_store.get(token)
+
+        try:
+            assert rebuilt is not None
+            assert rebuilt["status"] == "done"
+            assert len(rebuilt["chapters_done"]) == 3
+        finally:
+            with _progress_lock:
+                _progress_store.pop(token, None)
+
+    def test_restore_preserves_valid_progress_data(self, app):
+        """Valid (done) progress_data is stored as-is without a rebuild."""
+        from novelforge.session.persistence import restore_session_from_state
+
+        token = "restore-valid-pd"
+        chapters = _make_chapters(5)
+        done_pd = {
+            "status": "done",
+            "current": 5,
+            "total": 5,
+            "step": "Complete",
+            "chapters_done": chapters,
+            "error": None,
+            "extra_key": "preserved",
+        }
+        state = {
+            "title": "Done Novel",
+            "premise": "Test",
+            "genre": "Fantasy",
+            "chapters": 5,
+            "word_count": 5000,
+            "progress_token": token,
+            "completed_chapters": chapters,
+            "progress_data": done_pd,
+        }
+
+        with app.test_request_context():
+            with _progress_lock:
+                _progress_store.pop(token, None)
+            restore_session_from_state(state)
+            with _progress_lock:
+                stored = _progress_store.get(token)
+
+        try:
+            assert stored is not None
+            assert stored.get("extra_key") == "preserved"
+            assert stored["status"] == "done"
+        finally:
+            with _progress_lock:
+                _progress_store.pop(token, None)
+
+    def test_restore_preserves_live_running_progress(self, app):
+        """Running progress with _live=True is stored as-is (active generation)."""
+        from novelforge.session.persistence import restore_session_from_state
+
+        token = "restore-live-running"
+        chapters = _make_chapters(3)
+        live_pd = {
+            "status": "running",
+            "current": 3,
+            "total": 10,
+            "step": "Chapter 3: drafting",
+            "chapters_done": chapters,
+            "_live": True,
+        }
+        state = {
+            "title": "Live Running Novel",
+            "premise": "Test",
+            "genre": "Fantasy",
+            "chapters": 10,
+            "word_count": 10000,
+            "progress_token": token,
+            "completed_chapters": chapters,
+            "progress_data": live_pd,
+        }
+
+        with app.test_request_context():
+            with _progress_lock:
+                _progress_store.pop(token, None)
+            restore_session_from_state(state)
+            with _progress_lock:
+                stored = _progress_store.get(token)
+
+        try:
+            assert stored is not None
+            assert stored["status"] == "running"
+            assert stored.get("_live") is True
+        finally:
+            with _progress_lock:
+                _progress_store.pop(token, None)
