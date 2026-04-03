@@ -787,6 +787,8 @@ $(function () {
         _lastCompletedCount = 0;
         _chapterCompletionTimes = [];
         _generationStartTime = Date.now();
+        _latestFullData = {};
+        _lastFullFetchTime = 0;
         $("#progress-time-estimate").addClass("d-none").text("");
         _schedulePoll();
       },
@@ -804,6 +806,11 @@ $(function () {
   var _pollDelayMax = 60000;    // 60s ceiling
   var _lastPollStep = "";       // last observed step label
 
+  // Full-data fetch state
+  var _latestFullData = {};          // most recent full payload from /progress/<token>/full
+  var _lastFullFetchTime = 0;        // ms timestamp of the last full fetch
+  var _fullFetchIntervalMs = 120000; // fetch full data every 2 minutes
+
   // Time estimation state
   var _lastCompletedCount = 0;           // chapters completed at last poll
   var _chapterCompletionTimes = [];      // timestamps (ms) when each chapter finished
@@ -811,6 +818,47 @@ $(function () {
 
   function _schedulePoll() {
     _pollInterval = setTimeout(pollProgress, _pollDelay);
+  }
+
+  /**
+   * Fetch the full heavyweight payload from /progress/<token>/full.
+   * Updates _latestFullData, refreshes the chapter list, and calls
+   * showDoneStep if generation has finished.
+   */
+  function fetchFullProgress(onComplete) {
+    if (!_progressToken) return;
+    $.ajax({
+      url: "/progress/" + _progressToken + "/full",
+      method: "GET",
+      success: function (fullData) {
+        _latestFullData = fullData || {};
+        _lastFullFetchTime = Date.now();
+
+        // Refresh the chapter list with authoritative data
+        var $list = $("#chapter-progress-list");
+        $list.empty();
+        $.each(_latestFullData.chapters_done || [], function (_, ch) {
+          $list.append(
+            '<li class="list-group-item done-chapter">' +
+            '<i class="bi bi-check-circle-fill text-success me-2"></i>' +
+            "Chapter " + escapeHtml(ch.number) + ": " + escapeHtml(ch.title) +
+            "</li>"
+          );
+        });
+
+        if (typeof onComplete === "function") {
+          onComplete(_latestFullData);
+        }
+      },
+      error: function () {
+        // Full fetch failures are non-critical – lightweight polling continues unaffected.
+        // Update the timestamp so we don't hammer the server on repeated failures.
+        _lastFullFetchTime = Date.now();
+        if (typeof onComplete === "function") {
+          onComplete(_latestFullData);
+        }
+      },
+    });
   }
 
   function pollProgress() {
@@ -833,7 +881,8 @@ $(function () {
         updateProgressBar(current, total, step || null);
 
         // Track chapter completion times for ETA estimation
-        if (current > _lastCompletedCount && current <= total) {
+        var chapterJustCompleted = current > _lastCompletedCount && current <= total;
+        if (chapterJustCompleted) {
           var now = Date.now();
           // Record one timestamp per newly completed chapter
           for (var c = _lastCompletedCount; c < current; c++) {
@@ -851,20 +900,11 @@ $(function () {
         }
         _lastPollStep = step;
 
-        // Render completed chapters in list
-        var $list = $("#chapter-progress-list");
-        $list.empty();
-        $.each(data.chapters_done || [], function (_, ch) {
-          $list.append(
-            '<li class="list-group-item done-chapter">' +
-            '<i class="bi bi-check-circle-fill text-success me-2"></i>' +
-            "Chapter " + escapeHtml(ch.number) + ": " + escapeHtml(ch.title) +
-            "</li>"
-          );
-        });
-
         if (data.status === "done") {
-          showDoneStep(data);
+          // Generation complete – fetch full payload before showing results
+          fetchFullProgress(function (fullData) {
+            showDoneStep(fullData);
+          });
         } else if (data.status === "error") {
           if (data.error_code === "circuit_breaker") {
             showAlert(
@@ -878,6 +918,11 @@ $(function () {
           }
           showStep("#step-outline");
         } else {
+          // Trigger a full fetch when a chapter just completed or every 2 minutes
+          var timeSinceFullFetch = Date.now() - _lastFullFetchTime;
+          if (chapterJustCompleted || timeSinceFullFetch >= _fullFetchIntervalMs) {
+            fetchFullProgress();
+          }
           _schedulePoll();
         }
       },
