@@ -69,6 +69,18 @@ def generate_chapters() -> Response | tuple[Response, int]:
         if key not in session:
             return jsonify({"error": "Session data missing. Please start over."}), 400
 
+    # Guard against duplicate workers for the same session
+    existing_token = session.get("progress_token")
+    if existing_token:
+        with _progress_lock:
+            existing = _progress_store.get(existing_token)
+        if existing and existing.get("status") == "running":
+            return jsonify({
+                "error": "A chapter generation is already in progress for this session. Please wait for it to complete.",
+                "error_code": "generation_in_progress",
+                "token": existing_token,
+            }), 409
+
     token = str(uuid.uuid4())
     with _progress_lock:
         _progress_store[token] = {

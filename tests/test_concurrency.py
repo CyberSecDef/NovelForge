@@ -273,54 +273,116 @@ class TestConcurrentGenerationRequests:
         with _progress_lock:
             _progress_store.clear()
 
-    def test_two_generation_requests_get_different_tokens(self, client, monkeypatch):
-        """Two POST /generate_chapters requests should produce different tokens."""
-        # Prevent background threads from spawning — we only test token creation
+    def _seed(self, client):
+        with client.session_transaction() as sess:
+            sess["premise"] = "A test"
+            sess["genre"] = "Fantasy"
+            sess["chapters"] = 3
+            sess["word_count"] = 10000
+            sess["title"] = "Test"
+            sess["chapter_list"] = [
+                {"number": 1, "title": "Ch1", "summary": "S1"},
+                {"number": 2, "title": "Ch2", "summary": "S2"},
+                {"number": 3, "title": "Ch3", "summary": "S3"},
+            ]
+            sess["character_list"] = []
+            sess["special_instructions"] = ""
+            sess["story_architecture"] = {}
+            sess["master_timeline"] = {}
+            sess["character_fate_registry"] = {}
+            sess["character_arc_plan"] = {}
+            sess["antagonist_motivation_plan"] = {}
+            sess["technology_rules"] = {}
+            sess["theme_reinforcement"] = {}
+            sess["pov_focal_character_plan"] = {}
+
+    def test_first_generation_request_succeeds(self, client, monkeypatch):
+        """First POST /generate_chapters should return 200 with a token."""
         import novelforge.routes.generation as gen_mod
         monkeypatch.setattr(gen_mod.threading, "Thread",
                             lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
 
-        def seed():
-            with client.session_transaction() as sess:
-                sess["premise"] = "A test"
-                sess["genre"] = "Fantasy"
-                sess["chapters"] = 3
-                sess["word_count"] = 10000
-                sess["title"] = "Test"
-                sess["chapter_list"] = [
-                    {"number": 1, "title": "Ch1", "summary": "S1"},
-                    {"number": 2, "title": "Ch2", "summary": "S2"},
-                    {"number": 3, "title": "Ch3", "summary": "S3"},
-                ]
-                sess["character_list"] = []
-                sess["special_instructions"] = ""
-                sess["story_architecture"] = {}
-                sess["master_timeline"] = {}
-                sess["character_fate_registry"] = {}
-                sess["character_arc_plan"] = {}
-                sess["antagonist_motivation_plan"] = {}
-                sess["technology_rules"] = {}
-                sess["theme_reinforcement"] = {}
-                sess["pov_focal_character_plan"] = {}
+        self._seed(client)
+        r = client.post("/generate_chapters", data=json.dumps({}),
+                        content_type="application/json")
+        assert r.status_code == 200
+        token = r.get_json()["token"]
+        assert token
+        with _progress_lock:
+            assert token in _progress_store
+            assert _progress_store[token]["status"] == "running"
 
-        seed()
+    def test_duplicate_generation_request_blocked_with_409(self, client, monkeypatch):
+        """Second POST /generate_chapters while first is still running returns 409."""
+        import novelforge.routes.generation as gen_mod
+        monkeypatch.setattr(gen_mod.threading, "Thread",
+                            lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+
+        self._seed(client)
         r1 = client.post("/generate_chapters", data=json.dumps({}),
                          content_type="application/json")
         assert r1.status_code == 200
         token1 = r1.get_json()["token"]
 
-        seed()
+        # Second request from same session while first is still "running"
+        r2 = client.post("/generate_chapters", data=json.dumps({}),
+                         content_type="application/json")
+        assert r2.status_code == 409
+        body2 = r2.get_json()
+        assert body2["error_code"] == "generation_in_progress"
+        # Returns the existing token so the client can attach to it
+        assert body2["token"] == token1
+
+        # Only one entry in progress store
+        with _progress_lock:
+            assert token1 in _progress_store
+            assert len(_progress_store) == 1
+
+    def test_new_generation_allowed_after_previous_completes(self, client, monkeypatch):
+        """POST /generate_chapters is allowed once the previous generation finishes."""
+        import novelforge.routes.generation as gen_mod
+        monkeypatch.setattr(gen_mod.threading, "Thread",
+                            lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+
+        self._seed(client)
+        r1 = client.post("/generate_chapters", data=json.dumps({}),
+                         content_type="application/json")
+        assert r1.status_code == 200
+        token1 = r1.get_json()["token"]
+
+        # Simulate the first generation completing
+        with _progress_lock:
+            _progress_store[token1]["status"] = "done"
+
+        self._seed(client)
         r2 = client.post("/generate_chapters", data=json.dumps({}),
                          content_type="application/json")
         assert r2.status_code == 200
         token2 = r2.get_json()["token"]
+        assert token2 != token1
 
-        assert token1 != token2
-
-        # Both tokens should exist in progress store
         with _progress_lock:
-            assert token1 in _progress_store
             assert token2 in _progress_store
+            assert _progress_store[token2]["status"] == "running"
+
+    def test_rapid_repeat_calls_all_blocked_after_first(self, client, monkeypatch):
+        """Rapid repeated calls from the same session are blocked after the first."""
+        import novelforge.routes.generation as gen_mod
+        monkeypatch.setattr(gen_mod.threading, "Thread",
+                            lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+
+        self._seed(client)
+        responses = []
+        for _ in range(5):
+            r = client.post("/generate_chapters", data=json.dumps({}),
+                            content_type="application/json")
+            responses.append(r.status_code)
+
+        assert responses[0] == 200
+        assert all(s == 409 for s in responses[1:])
+        # Only one entry in the progress store
+        with _progress_lock:
+            assert len(_progress_store) == 1
 
 
 class TestCircuitBreakerThreadSafety:
