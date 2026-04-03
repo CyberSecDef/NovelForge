@@ -10,7 +10,7 @@ from flask import Blueprint, Response, abort, jsonify, request, send_file, sessi
 from novelforge import limiter
 from novelforge.progress import _progress_store, _progress_lock
 import novelforge.config as config
-from novelforge.llm.client import call_llm, parse_llm_json, _friendly_llm_error
+from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.llm.image import call_image_api
 from novelforge.agents.chapter import build_illustration_prompt_generator_prompt
 from novelforge.session.persistence import save_session_state
@@ -560,7 +560,7 @@ def generate_illustrations() -> Response | tuple[Response, int]:
 
     except RuntimeError as exc:
         logger.error("Illustration generation failed: %s", exc)
-        return jsonify({"error": _friendly_llm_error(exc)}), 502
+        return jsonify({"error": friendly_llm_error(exc)}), 502
 
 
 @export_bp.route("/illustrations/<path:filename>")

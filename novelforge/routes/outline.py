@@ -9,7 +9,7 @@ from flask import Blueprint, Response, jsonify, request, session
 
 from novelforge import limiter
 from novelforge.validation import validate_outline_input
-from novelforge.llm.client import call_llm, parse_llm_json, _friendly_llm_error
+from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.voice import select_voice_seed, format_voice_prompt
 from novelforge.agents.chapter import (
     build_title_prompt, build_outline_prompt, build_characters_prompt,
@@ -184,7 +184,7 @@ def generate_outline() -> Response | tuple[Response, int]:
 
     except RuntimeError as exc:
         logger.error("Outline generation failed: %s", exc)
-        return jsonify({"error": _friendly_llm_error(exc)}), 502
+        return jsonify({"error": friendly_llm_error(exc)}), 502
 
 
 @outline_bp.route("/approve_outline", methods=["POST"])

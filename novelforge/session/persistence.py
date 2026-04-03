@@ -276,7 +276,7 @@ def restore_session_from_state(state: dict) -> None:
     logger.info("Restored session from saved state")
 
 
-def _persist_completed_chapters(
+def persist_completed_chapters(
     session_id: str,
     chapters_done: list[dict],
     progress_token: str = "",

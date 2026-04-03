@@ -487,14 +487,14 @@ def call_llm(messages: list[dict], *, action: str = "", json_mode: bool = False)
     )
 
 
-def _reset_llm_usage() -> None:
+def reset_llm_usage() -> None:
     """Reset the thread-local token usage accumulator."""
     _llm_usage.prompt_tokens = 0
     _llm_usage.completion_tokens = 0
     _llm_usage.call_count = 0
 
 
-def _get_llm_usage() -> dict:
+def get_llm_usage() -> dict:
     """Return current accumulated token usage and reset."""
     usage = {
         "prompt_tokens": getattr(_llm_usage, "prompt_tokens", 0),
@@ -502,11 +502,17 @@ def _get_llm_usage() -> dict:
         "total_tokens": getattr(_llm_usage, "prompt_tokens", 0) + getattr(_llm_usage, "completion_tokens", 0),
         "call_count": getattr(_llm_usage, "call_count", 0),
     }
-    _reset_llm_usage()
+    reset_llm_usage()
     return usage
 
 
-def _friendly_llm_error(exc: Exception) -> str:
+def reset_circuit_breakers() -> None:
+    """Reset all per-provider LLM circuit breakers."""
+    for cb in _llm_circuit_breakers.values():
+        cb.reset()
+
+
+def friendly_llm_error(exc: Exception) -> str:
     """
     Convert a RuntimeError from call_llm into a user-friendly message.
 
