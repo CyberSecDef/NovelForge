@@ -12,9 +12,24 @@ import json
 import logging
 from abc import ABC, abstractmethod
 
-from novelforge.llm.client import call_llm, parse_llm_json
+from novelforge.llm.client import ContentRejectionError, call_llm, parse_llm_json
 
 logger = logging.getLogger(__name__)
+
+# Exceptions that represent expected operational failures for which the agent
+# should degrade gracefully to ``build_fallback()``.
+#
+# * RuntimeError  – covers CircuitBreakerError, ChapterTimeoutError, and general
+#                   LLM call failures.
+# * json.JSONDecodeError – the LLM returned text that cannot be parsed as JSON.
+# * ValueError    – ``normalise()`` rejected the LLM payload due to bad values.
+# * ContentRejectionError – the LLM API refused the request on content-policy
+#                           grounds.
+#
+# Exceptions that are NOT listed here (AttributeError, TypeError, KeyError,
+# NameError, IndexError, …) indicate programmer defects and are intentionally
+# allowed to propagate so they surface as bugs rather than silent fallbacks.
+_OPERATIONAL_ERRORS = (RuntimeError, json.JSONDecodeError, ValueError, ContentRejectionError)
 
 
 class BaseAgent(ABC):
@@ -48,15 +63,18 @@ class BaseAgent(ABC):
         """
         Shared orchestration: build prompt, call LLM, parse, normalise.
 
-        Falls back to ``build_fallback()`` on any error and logs the failure
-        with structured context.
+        Falls back to ``build_fallback()`` on expected operational failures
+        (LLM errors, JSON parse failures, payload validation errors, content
+        policy rejections).  Unexpected programmer errors such as
+        ``AttributeError``, ``TypeError``, and ``KeyError`` are intentionally
+        re-raised so they surface as bugs rather than silent fallbacks.
         """
         try:
             messages = self.build_prompt(**ctx)
             raw = call_llm(messages, action=self.prompt_action, json_mode=True)
             parsed = parse_llm_json(raw)
             return self.normalise(parsed, **ctx)
-        except (RuntimeError, json.JSONDecodeError, TypeError, ValueError, Exception) as exc:
+        except _OPERATIONAL_ERRORS as exc:
             self._log_failure(exc, **ctx)
             return self.build_fallback(**ctx)
 
