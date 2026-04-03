@@ -352,7 +352,7 @@ class TestImageAPI:
         import base64
         monkeypatch.setattr(config, "IMAGE_API_KEY", "test-key")
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
-        # Do NOT pre-create the illustrations dir — call_image_api must create it
+        # Do NOT pre-create the illustrations directory — call_image_api must create it
 
         fake_image = base64.b64encode(b"fake PNG data").decode()
         mock_resp = MagicMock()

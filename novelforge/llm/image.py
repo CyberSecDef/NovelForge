@@ -78,7 +78,7 @@ def call_image_api(prompt: str, *, filename_prefix: str = "illustration") -> str
                 save_path.parent.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
                 logger.error(
-                    "Failed to create illustrations directory %s: %s",
+                    "Failed to create illustrations directory %s: %r",
                     save_path.parent,
                     exc,
                 )
