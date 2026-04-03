@@ -213,10 +213,13 @@ class TestGenerateChapters:
             sess["theme_reinforcement"] = {}
             sess["pov_focal_character_plan"] = {}
 
-    def test_starts_generation_returns_token(self, client, monkeypatch):
+    def _patch_thread(self, monkeypatch):
         import novelforge.routes.generation as gen_mod
         monkeypatch.setattr(gen_mod.threading, "Thread",
                             lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+
+    def test_starts_generation_returns_token(self, client, monkeypatch):
+        self._patch_thread(monkeypatch)
 
         self._seed_full_session(client)
         r = client.post(
@@ -230,9 +233,7 @@ class TestGenerateChapters:
         assert len(data["token"]) > 0
 
     def test_progress_endpoint_returns_status(self, client, monkeypatch):
-        import novelforge.routes.generation as gen_mod
-        monkeypatch.setattr(gen_mod.threading, "Thread",
-                            lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
+        self._patch_thread(monkeypatch)
 
         self._seed_full_session(client)
         r = client.post(
@@ -248,6 +249,74 @@ class TestGenerateChapters:
         assert "status" in data
         assert "step" in data
         assert data["total"] == 3
+
+    def test_progress_endpoint_is_lightweight(self, client, monkeypatch):
+        """Lightweight /progress/<token> must not include heavy fields."""
+        self._patch_thread(monkeypatch)
+
+        self._seed_full_session(client)
+        r = client.post(
+            "/generate_chapters",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        token = r.get_json()["token"]
+
+        # Inject heavyweight data into the store to simulate a completed chapter
+        with _progress_lock:
+            _progress_store[token]["chapters_done"] = [
+                {"number": 1, "title": "Ch1", "content": "x" * 5000, "summary": "s"},
+            ]
+            _progress_store[token]["consistency"] = {"issues": [], "overall_assessment": "good"}
+
+        r2 = client.get(f"/progress/{token}")
+        assert r2.status_code == 200
+        data = r2.get_json()
+        # Only lightweight fields should be present
+        assert "status" in data
+        assert "current" in data
+        assert "total" in data
+        assert "step" in data
+        # Heavyweight fields must not be included
+        assert "chapters_done" not in data
+        assert "consistency" not in data
+
+    def test_progress_full_endpoint_includes_heavy_fields(self, client, monkeypatch):
+        """/progress/<token>/full must include chapter content and reports."""
+        self._patch_thread(monkeypatch)
+
+        self._seed_full_session(client)
+        r = client.post(
+            "/generate_chapters",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        token = r.get_json()["token"]
+
+        chapter_content = "x" * 5000
+        with _progress_lock:
+            _progress_store[token]["chapters_done"] = [
+                {"number": 1, "title": "Ch1", "content": chapter_content, "summary": "s"},
+            ]
+            _progress_store[token]["consistency"] = {"issues": [], "overall_assessment": "good"}
+
+        r2 = client.get(f"/progress/{token}/full")
+        assert r2.status_code == 200
+        data = r2.get_json()
+        assert "status" in data
+        assert "chapters_done" in data
+        assert data["chapters_done"][0]["content"] == chapter_content
+        assert "consistency" in data
+
+    def test_progress_full_endpoint_unknown_token(self, client):
+        """/progress/<token>/full returns 404 for unknown token."""
+        r = client.get("/progress/nonexistent-token/full")
+        assert r.status_code == 404
+
+    def test_progress_endpoint_unknown_token(self, client):
+        """/progress/<token> returns 404 for unknown token."""
+        r = client.get("/progress/nonexistent-token")
+        assert r.status_code == 404
 
 
 class TestReviseChapter:

@@ -855,11 +855,26 @@ def revise_chapter() -> Response | tuple[Response, int]:
         return jsonify({"error": friendly_llm_error(exc)}), 502
 
 
+# All lightweight fields are scalar (str, int, bool, None) so a shallow extraction is safe.
+_LIGHTWEIGHT_FIELDS = ("status", "current", "total", "step", "error", "error_code", "_live")
+
+
 @generation_bp.route("/progress/<token>")
 def progress(token: str) -> Response | tuple[Response, int]:
-    """Poll endpoint for chapter generation progress."""
+    """Lightweight poll endpoint – returns only status/step fields, not chapter content."""
     with _progress_lock:
         data = _progress_store.get(token)
     if data is None:
         return jsonify({"error": "Unknown token"}), 404
-    return jsonify(data)
+    light = {k: data[k] for k in _LIGHTWEIGHT_FIELDS if k in data}
+    return jsonify(light)
+
+
+@generation_bp.route("/progress/<token>/full")
+def progress_full(token: str) -> Response | tuple[Response, int]:
+    """Full progress endpoint – returns the complete payload including chapter content and reports."""
+    with _progress_lock:
+        data = _progress_store.get(token)
+    if data is None:
+        return jsonify({"error": "Unknown token"}), 404
+    return jsonify(dict(data))
