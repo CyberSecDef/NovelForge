@@ -286,7 +286,9 @@ class TestChapterPosition:
         from novelforge.chapter_position import ChapterPosition
         assert "Hook" in ChapterPosition(1, 20).get_phase()
         assert "Rising" in ChapterPosition(8, 20).get_phase()
-        assert "Climax" in ChapterPosition(18, 20).get_phase()
+        # climax_chapter(20) == 19; chapter 18 falls in the pre-climax Crisis zone
+        assert "Crisis" in ChapterPosition(18, 20).get_phase()
+        assert "Climax" in ChapterPosition(19, 20).get_phase()
         assert "Resolution" in ChapterPosition(20, 20).get_phase()
 
     def test_acts_three(self):
