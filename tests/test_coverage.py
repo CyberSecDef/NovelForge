@@ -352,7 +352,7 @@ class TestImageAPI:
         import base64
         monkeypatch.setattr(config, "IMAGE_API_KEY", "test-key")
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
-        (tmp_path / "illustrations").mkdir()
+        # Do NOT pre-create the illustrations directory — call_image_api must create it
 
         fake_image = base64.b64encode(b"fake PNG data").decode()
         mock_resp = MagicMock()
@@ -367,8 +367,50 @@ class TestImageAPI:
         assert result is not None
         assert result.startswith("test_")
         assert result.endswith(".png")
-        # Verify file was written
+        # Verify directory was auto-created and file was written
+        assert (tmp_path / "illustrations").is_dir()
         assert (tmp_path / "illustrations" / result).exists()
+
+    def test_creates_illustrations_dir_if_missing(self, monkeypatch, tmp_path):
+        """call_image_api must create the illustrations subdirectory on a clean filesystem."""
+        import novelforge.config as config
+        import base64
+        monkeypatch.setattr(config, "IMAGE_API_KEY", "test-key")
+        monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
+        # Confirm the directory does not exist before calling
+        assert not (tmp_path / "illustrations").exists()
+
+        fake_image = base64.b64encode(b"fresh PNG").decode()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"data": [{"b64_json": fake_image}]}
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("novelforge.llm.image.requests.post", return_value=mock_resp):
+            from novelforge.llm.image import call_image_api
+            result = call_image_api("A brand-new scene", filename_prefix="new")
+
+        assert result is not None
+        assert (tmp_path / "illustrations").is_dir()
+        assert (tmp_path / "illustrations" / result).exists()
+
+    def test_dir_creation_failure_returns_none(self, monkeypatch, tmp_path):
+        """If the illustrations directory cannot be created, return None and log an error."""
+        import novelforge.config as config
+        monkeypatch.setattr(config, "IMAGE_API_KEY", "test-key")
+        monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"data": [{"b64_json": "dGVzdA=="}]}
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("novelforge.llm.image.requests.post", return_value=mock_resp):
+            with patch("novelforge.llm.image.Path.mkdir", side_effect=OSError("permission denied")):
+                from novelforge.llm.image import call_image_api
+                result = call_image_api("test prompt", filename_prefix="fail")
+
+        assert result is None
 
     def test_api_timeout_returns_none(self, monkeypatch):
         import novelforge.config as config

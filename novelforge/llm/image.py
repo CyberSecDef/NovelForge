@@ -73,6 +73,17 @@ def call_image_api(prompt: str, *, filename_prefix: str = "illustration") -> str
             filename = f"{filename_prefix}_{unique_id}.png"
             save_path = Path(config.EXPORT_DIR) / "illustrations" / filename
 
+            # Ensure the illustrations directory exists before writing
+            try:
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                logger.error(
+                    "Failed to create illustrations directory %s: %r",
+                    save_path.parent,
+                    exc,
+                )
+                return None
+
             # Extract image data — OpenAI returns either url or b64_json
             data_list = data.get("data")
             if not isinstance(data_list, list) or len(data_list) == 0:
