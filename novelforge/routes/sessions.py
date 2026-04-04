@@ -9,9 +9,11 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, request, session
 
 import novelforge.config as config
-from novelforge.progress import progress_manager
 from novelforge.session.persistence import (
-    get_session_file_path, restore_session_from_state, resolve_session_path,
+    get_session_file_path,
+    list_session_summaries,
+    load_session_by_id,
+    restore_session_from_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,23 +24,7 @@ sessions_bp = Blueprint("sessions", __name__)
 @sessions_bp.route("/list_sessions")
 def list_sessions() -> Response:
     """Return a list of all saved sessions that have a book title."""
-    sessions_dir = Path(config.NOVELS_DIR)
-    result = []
-    for session_file in sessions_dir.glob("*.json"):
-        if session_file.name.endswith("_progress.json"):
-            continue
-        try:
-            state = json.loads(session_file.read_text(encoding="utf-8"))
-            title = (state.get("title") or "").strip()
-            if title:
-                result.append({
-                    "session_id": state.get("session_id", session_file.stem),
-                    "title": title,
-                })
-        except Exception:
-            continue
-    result.sort(key=lambda s: s["title"].lower())
-    return jsonify({"sessions": result})
+    return jsonify({"sessions": list_session_summaries()})
 
 
 @sessions_bp.route("/load_session", methods=["POST"])
@@ -50,24 +36,23 @@ def load_session() -> Response | tuple[Response, int]:
         return jsonify({"error": "session_id is required."}), 400
 
     try:
-        session_file = resolve_session_path(target_id)
+        state = load_session_by_id(target_id)
+    except (json.JSONDecodeError, OSError) as e:
+        # File-level errors (corrupt JSON or unreadable file) → 500
+        logger.error("Failed to read session %s: %s", target_id, e)
+        return jsonify({"error": "Failed to read session data."}), 500
     except ValueError:
+        # Invalid UUID format → 400 (note: must come after JSONDecodeError
+        # because JSONDecodeError is a subclass of ValueError)
         return jsonify({"error": "Invalid session_id."}), 400
-
-    if not session_file.exists():
-        return jsonify({"error": "Session not found."}), 404
-
-    try:
-        state = json.loads(session_file.read_text(encoding="utf-8"))
     except Exception as e:
-        logger.error(f"Failed to read session file {session_file}: {e}")
+        logger.error("Failed to read session %s: %s", target_id, e)
         return jsonify({"error": "Failed to read session data."}), 500
 
-    restore_session_from_state(state)
+    if state is None:
+        return jsonify({"error": "Session not found."}), 404
 
-    token = state.get("progress_token")
-    if token and "progress_data" in state:
-        progress_manager.create(token, state["progress_data"])
+    restore_session_from_state(state)
 
     return jsonify({"status": "loaded", "title": state.get("title", "")})
 

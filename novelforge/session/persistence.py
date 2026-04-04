@@ -338,6 +338,67 @@ def restore_session_from_state(state: dict) -> None:
     logger.info("Restored session from saved state")
 
 
+def list_session_summaries() -> list[dict]:
+    """Return a list of all saved sessions that have a book title.
+
+    Each entry contains ``"session_id"`` and ``"title"``.  Corrupt, unreadable,
+    or untitled session files are logged as warnings and silently skipped so
+    that one bad file never breaks the listing for valid sessions.
+    """
+    sessions_dir = Path(config.NOVELS_DIR)
+    result = []
+    for session_file in sessions_dir.glob("*.json"):
+        if session_file.name.endswith("_progress.json"):
+            continue
+        try:
+            raw = session_file.read_text(encoding="utf-8")
+        except OSError as e:
+            logger.warning("Skipping unreadable session file %s: %s", session_file.name, e)
+            continue
+        try:
+            state = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.warning("Skipping corrupt session file %s: %s", session_file.name, e)
+            continue
+        try:
+            state = validate_session_state(state)
+        except Exception as e:
+            logger.warning("Skipping invalid session file %s: %s", session_file.name, e)
+            continue
+        title = (state.get("title") or "").strip()
+        if title:
+            result.append({
+                "session_id": state.get("session_id") or session_file.stem,
+                "title": title,
+            })
+    result.sort(key=lambda s: s["title"].lower())
+    return result
+
+
+def load_session_by_id(session_id: str) -> dict | None:
+    """Load and validate a session state by its ID.
+
+    Raises :exc:`ValueError` if *session_id* is not a valid UUID (call site
+    should return HTTP 400).  Returns ``None`` if the session file does not
+    exist (call site should return HTTP 404).  Raises
+    :exc:`json.JSONDecodeError` or :exc:`OSError` if the file is corrupt or
+    unreadable (call site should return HTTP 500).  On success, returns the
+    validated state dict ready for :func:`restore_session_from_state`.
+    """
+    session_file = resolve_session_path(session_id)  # raises ValueError if invalid
+    # Defense-in-depth: ensure the resolved path is inside NOVELS_DIR even
+    # though resolve_session_path() has already validated the UUID format.
+    expected_dir = Path(config.NOVELS_DIR).resolve()
+    if session_file.resolve().parent != expected_dir:
+        raise ValueError(f"Session file path outside sessions directory: {session_id!r}")
+    if not session_file.exists():
+        return None
+    state = json.loads(session_file.read_text(encoding="utf-8"))
+    state = validate_session_state(state)
+    logger.info("Loaded session %s from %s", session_id, session_file)
+    return state
+
+
 def persist_completed_chapters(
     session_id: str,
     chapters_done: list[dict],
