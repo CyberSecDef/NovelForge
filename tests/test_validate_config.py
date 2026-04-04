@@ -341,3 +341,102 @@ class TestValidateConfigFallbackProviders:
         errors = exc_info.value.errors
         assert any("provider_2" in e for e in errors)
         assert any("LLM_API_KEY_2" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# _parse_llm_providers – gap detection / non-contiguous numbering
+# ---------------------------------------------------------------------------
+
+class TestParseLlmProviders:
+    """Unit tests for _parse_llm_providers() gap detection behaviour."""
+
+    def setup_method(self):
+        cfg._CONFIG_PARSE_ERRORS.clear()
+
+    def teardown_method(self):
+        cfg._CONFIG_PARSE_ERRORS.clear()
+
+    def test_contiguous_providers_no_gap_warning(self, monkeypatch):
+        """Providers numbered 2, 3 without gaps produce no parse errors."""
+        monkeypatch.setenv("LLM_API_URL_2", "https://api2.example.com/v1")
+        monkeypatch.setenv("LLM_API_URL_3", "https://api3.example.com/v1")
+
+        providers = cfg._parse_llm_providers()
+
+        assert any(p.label == "provider_2" for p in providers)
+        assert any(p.label == "provider_3" for p in providers)
+        assert cfg._CONFIG_PARSE_ERRORS == []
+
+    def test_gap_in_numbering_emits_parse_error(self, monkeypatch):
+        """A missing index between two defined providers is recorded as an error."""
+        monkeypatch.delenv("LLM_API_URL_2", raising=False)
+        monkeypatch.setenv("LLM_API_URL_3", "https://api3.example.com/v1")
+
+        cfg._parse_llm_providers()
+
+        assert len(cfg._CONFIG_PARSE_ERRORS) == 1
+        assert "2" in cfg._CONFIG_PARSE_ERRORS[0]
+
+    def test_provider_after_gap_is_not_dropped(self, monkeypatch):
+        """A provider defined after a gap is still included in the returned list."""
+        monkeypatch.delenv("LLM_API_URL_2", raising=False)
+        monkeypatch.setenv("LLM_API_URL_3", "https://api3.example.com/v1")
+
+        providers = cfg._parse_llm_providers()
+
+        labels = [p.label for p in providers]
+        assert "provider_3" in labels
+        assert "provider_2" not in labels
+
+    def test_multiple_gaps_all_reported(self, monkeypatch):
+        """Multiple gap indices are all mentioned in the single error message."""
+        monkeypatch.delenv("LLM_API_URL_2", raising=False)
+        monkeypatch.delenv("LLM_API_URL_3", raising=False)
+        monkeypatch.setenv("LLM_API_URL_4", "https://api4.example.com/v1")
+
+        cfg._parse_llm_providers()
+
+        assert len(cfg._CONFIG_PARSE_ERRORS) == 1
+        error = cfg._CONFIG_PARSE_ERRORS[0]
+        assert "2" in error
+        assert "3" in error
+
+    def test_all_providers_after_multiple_gaps_included(self, monkeypatch):
+        """All providers defined after multiple gaps are still returned."""
+        monkeypatch.delenv("LLM_API_URL_2", raising=False)
+        monkeypatch.delenv("LLM_API_URL_3", raising=False)
+        monkeypatch.setenv("LLM_API_URL_4", "https://api4.example.com/v1")
+        monkeypatch.setenv("LLM_API_URL_5", "https://api5.example.com/v1")
+
+        providers = cfg._parse_llm_providers()
+
+        labels = [p.label for p in providers]
+        assert "provider_4" in labels
+        assert "provider_5" in labels
+        assert "provider_2" not in labels
+        assert "provider_3" not in labels
+
+    def test_no_fallback_providers_produces_no_errors(self, monkeypatch):
+        """When no numbered fallbacks are defined at all, no error is emitted."""
+        for idx in range(2, cfg._MAX_PROVIDER_INDEX + 1):
+            monkeypatch.delenv(f"LLM_API_URL_{idx}", raising=False)
+
+        cfg._parse_llm_providers()
+
+        assert cfg._CONFIG_PARSE_ERRORS == []
+
+    def test_gap_error_surfaced_by_validate_config(self, monkeypatch):
+        """Gaps discovered during provider parsing appear in validate_config errors."""
+        monkeypatch.delenv("LLM_API_URL_2", raising=False)
+        monkeypatch.setenv("LLM_API_URL_3", "https://api3.example.com/v1")
+        monkeypatch.setenv("LLM_API_KEY_3", "sk-valid3")
+
+        # Re-run parser so errors land in _CONFIG_PARSE_ERRORS for this test
+        providers = cfg._parse_llm_providers()
+        monkeypatch.setattr(cfg, "LLM_PROVIDERS", providers)
+        monkeypatch.setattr(cfg, "SECRET_KEY", "a-valid-secret-key")
+
+        with pytest.raises(cfg.ConfigurationError) as exc_info:
+            cfg.validate_config(debug=False)
+
+        assert any("gap" in e.lower() or "2" in e for e in exc_info.value.errors)
