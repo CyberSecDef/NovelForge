@@ -3,7 +3,7 @@ Boundary condition tests for NovelForge.
 
 Tests edge cases: Unicode/emoji in premises, special characters in titles,
 upper-bound validation limits, empty character lists, contenteditable field
-limits, and session schema coercion.
+limits, session schema coercion, and malformed JSON payload types.
 """
 
 import json
@@ -410,3 +410,63 @@ class TestSessionSchemaEdgeCases:
         state = {"story_architecture": "not a dict"}
         result = validate_session_state(state)
         assert result["story_architecture"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Malformed JSON payload type tests
+# ---------------------------------------------------------------------------
+
+_VALID_BASE = {"premise": "A story", "genre": "Fantasy", "chapters": 3, "word_count": 5000}
+
+
+class TestMalformedJsonTypes:
+    """validate_outline_input must never crash on unexpected field types."""
+
+    # --- premise ---
+
+    @pytest.mark.parametrize("bad_value", [123, 3.14, True, False, [], {}, None])
+    def test_premise_non_string_returns_error(self, bad_value):
+        data = {**_VALID_BASE, "premise": bad_value}
+        ok, err = validate_outline_input(data)
+        assert not ok
+        assert err  # a user-facing message must be present
+
+    def test_premise_missing_returns_required_error(self):
+        data = {k: v for k, v in _VALID_BASE.items() if k != "premise"}
+        ok, err = validate_outline_input(data)
+        assert not ok
+        assert "premise" in err.lower()
+
+    # --- genre ---
+
+    @pytest.mark.parametrize("bad_value", [42, 1.5, True, False, ["Fantasy"], {"genre": "Fantasy"}, None])
+    def test_genre_non_string_returns_error(self, bad_value):
+        data = {**_VALID_BASE, "genre": bad_value}
+        ok, err = validate_outline_input(data)
+        assert not ok
+        assert err
+
+    # --- special_events ---
+
+    @pytest.mark.parametrize("bad_value", [99, True, ["event"], {"key": "val"}, None])
+    def test_special_events_non_string_returns_error(self, bad_value):
+        data = {**_VALID_BASE, "special_events": bad_value}
+        ok, err = validate_outline_input(data)
+        assert not ok
+        assert err
+
+    # --- special_instructions ---
+
+    @pytest.mark.parametrize("bad_value", [0, False, ["inst"], {"key": "val"}, None])
+    def test_special_instructions_non_string_returns_error(self, bad_value):
+        data = {**_VALID_BASE, "special_instructions": bad_value}
+        ok, err = validate_outline_input(data)
+        assert not ok
+        assert err
+
+    # --- valid baseline still passes ---
+
+    def test_valid_payload_still_passes(self):
+        ok, err = validate_outline_input(_VALID_BASE)
+        assert ok, f"Valid payload should pass: {err}"
+
