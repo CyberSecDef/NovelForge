@@ -8,6 +8,8 @@ from jinja2 import Environment, StrictUndefined, UndefinedError
 
 logger = logging.getLogger(__name__)
 
+_jinja_env = Environment(undefined=StrictUndefined, autoescape=False)
+
 
 _prompts_cache: dict | None = None
 
@@ -77,7 +79,7 @@ def render_prompt(name: str, **context) -> list[dict]:
     if name not in prompts:
         raise KeyError(f"Prompt '{name}' not found in prompts.yml")
     prompt = prompts[name]
-    env = Environment(undefined=StrictUndefined, autoescape=False)
+    env = _jinja_env
     try:
         system_text = env.from_string(prompt["system"]).render(**context)
         user_text = env.from_string(prompt["user"]).render(**context)
