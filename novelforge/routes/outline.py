@@ -43,16 +43,16 @@ def generate_outline() -> Response | tuple[Response, int]:
     """
     data = request.get_json(silent=True) or {}
 
-    ok, err = validate_outline_input(data)
-    if not ok:
-        return jsonify({"error": err}), 400
+    result = validate_outline_input(data)
+    if not result.ok:
+        return jsonify({"error": result.first_error, "errors": result.errors}), 400
 
-    premise = data["premise"].strip()
-    genre = data["genre"].strip()
-    chapters = int(data["chapters"])
-    word_count = int(data["word_count"])
-    special_events = data.get("special_events", "").strip()
-    special_instructions = data.get("special_instructions", "").strip()
+    premise = str(result.values["premise"])
+    genre = str(result.values["genre"])
+    chapters = int(result.values["chapters"])
+    word_count = int(result.values["word_count"])
+    special_events = str(result.values.get("special_events", ""))
+    special_instructions = str(result.values.get("special_instructions", ""))
 
     # Store sanitised inputs in session for later phases
     session["premise"] = str(premise)

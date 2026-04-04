@@ -9,7 +9,7 @@ limits, session schema coercion, and malformed JSON payload types.
 import json
 import pytest
 
-from novelforge.validation import validate_outline_input, ALLOWED_GENRES
+from novelforge.validation import validate_outline_input, ValidationResult, ALLOWED_GENRES
 
 
 # ---------------------------------------------------------------------------
@@ -470,3 +470,132 @@ class TestMalformedJsonTypes:
         ok, err = validate_outline_input(_VALID_BASE)
         assert ok, f"Valid payload should pass: {err}"
 
+
+# ---------------------------------------------------------------------------
+# Structured ValidationResult API
+# ---------------------------------------------------------------------------
+
+class TestValidationResult:
+    """Tests for the structured :class:`ValidationResult` return type."""
+
+    def test_returns_validation_result_instance(self):
+        result = validate_outline_input(_VALID_BASE)
+        assert isinstance(result, ValidationResult)
+
+    def test_ok_result_has_empty_errors(self):
+        result = validate_outline_input(_VALID_BASE)
+        assert result.ok is True
+        assert result.errors == {}
+
+    def test_ok_result_values_contain_normalised_fields(self):
+        data = {
+            "premise": "  A story  ",
+            "genre": "Fantasy",
+            "chapters": "5",
+            "word_count": "50000",
+            "special_events": "An eclipse",
+            "special_instructions": "Keep it dark",
+        }
+        result = validate_outline_input(data)
+        assert result.ok, f"Expected valid: {result.errors}"
+        assert result.values["premise"] == "A story"
+        assert result.values["genre"] == "Fantasy"
+        assert result.values["chapters"] == 5
+        assert result.values["word_count"] == 50000
+        assert result.values["special_events"] == "An eclipse"
+        assert result.values["special_instructions"] == "Keep it dark"
+
+    def test_first_error_returns_first_message(self):
+        result = validate_outline_input(
+            {"premise": "", "genre": "Fantasy", "chapters": 3, "word_count": 5000}
+        )
+        assert result.ok is False
+        assert result.first_error != ""
+        assert result.first_error == next(iter(result.errors.values()))
+
+    def test_first_error_empty_when_ok(self):
+        result = validate_outline_input(_VALID_BASE)
+        assert result.first_error == ""
+
+    def test_backward_compatible_tuple_unpack(self):
+        ok, err = validate_outline_input(_VALID_BASE)
+        assert ok is True
+        assert err == ""
+
+    def test_backward_compatible_tuple_unpack_failure(self):
+        ok, err = validate_outline_input(
+            {"premise": "", "genre": "BadGenre", "chapters": 1, "word_count": 0}
+        )
+        assert ok is False
+        assert isinstance(err, str)
+        assert err != ""
+
+
+# ---------------------------------------------------------------------------
+# Multiple simultaneous field errors
+# ---------------------------------------------------------------------------
+
+class TestMultipleSimultaneousErrors:
+    """validate_outline_input must report ALL failing fields at once."""
+
+    def test_all_fields_invalid_returns_all_errors(self):
+        result = validate_outline_input({
+            "premise": "",        # required
+            "genre": "INVALID",   # not in ALLOWED_GENRES
+            "chapters": 1,        # below minimum
+            "word_count": 0,      # below minimum
+        })
+        assert result.ok is False
+        assert "premise" in result.errors
+        assert "genre" in result.errors
+        assert "chapters" in result.errors
+        assert "word_count" in result.errors
+        assert len(result.errors) >= 4
+
+    def test_two_numeric_fields_invalid_simultaneously(self):
+        result = validate_outline_input({
+            "premise": "A story",
+            "genre": "Fantasy",
+            "chapters": 1,      # too low
+            "word_count": 500,  # too low
+        })
+        assert result.ok is False
+        assert "chapters" in result.errors
+        assert "word_count" in result.errors
+        assert len(result.errors) == 2
+
+    def test_text_and_numeric_errors_coexist(self):
+        result = validate_outline_input({
+            "premise": "x" * 2001,  # too long
+            "genre": "BAD",          # invalid
+            "chapters": 5,
+            "word_count": 5000,
+        })
+        assert result.ok is False
+        assert "premise" in result.errors
+        assert "genre" in result.errors
+        # valid fields still have normalised values available
+        assert result.values.get("chapters") == 5
+        assert result.values.get("word_count") == 5000
+
+    def test_optional_fields_errors_alongside_required(self):
+        result = validate_outline_input({
+            "premise": "A story",
+            "genre": "Fantasy",
+            "chapters": 3,
+            "word_count": 5000,
+            "special_events": 42,           # wrong type
+            "special_instructions": True,   # wrong type
+        })
+        assert result.ok is False
+        assert "special_events" in result.errors
+        assert "special_instructions" in result.errors
+        # core fields are valid and their values preserved
+        assert result.values.get("premise") == "A story"
+        assert result.values.get("chapters") == 3
+
+    def test_empty_payload_reports_core_field_errors(self):
+        result = validate_outline_input({})
+        assert result.ok is False
+        for field_name in ("premise", "genre", "chapters", "word_count"):
+            assert field_name in result.errors, f"Expected error for '{field_name}'"

@@ -1,5 +1,10 @@
 """Input validation helpers for NovelForge."""
 
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Iterator
+
 import novelforge.config as config
 
 ALLOWED_GENRES = {
@@ -27,52 +32,116 @@ ALLOWED_GENRES = {
 }
 
 
-def validate_outline_input(data: dict) -> tuple[bool, str]:
-    """Validate the /generate_outline form data. Returns (ok, error_message)."""
+@dataclass
+class ValidationResult:
+    """Structured result returned by :func:`validate_outline_input`.
+
+    Attributes:
+        ok: ``True`` when all fields passed validation.
+        errors: Mapping of field name to a human-readable error message for
+            every field that failed validation.  Empty when *ok* is ``True``.
+        values: Normalised/coerced field values (stripped strings, parsed
+            integers) for every field that passed validation.  Callers should
+            use these instead of re-parsing the raw request data.
+    """
+
+    ok: bool
+    errors: dict[str, str] = field(default_factory=dict)
+    values: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def first_error(self) -> str:
+        """Return the first error message, or an empty string when there are none."""
+        return next(iter(self.errors.values()), "")
+
+    def __iter__(self) -> Iterator[object]:
+        """Allow backward-compatible tuple unpacking: ``ok, err = validate_outline_input(data)``.
+
+        Yields ``ok`` then :attr:`first_error` so existing call-sites that
+        unpack the result as a two-tuple continue to work unchanged.
+        """
+        yield self.ok
+        yield self.first_error
+
+
+def validate_outline_input(data: dict) -> ValidationResult:
+    """Validate the ``/generate_outline`` form data.
+
+    All fields are checked independently so the caller receives every
+    validation error in a single call rather than only the first one.
+
+    Returns a :class:`ValidationResult` whose ``errors`` dict maps each
+    failing field name to a user-facing message and whose ``values`` dict
+    contains the normalised (stripped / coerced) value for every field that
+    passed validation.
+    """
+    errors: dict[str, str] = {}
+    values: dict[str, Any] = {}
+
+    # --- premise ---
     premise = data.get("premise", "")
     if not isinstance(premise, str):
-        return False, "Story premise must be a string."
-    premise = premise.strip()
-    if not premise:
-        return False, "Story premise is required."
-    if len(premise) > 2000:
-        return False, "Story premise must be 2000 characters or fewer."
+        errors["premise"] = "Story premise must be a string."
+    else:
+        premise = premise.strip()
+        if not premise:
+            errors["premise"] = "Story premise is required."
+        elif len(premise) > 2000:
+            errors["premise"] = "Story premise must be 2000 characters or fewer."
+        else:
+            values["premise"] = premise
 
+    # --- genre ---
     genre = data.get("genre", "")
     if not isinstance(genre, str):
-        return False, "Genre must be a string."
-    genre = genre.strip()
-    if genre not in ALLOWED_GENRES:
-        return False, f"Invalid genre. Choose from: {', '.join(sorted(ALLOWED_GENRES))}."
+        errors["genre"] = "Genre must be a string."
+    else:
+        genre = genre.strip()
+        if genre not in ALLOWED_GENRES:
+            errors["genre"] = f"Invalid genre. Choose from: {', '.join(sorted(ALLOWED_GENRES))}."
+        else:
+            values["genre"] = genre
 
+    # --- chapters ---
     try:
         chapters = int(data.get("chapters", 0))
         if chapters < 3:
-            return False, "Number of chapters must be at least 3."
-        if chapters > config.MAX_CHAPTERS:
-            return False, f"Number of chapters must be {config.MAX_CHAPTERS:,} or fewer."
+            errors["chapters"] = "Number of chapters must be at least 3."
+        elif chapters > config.MAX_CHAPTERS:
+            errors["chapters"] = f"Number of chapters must be {config.MAX_CHAPTERS:,} or fewer."
+        else:
+            values["chapters"] = chapters
     except (ValueError, TypeError):
-        return False, "Chapters must be a valid number."
+        errors["chapters"] = "Chapters must be a valid number."
 
+    # --- word_count ---
     try:
         word_count = int(data.get("word_count", 0))
         if word_count < 1000:
-            return False, "Word count must be at least 1000."
-        if word_count > config.MAX_WORD_COUNT:
-            return False, f"Word count must be {config.MAX_WORD_COUNT:,} or fewer."
+            errors["word_count"] = "Word count must be at least 1000."
+        elif word_count > config.MAX_WORD_COUNT:
+            errors["word_count"] = f"Word count must be {config.MAX_WORD_COUNT:,} or fewer."
+        else:
+            values["word_count"] = word_count
     except (ValueError, TypeError):
-        return False, "Word count must be a valid number."
+        errors["word_count"] = "Word count must be a valid number."
 
+    # --- special_events ---
     special_events = data.get("special_events", "")
     if not isinstance(special_events, str):
-        return False, "Special events must be a string."
-    if len(special_events) > 5000:
-        return False, "Special events must be 5,000 characters or fewer."
+        errors["special_events"] = "Special events must be a string."
+    elif len(special_events) > 5000:
+        errors["special_events"] = "Special events must be 5,000 characters or fewer."
+    else:
+        values["special_events"] = special_events
 
+    # --- special_instructions ---
     special_instructions = data.get("special_instructions", "")
     if not isinstance(special_instructions, str):
-        return False, "Special instructions must be a string."
-    if len(special_instructions) > 5000:
-        return False, "Special instructions must be 5,000 characters or fewer."
+        errors["special_instructions"] = "Special instructions must be a string."
+    elif len(special_instructions) > 5000:
+        errors["special_instructions"] = "Special instructions must be 5,000 characters or fewer."
+    else:
+        values["special_instructions"] = special_instructions
 
-    return True, ""
+    return ValidationResult(ok=not errors, errors=errors, values=values)
