@@ -20,6 +20,50 @@ from dotenv import load_dotenv
 # or the operator) are never replaced by .env values.
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
+# ---------------------------------------------------------------------------
+# Public API – names exported by this module and re-exported by the top-level
+# config.py backward-compatibility shim.  Keep this list in sync with any new
+# public symbols added below.
+# ---------------------------------------------------------------------------
+__all__ = [
+    # Helper
+    "get_env_int",
+    # Path
+    "PROJECT_ROOT",
+    # LLM provider configuration
+    "ProviderConfig",
+    "LLM_PROVIDERS",
+    # Backward-compatible primary-provider aliases
+    "LLM_API_URL",
+    "LLM_API_KEY",
+    "LLM_MODEL",
+    # Image generation configuration
+    "IMAGE_API_URL",
+    "IMAGE_API_KEY",
+    "IMAGE_MODEL",
+    "IMAGE_SIZE",
+    # LLM tuning constants
+    "LLM_MAX_RETRIES",
+    "LLM_RETRY_DELAY",
+    "LLM_TIMEOUT",
+    "IMAGE_TIMEOUT",
+    "LLM_CIRCUIT_BREAKER_THRESHOLD",
+    "PER_CHAPTER_TIMEOUT",
+    # Input validation limits
+    "MAX_CHAPTERS",
+    "MAX_WORD_COUNT",
+    # Flask
+    "SECRET_KEY",
+    "SESSION_FILE_DIR",
+    "EXPORT_DIR",
+    "NOVELS_DIR",
+    "LOGS_DIR",
+    # Errors and startup helpers
+    "ConfigurationError",
+    "ensure_app_dirs",
+    "validate_config",
+]
+
 # Collects errors discovered while parsing numeric environment variables at
 # import time so that validate_config() can surface them all at once instead
 # of crashing with a bare ValueError.
