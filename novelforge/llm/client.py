@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any
+from typing import Any, cast
 
 import requests
 from unidecode import unidecode
@@ -236,7 +236,7 @@ def _log_llm_error(
 
 def _to_ascii(text: str) -> str:
     """Transliterate Unicode to ASCII equivalents (curly quotes, em-dashes, accents, etc.)."""
-    return unidecode(text)
+    return cast(str, unidecode(text))
 
 
 def _sanitize_messages(messages: list[dict]) -> list[dict]:
