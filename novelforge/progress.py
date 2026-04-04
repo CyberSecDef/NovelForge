@@ -48,6 +48,9 @@ class ProgressState(TypedDict, total=False):
     # Illustration results
     illustrations: list[dict[str, Any]]
 
+    # Token linking a novel entry to its illustration job
+    illustration_token: str
+
 
 _REQUIRED_CREATION_KEYS: frozenset[str] = frozenset(
     {"status", "current", "total", "step", "chapters_done", "error"}
