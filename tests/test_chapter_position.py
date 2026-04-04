@@ -173,3 +173,74 @@ class TestLandmarkReturnValues:
         assert ChapterPosition.inciting_chapter(3) == 1
         assert ChapterPosition.inciting_chapter(4) == 2
         assert ChapterPosition.inciting_chapter(20) == 2
+
+
+# ---------------------------------------------------------------------------
+# Input clamping / boundary validation
+# ---------------------------------------------------------------------------
+
+class TestChapterPositionClamping:
+    """chapter_num and total_chapters must be clamped to sensible bounds."""
+
+    # --- total_chapters clamping ---
+
+    def test_total_chapters_zero_clamped_to_one(self):
+        cp = ChapterPosition(1, 0)
+        assert cp.total_chapters == 1
+
+    def test_total_chapters_negative_clamped_to_one(self):
+        cp = ChapterPosition(1, -5)
+        assert cp.total_chapters == 1
+
+    # --- chapter_num zero / negative clamped to 1 ---
+
+    def test_chapter_num_zero_clamped_to_one(self):
+        cp = ChapterPosition(0, 10)
+        assert cp.chapter_num == 1
+
+    def test_chapter_num_negative_clamped_to_one(self):
+        cp = ChapterPosition(-3, 10)
+        assert cp.chapter_num == 1
+
+    # --- chapter_num over total_chapters clamped down ---
+
+    def test_chapter_num_over_total_clamped(self):
+        cp = ChapterPosition(15, 10)
+        assert cp.chapter_num == 10
+
+    def test_chapter_num_far_over_total_clamped(self):
+        cp = ChapterPosition(999, 5)
+        assert cp.chapter_num == 5
+
+    # --- position_pct is always in [0, 100] after clamping ---
+
+    @pytest.mark.parametrize("c,n", [
+        (0, 10), (-1, 10), (11, 10), (0, 0), (-5, -3),
+    ])
+    def test_position_pct_always_in_range(self, c, n):
+        cp = ChapterPosition(c, n)
+        assert 0 <= cp.position_pct <= 100
+
+    # --- one-chapter novel boundary ---
+
+    def test_one_chapter_novel_chapter_one(self):
+        cp = ChapterPosition(1, 1)
+        assert cp.chapter_num == 1
+        assert cp.total_chapters == 1
+        assert cp.position_pct == 100.0
+        assert cp.get_phase() == "Resolution"
+
+    def test_one_chapter_novel_over_range_clamped(self):
+        cp = ChapterPosition(5, 1)
+        assert cp.chapter_num == 1
+        assert cp.get_phase() == "Resolution"
+
+    # --- clamped chapter_num drives phase, not raw input ---
+
+    def test_negative_chapter_uses_clamped_phase(self):
+        # chapter -1 of 10 is clamped to chapter 1 → Hook
+        assert ChapterPosition(-1, 10).get_phase() == "Hook"
+
+    def test_over_range_chapter_uses_clamped_phase(self):
+        # chapter 20 of 10 is clamped to 10 → Resolution
+        assert ChapterPosition(20, 10).get_phase() == "Resolution"
