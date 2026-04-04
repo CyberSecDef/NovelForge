@@ -130,18 +130,22 @@ def validate_outline_input(data: dict) -> ValidationResult:
     special_events = data.get("special_events", "")
     if not isinstance(special_events, str):
         errors["special_events"] = "Special events must be a string."
-    elif len(special_events) > 5000:
-        errors["special_events"] = "Special events must be 5,000 characters or fewer."
     else:
-        values["special_events"] = special_events
+        special_events = special_events.strip()
+        if len(special_events) > 5000:
+            errors["special_events"] = "Special events must be 5,000 characters or fewer."
+        else:
+            values["special_events"] = special_events
 
     # --- special_instructions ---
     special_instructions = data.get("special_instructions", "")
     if not isinstance(special_instructions, str):
         errors["special_instructions"] = "Special instructions must be a string."
-    elif len(special_instructions) > 5000:
-        errors["special_instructions"] = "Special instructions must be 5,000 characters or fewer."
     else:
-        values["special_instructions"] = special_instructions
+        special_instructions = special_instructions.strip()
+        if len(special_instructions) > 5000:
+            errors["special_instructions"] = "Special instructions must be 5,000 characters or fewer."
+        else:
+            values["special_instructions"] = special_instructions
 
     return ValidationResult(ok=not errors, errors=errors, values=values)

@@ -493,8 +493,8 @@ class TestValidationResult:
             "genre": "Fantasy",
             "chapters": "5",
             "word_count": "50000",
-            "special_events": "An eclipse",
-            "special_instructions": "Keep it dark",
+            "special_events": "  An eclipse  ",
+            "special_instructions": "  Keep it dark  ",
         }
         result = validate_outline_input(data)
         assert result.ok, f"Expected valid: {result.errors}"
