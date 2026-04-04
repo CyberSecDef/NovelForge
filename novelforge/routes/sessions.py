@@ -37,10 +37,13 @@ def load_session() -> Response | tuple[Response, int]:
 
     try:
         state = load_session_by_id(target_id)
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, OSError) as e:
+        # File-level errors (corrupt JSON or unreadable file) → 500
         logger.error("Failed to read session %s: %s", target_id, e)
         return jsonify({"error": "Failed to read session data."}), 500
     except ValueError:
+        # Invalid UUID format → 400 (note: must come after JSONDecodeError
+        # because JSONDecodeError is a subclass of ValueError)
         return jsonify({"error": "Invalid session_id."}), 400
     except Exception as e:
         logger.error("Failed to read session %s: %s", target_id, e)
