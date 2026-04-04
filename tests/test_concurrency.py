@@ -113,7 +113,7 @@ class TestProgressStoreThreadSafety:
         })
 
         def generate():
-            local_chapters: list = []
+            local_chapters: list[dict] = []
             for i in range(10):
                 chapter = {"number": i + 1, "title": f"Ch{i+1}", "content": f"Text {i+1}"}
                 local_chapters.append(chapter)
@@ -161,7 +161,7 @@ class TestProgressStoreThreadSafety:
             })
 
         def gen(token, count):
-            local_chapters: list = []
+            local_chapters: list[dict] = []
             for i in range(count):
                 local_chapters.append({"number": i + 1})
                 progress_manager.update(token, {
