@@ -66,7 +66,7 @@ class TestGenerateOutline:
             "/generate_outline",
             data=json.dumps({
                 "premise": "A space adventure",
-                "genre": "Sci-Fi",
+                "genre": "Science Fiction",
                 "chapters": 3,
                 "word_count": 10000,
             }),
