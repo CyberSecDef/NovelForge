@@ -9,6 +9,8 @@ from novelforge.session.persistence import (
     restore_session_from_state,
     persist_completed_chapters,
     clear_session_state,
+    list_session_summaries,
+    load_session_by_id,
 )
 
 __all__ = [
@@ -20,4 +22,6 @@ __all__ = [
     "restore_session_from_state",
     "persist_completed_chapters",
     "clear_session_state",
+    "list_session_summaries",
+    "load_session_by_id",
 ]

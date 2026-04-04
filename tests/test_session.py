@@ -719,6 +719,350 @@ class TestRestoreSessionRebuildsBrokenProgress:
             progress_manager.delete(token)
 
 
+_VALID_UUID = "12345678-1234-1234-1234-123456789abc"
+
+
+class TestListSessionSummaries:
+    """Tests for list_session_summaries() in the persistence layer."""
+
+    def _write_session(self, sessions_dir: Path, session_id: str, state: dict) -> Path:
+        """Write a session JSON file directly to disk."""
+        p = sessions_dir / f"{session_id}.json"
+        p.write_text(json.dumps(state), encoding="utf-8")
+        return p
+
+    def test_returns_sessions_with_title(self, app):
+        from novelforge.session.persistence import list_session_summaries
+
+        sid = _VALID_UUID
+        sessions_dir = Path(config.NOVELS_DIR)
+        self._write_session(sessions_dir, sid, {
+            "session_id": sid,
+            "title": "My Novel",
+            "premise": "A test premise",
+            "genre": "Fantasy",
+            "chapters": 5,
+            "word_count": 5000,
+        })
+
+        with app.test_request_context():
+            result = list_session_summaries()
+
+        assert any(s["session_id"] == sid and s["title"] == "My Novel" for s in result)
+
+    def test_skips_untitled_sessions(self, app):
+        from novelforge.session.persistence import list_session_summaries
+
+        sid = _VALID_UUID
+        sessions_dir = Path(config.NOVELS_DIR)
+        self._write_session(sessions_dir, sid, {
+            "session_id": sid,
+            "title": "",
+            "premise": "A test",
+            "genre": "Fantasy",
+        })
+
+        with app.test_request_context():
+            result = list_session_summaries()
+
+        assert not any(s["session_id"] == sid for s in result)
+
+    def test_skips_corrupt_json_file(self, app):
+        from novelforge.session.persistence import list_session_summaries
+
+        sessions_dir = Path(config.NOVELS_DIR)
+        corrupt = sessions_dir / f"{_VALID_UUID}.json"
+        corrupt.write_text("{ this is not valid JSON !!!", encoding="utf-8")
+
+        with app.test_request_context():
+            result = list_session_summaries()
+
+        # Corrupt file must not appear and must not raise
+        assert not any(s["session_id"] == _VALID_UUID for s in result)
+
+    def test_skips_progress_json_files(self, app):
+        from novelforge.session.persistence import list_session_summaries
+
+        sessions_dir = Path(config.NOVELS_DIR)
+        (sessions_dir / f"{_VALID_UUID}_progress.json").write_text(
+            json.dumps({"title": "Should Be Ignored"}), encoding="utf-8"
+        )
+
+        with app.test_request_context():
+            result = list_session_summaries()
+
+        assert not any(s.get("session_id", "").endswith("_progress") for s in result)
+
+    def test_partial_session_included_when_title_present(self, app):
+        """Legacy/partial sessions missing optional fields are included if they have a title."""
+        from novelforge.session.persistence import list_session_summaries
+
+        sid = _VALID_UUID
+        sessions_dir = Path(config.NOVELS_DIR)
+        # Only title and session_id; all other fields missing
+        self._write_session(sessions_dir, sid, {
+            "session_id": sid,
+            "title": "Partial Novel",
+        })
+
+        with app.test_request_context():
+            result = list_session_summaries()
+
+        assert any(s["session_id"] == sid and s["title"] == "Partial Novel" for s in result)
+
+    def test_result_sorted_by_title(self, app):
+        from novelforge.session.persistence import list_session_summaries
+
+        sessions_dir = Path(config.NOVELS_DIR)
+        ids = [
+            "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        ]
+        titles = ["Zebra Story", "Alpha Story", "Middle Story"]
+        for sid, title in zip(ids, titles):
+            self._write_session(sessions_dir, sid, {
+                "session_id": sid,
+                "title": title,
+                "premise": "x",
+                "genre": "Fantasy",
+            })
+
+        with app.test_request_context():
+            result = list_session_summaries()
+
+        returned_titles = [s["title"] for s in result]
+        assert returned_titles == sorted(returned_titles, key=str.lower)
+
+    def test_valid_and_corrupt_files_coexist(self, app):
+        """One corrupt file must not prevent valid sessions from being listed."""
+        from novelforge.session.persistence import list_session_summaries
+
+        sessions_dir = Path(config.NOVELS_DIR)
+        good_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        bad_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+        self._write_session(sessions_dir, good_id, {
+            "session_id": good_id,
+            "title": "Good Novel",
+            "premise": "fine",
+            "genre": "Fantasy",
+        })
+        (sessions_dir / f"{bad_id}.json").write_text("not json at all", encoding="utf-8")
+
+        with app.test_request_context():
+            result = list_session_summaries()
+
+        titles = [s["title"] for s in result]
+        assert "Good Novel" in titles
+
+
+class TestLoadSessionById:
+    """Tests for load_session_by_id() in the persistence layer."""
+
+    def _write_session(self, sessions_dir: Path, session_id: str, state: dict) -> Path:
+        p = sessions_dir / f"{session_id}.json"
+        p.write_text(json.dumps(state), encoding="utf-8")
+        return p
+
+    def test_returns_validated_state_for_valid_session(self, app):
+        from novelforge.session.persistence import load_session_by_id
+
+        sid = _VALID_UUID
+        sessions_dir = Path(config.NOVELS_DIR)
+        self._write_session(sessions_dir, sid, {
+            "session_id": sid,
+            "title": "Loadable",
+            "premise": "Test",
+            "genre": "Sci-Fi",
+            "chapters": 3,
+            "word_count": 3000,
+        })
+
+        with app.test_request_context():
+            state = load_session_by_id(sid)
+
+        assert state is not None
+        assert state["title"] == "Loadable"
+        assert state["genre"] == "Sci-Fi"
+        # validate_session_state fills in missing fields with defaults
+        assert "chapter_list" in state
+        assert "character_list" in state
+
+    def test_returns_none_for_missing_file(self, app):
+        from novelforge.session.persistence import load_session_by_id
+
+        with app.test_request_context():
+            result = load_session_by_id(_VALID_UUID)
+
+        assert result is None
+
+    def test_raises_value_error_for_invalid_id(self, app):
+        from novelforge.session.persistence import load_session_by_id
+
+        with app.test_request_context():
+            with pytest.raises(ValueError):
+                load_session_by_id("not-a-uuid")
+
+    def test_raises_on_corrupt_file(self, app):
+        from novelforge.session.persistence import load_session_by_id
+        import json as _json
+
+        sid = _VALID_UUID
+        (Path(config.NOVELS_DIR) / f"{sid}.json").write_text(
+            "{ corrupt JSON !!!", encoding="utf-8"
+        )
+
+        with app.test_request_context():
+            with pytest.raises(_json.JSONDecodeError):
+                load_session_by_id(sid)
+
+    def test_partial_session_gets_defaults(self, app):
+        """A session file with only a title returns a fully normalised state dict."""
+        from novelforge.session.persistence import load_session_by_id
+
+        sid = _VALID_UUID
+        sessions_dir = Path(config.NOVELS_DIR)
+        self._write_session(sessions_dir, sid, {
+            "session_id": sid,
+            "title": "Partial",
+        })
+
+        with app.test_request_context():
+            state = load_session_by_id(sid)
+
+        assert state is not None
+        assert state["title"] == "Partial"
+        assert state["chapters"] == 0          # default
+        assert state["chapter_list"] == []     # default
+        assert state["voice_seed"] == {}       # default
+
+    def test_legacy_numeric_string_coerced(self, app):
+        """Legacy files that store chapters as a string are coerced to int."""
+        from novelforge.session.persistence import load_session_by_id
+
+        sid = _VALID_UUID
+        sessions_dir = Path(config.NOVELS_DIR)
+        self._write_session(sessions_dir, sid, {
+            "session_id": sid,
+            "title": "Legacy Novel",
+            "chapters": "7",   # stored as string in old format
+            "word_count": "50000",
+        })
+
+        with app.test_request_context():
+            state = load_session_by_id(sid)
+
+        assert state is not None
+        assert state["chapters"] == 7
+        assert state["word_count"] == 50000
+
+
+class TestRouteUsesPersisteceLayer:
+    """Verify that route handlers delegate to persistence helpers, not raw JSON."""
+
+    def test_list_sessions_route_uses_list_session_summaries(self, app, mocker):
+        """list_sessions() route must call list_session_summaries(), not json.loads."""
+        from novelforge.routes import sessions as sessions_module
+
+        mock_list = mocker.patch.object(
+            sessions_module,
+            "list_session_summaries",
+            return_value=[{"session_id": "abc", "title": "Mocked"}],
+        )
+
+        with app.test_client() as c:
+            r = c.get("/list_sessions")
+
+        assert r.status_code == 200
+        mock_list.assert_called_once()
+        data = r.get_json()
+        assert data["sessions"] == [{"session_id": "abc", "title": "Mocked"}]
+
+    def test_load_session_route_uses_load_session_by_id(self, app, mocker):
+        """load_session() route must call load_session_by_id(), not json.loads."""
+        from novelforge.routes import sessions as sessions_module
+
+        fake_state = {
+            "session_id": _VALID_UUID,
+            "title": "Mocked Session",
+            "premise": "",
+            "genre": "Fantasy",
+            "chapters": 0,
+            "word_count": 0,
+            "special_events": "",
+            "special_instructions": "",
+            "chapter_list": [],
+            "character_list": [],
+            "story_architecture": {},
+            "master_timeline": {},
+            "character_fate_registry": {},
+            "character_arc_plan": {},
+            "antagonist_motivation_plan": {},
+            "technology_rules": {},
+            "theme_reinforcement": {},
+            "pov_focal_character_plan": {},
+            "narrative_perspective": "third_person",
+            "progress_token": "",
+            "completed_chapters": [],
+            "illustrations": [],
+            "voice_seed": {},
+        }
+
+        mock_load = mocker.patch.object(
+            sessions_module,
+            "load_session_by_id",
+            return_value=fake_state,
+        )
+        mocker.patch.object(sessions_module, "restore_session_from_state")
+
+        with app.test_client() as c:
+            r = c.post(
+                "/load_session",
+                data=json.dumps({"session_id": _VALID_UUID}),
+                content_type="application/json",
+            )
+
+        assert r.status_code == 200
+        mock_load.assert_called_once_with(_VALID_UUID)
+
+    def test_load_session_returns_404_when_load_returns_none(self, app, mocker):
+        """load_session() must return 404 when load_session_by_id() returns None."""
+        from novelforge.routes import sessions as sessions_module
+
+        mocker.patch.object(sessions_module, "load_session_by_id", return_value=None)
+
+        with app.test_client() as c:
+            r = c.post(
+                "/load_session",
+                data=json.dumps({"session_id": _VALID_UUID}),
+                content_type="application/json",
+            )
+
+        assert r.status_code == 404
+
+    def test_load_session_returns_500_on_corrupt_file(self, app, mocker):
+        """load_session() must return 500 when load_session_by_id() raises."""
+        import json as _json
+        from novelforge.routes import sessions as sessions_module
+
+        mocker.patch.object(
+            sessions_module,
+            "load_session_by_id",
+            side_effect=_json.JSONDecodeError("bad", "doc", 0),
+        )
+
+        with app.test_client() as c:
+            r = c.post(
+                "/load_session",
+                data=json.dumps({"session_id": _VALID_UUID}),
+                content_type="application/json",
+            )
+
+        assert r.status_code == 500
+        assert "error" in r.get_json()
+
+
 class TestResolveSessionPath:
     """Test the resolve_session_path validation helper."""
 
