@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from novelforge.llm.client import call_llm, parse_llm_json, ChapterTimeoutError, ContentRejectionError, PER_CHAPTER_TIMEOUT
 from novelforge.llm.prompts import render_prompt
+from novelforge.names import format_name_pool_for_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -315,9 +316,11 @@ def _collect_existing_names() -> str:
 
 def build_characters_prompt(premise: str, genre: str, outline_text: str) -> list[dict[str, str]]:
     names_to_avoid = _collect_existing_names()
+    name_pool = format_name_pool_for_prompt(genre)
     return render_prompt(
         "characters", premise=premise, genre=genre,
         outline_text=outline_text, names_to_avoid=names_to_avoid,
+        name_pool=name_pool,
     )
 
 
