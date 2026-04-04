@@ -31,4 +31,7 @@ jobs:
         run: mkdir -p logs
      
       - name: Run tests
-        run: pytest --tb=short -q -cov=. --cov-report=term-missing  --cov-report=xml:coverage.xml  --cov-fail-under=85
+        run: pytest --tb=short -q --cov=. --cov-report=term-missing  --cov-report=xml:coverage.xml  --cov-fail-under=85
+
+
+
