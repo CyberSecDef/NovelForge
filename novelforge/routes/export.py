@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Blueprint, Response, abort, jsonify, request, send_file, session
 
 from novelforge import limiter
-from novelforge.progress import _progress_store, _progress_lock
+from novelforge.progress import progress_manager
 import novelforge.config as config
 from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.llm.image import call_image_api
@@ -43,8 +43,7 @@ def export_novel() -> Response | tuple[Response, int]:
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
 
-    with _progress_lock:
-        progress_data = _progress_store.get(token)
+    progress_data = progress_manager.get(token)
 
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
@@ -69,8 +68,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
 
-    with _progress_lock:
-        progress_data = _progress_store.get(token)
+    progress_data = progress_manager.get(token)
 
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
@@ -484,8 +482,7 @@ def generate_illustrations() -> Response | tuple[Response, int]:
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
 
-    with _progress_lock:
-        progress_data = _progress_store.get(token)
+    progress_data = progress_manager.get(token)
 
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
@@ -551,8 +548,7 @@ def generate_illustrations() -> Response | tuple[Response, int]:
         if not results:
             return jsonify({"error": "Image generation failed for all prompts."}), 502
 
-        with _progress_lock:
-            _progress_store[token]["illustrations"] = results
+        progress_manager.update(token, {"illustrations": results})
         session["illustrations"] = results
         save_session_state()
 

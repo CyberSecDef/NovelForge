@@ -13,7 +13,7 @@ from flask_session import Session
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 
 import novelforge.config as config
-from novelforge.progress import _progress_store, _progress_lock, CorrelationFilter, CorrelationFormatter
+from novelforge.progress import progress_manager, CorrelationFilter, CorrelationFormatter
 from novelforge.routes import register_blueprints
 
 # Module-level limiter, initialised without app (attached in create_app)
@@ -154,8 +154,7 @@ def create_app(*, testing: bool = False) -> Flask:
             token = sess.get("progress_token", "")
             if token:
                 session_data["progress_token"] = token
-                with _progress_lock:
-                    progress = _progress_store.get(token)
+                progress = progress_manager.get(token)
                 if progress:
                     session_data["progress_data"] = progress
 

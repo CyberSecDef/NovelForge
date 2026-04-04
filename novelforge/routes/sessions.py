@@ -9,7 +9,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, request, session
 
 import novelforge.config as config
-from novelforge.progress import _progress_store, _progress_lock
+from novelforge.progress import progress_manager
 from novelforge.session.persistence import (
     get_session_file_path, restore_session_from_state,
 )
@@ -63,8 +63,7 @@ def load_session() -> Response | tuple[Response, int]:
 
     token = state.get("progress_token")
     if token and "progress_data" in state:
-        with _progress_lock:
-            _progress_store[token] = state["progress_data"]
+        progress_manager.create(token, state["progress_data"])
 
     return jsonify({"status": "loaded", "title": state.get("title", "")})
 

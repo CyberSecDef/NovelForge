@@ -11,7 +11,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from novelforge.progress import _progress_store, _progress_lock
+from novelforge.progress import progress_manager
 
 
 # ---------------------------------------------------------------------------
@@ -128,8 +128,7 @@ class TestEditorsNotesFormatting:
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
         token = "editors-full"
-        with _progress_lock:
-            _progress_store[token] = self._full_progress_data()
+        progress_manager.create(token, self._full_progress_data())
         with client.session_transaction() as sess:
             sess["title"] = "Full Notes Test"
 
@@ -162,8 +161,7 @@ class TestEditorsNotesFormatting:
 
     def test_editors_notes_no_content(self, client):
         token = "editors-empty"
-        with _progress_lock:
-            _progress_store[token] = {"status": "done"}
+        progress_manager.create(token, {"status": "done", "current": 0, "total": 0, "step": "", "chapters_done": [], "error": None})
         with client.session_transaction() as sess:
             sess["title"] = "Empty"
 
@@ -665,14 +663,17 @@ class TestManuscriptExport:
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
         token = "export-file-test"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "done",
-                "chapters_done": [
-                    {"number": 1, "title": "Opening", "content": "Chapter one content."},
-                    {"number": 2, "title": "Finale", "content": "Chapter two content."},
-                ],
-            }
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 2,
+            "total": 2,
+            "step": "Complete",
+            "error": None,
+            "chapters_done": [
+                {"number": 1, "title": "Opening", "content": "Chapter one content."},
+                {"number": 2, "title": "Finale", "content": "Chapter two content."},
+            ],
+        })
         with client.session_transaction() as sess:
             sess["title"] = "Export File Test"
 

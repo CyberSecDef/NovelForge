@@ -10,7 +10,7 @@ from pathlib import Path
 from flask import session
 
 import novelforge.config as config
-from novelforge.progress import _progress_store, _progress_lock
+from novelforge.progress import progress_manager
 
 logger = logging.getLogger(__name__)
 
@@ -201,13 +201,13 @@ def save_session_state() -> None:
         # Add progress store data if available
         token = session.get("progress_token")
         if token:
-            with _progress_lock:
-                if token in _progress_store:
-                    state["progress_data"] = _progress_store[token]
-                    # Keep completed_chapters in sync with progress data
-                    done = _progress_store[token].get("chapters_done", [])
-                    if done:
-                        state["completed_chapters"] = list(done)
+            progress = progress_manager.get(token)
+            if progress is not None:
+                state["progress_data"] = progress
+                # Keep completed_chapters in sync with progress data
+                done = progress.get("chapters_done", [])
+                if done:
+                    state["completed_chapters"] = list(done)
 
         # Validate before writing
         state = validate_session_state(state)
@@ -259,8 +259,7 @@ def rebuild_stale_progress(
         "chapters_done": completed_chapters,
         "error": None,
     }
-    with _progress_lock:
-        _progress_store[progress_token] = rebuilt
+    progress_manager.create(progress_token, rebuilt)
     logger.info(
         "Rebuilt stale progress snapshot for token %s (%d chapters)",
         progress_token,
@@ -309,8 +308,7 @@ def restore_session_from_state(state: dict) -> None:
         ):
             rebuild_stale_progress(completed, state.get("chapters", 0), token)
         elif pd:
-            with _progress_lock:
-                _progress_store[token] = pd
+            progress_manager.create(token, pd)
 
     logger.info("Restored session from saved state")
 
@@ -336,10 +334,9 @@ def persist_completed_chapters(
         state["completed_chapters"] = list(chapters_done)
 
         if progress_token:
-            with _progress_lock:
-                progress = _progress_store.get(progress_token)
-                if progress is not None:
-                    state["progress_data"] = dict(progress)
+            progress = progress_manager.get(progress_token)
+            if progress is not None:
+                state["progress_data"] = progress
 
         _atomic_write(session_file, json.dumps(state, indent=2))
     except Exception as e:

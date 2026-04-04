@@ -13,7 +13,7 @@ from flask import Blueprint, Response, jsonify, request, session
 from novelforge import limiter
 import novelforge.config as config
 from novelforge.progress import (
-    _progress_store, _progress_lock,
+    progress_manager,
     set_correlation_token, clear_correlation_token,
 )
 from novelforge.llm.client import (
@@ -72,8 +72,7 @@ def generate_chapters() -> Response | tuple[Response, int]:
     # Guard against duplicate workers for the same session
     existing_token = session.get("progress_token")
     if existing_token:
-        with _progress_lock:
-            existing = _progress_store.get(existing_token)
+        existing = progress_manager.get(existing_token)
         if existing and existing.get("status") == "running":
             return jsonify({
                 "error": "A chapter generation is already in progress for this session. Please wait for it to complete.",
@@ -103,17 +102,16 @@ def generate_chapters() -> Response | tuple[Response, int]:
         "voice_seed": session.get("voice_seed", {}),
         "narrative_perspective": session.get("narrative_perspective", "third_person"),
     }
-    with _progress_lock:
-        _progress_store[token] = {
-            "status": "running",
-            "current": 0,
-            "total": session["chapters"],
-            "step": "Preparing\u2026",
-            "chapters_done": [],
-            "error": None,
-            "_live": True,
-            "snapshot": snapshot,
-        }
+    progress_manager.create(token, {
+        "status": "running",
+        "current": 0,
+        "total": session["chapters"],
+        "step": "Preparing\u2026",
+        "chapters_done": [],
+        "error": None,
+        "_live": True,
+        "snapshot": snapshot,
+    })
 
     thread = threading.Thread(
         target=_run_chapter_generation,
@@ -245,12 +243,10 @@ def _run_chapter_generation_internal(
     set_correlation_token(token)
 
     def _set_step(step_label: str) -> None:
-        with _progress_lock:
-            _progress_store[token]["step"] = step_label
+        progress_manager.update(token, {"step": step_label})
         try:
             save_file = Path(config.NOVELS_DIR) / f"{token}_progress.json"
-            with _progress_lock:
-                progress_data = dict(_progress_store[token])
+            progress_data = progress_manager.get(token)
             save_data = {
                 "token": token,
                 "snapshot": snap,
@@ -400,19 +396,19 @@ def _run_chapter_generation_internal(
                 "total_tokens": chapter_usage["total_tokens"],
             })
 
-            with _progress_lock:
-                _progress_store[token]["current"] = idx + 1
-                _progress_store[token]["step"] = f"Chapter {chapter_num}: complete"
-                _progress_store[token]["chapters_done"] = list(chapters_done)
-                _progress_store[token]["character_state_log"] = list(character_state_log)
+            progress_manager.update(token, {
+                "current": idx + 1,
+                "step": f"Chapter {chapter_num}: complete",
+                "chapters_done": list(chapters_done),
+                "character_state_log": list(character_state_log),
+            })
 
             session_id = snap.get("session_id")
             if session_id:
                 persist_completed_chapters(session_id, chapters_done, token)
 
         # --- Final consistency pass ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Final consistency pass"
+        progress_manager.update(token, {"step": "Final consistency pass"})
         consistency_raw = call_llm(
             build_consistency_pass_prompt(title, summaries, special_instructions),
             action="Final consistency pass", json_mode=True,
@@ -423,8 +419,7 @@ def _run_chapter_generation_internal(
             consistency = {"issues": [], "overall_assessment": ""}
 
         # --- Global Continuity Audit ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Global continuity audit"
+        progress_manager.update(token, {"step": "Global continuity audit"})
         audit_raw = call_llm(
             build_global_continuity_auditor_prompt(
                 title=title, all_summaries=summaries,
@@ -443,14 +438,14 @@ def _run_chapter_generation_internal(
                 "overall_integrity": "unknown", "overall_assessment": "",
             }
 
-        with _progress_lock:
-            _progress_store[token]["status"] = "done"
-            _progress_store[token]["consistency"] = consistency
-            _progress_store[token]["global_continuity_audit"] = global_audit
+        progress_manager.update(token, {
+            "status": "done",
+            "consistency": consistency,
+            "global_continuity_audit": global_audit,
+        })
 
         # --- Narrative Compression Edit ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Narrative compression analysis"
+        progress_manager.update(token, {"step": "Narrative compression analysis"})
         compression_raw = call_llm(
             build_narrative_compression_editor_prompt(
                 title=title, all_summaries=summaries, continuity_audit=global_audit,
@@ -465,12 +460,10 @@ def _run_chapter_generation_internal(
                 "compression_priority": "unknown", "overall_assessment": "",
             }
 
-        with _progress_lock:
-            _progress_store[token]["narrative_compression_report"] = compression_report
+        progress_manager.update(token, {"narrative_compression_report": compression_report})
 
         # --- Character Resolution Validation ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Character resolution validation"
+        progress_manager.update(token, {"step": "Character resolution validation"})
         resolution_raw = call_llm(
             build_character_resolution_validator_prompt(
                 title=title, all_summaries=summaries,
@@ -488,12 +481,10 @@ def _run_chapter_generation_internal(
                 "resolution_integrity": "unknown", "overall_assessment": "",
             }
 
-        with _progress_lock:
-            _progress_store[token]["character_resolution_report"] = resolution_report
+        progress_manager.update(token, {"character_resolution_report": resolution_report})
 
         # --- Thematic Payoff Analysis ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Thematic payoff analysis"
+        progress_manager.update(token, {"step": "Thematic payoff analysis"})
         thematic_raw = call_llm(
             build_thematic_payoff_analyzer_prompt(
                 title=title, all_summaries=summaries,
@@ -510,12 +501,10 @@ def _run_chapter_generation_internal(
                 "overall_assessment": "",
             }
 
-        with _progress_lock:
-            _progress_store[token]["thematic_payoff_report"] = thematic_report
+        progress_manager.update(token, {"thematic_payoff_report": thematic_report})
 
         # --- Climax Integrity Check ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Climax integrity check"
+        progress_manager.update(token, {"step": "Climax integrity check"})
         climax_raw = call_llm(
             build_climax_integrity_checker_prompt(
                 title=title, all_summaries=summaries,
@@ -534,12 +523,10 @@ def _run_chapter_generation_internal(
                 "overall_assessment": "",
             }
 
-        with _progress_lock:
-            _progress_store[token]["climax_integrity_report"] = climax_report
+        progress_manager.update(token, {"climax_integrity_report": climax_report})
 
         # --- Loose Thread Resolution ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Loose thread resolution"
+        progress_manager.update(token, {"step": "Loose thread resolution"})
         threads_raw = call_llm(
             build_loose_thread_resolver_prompt(
                 title=title, all_summaries=summaries,
@@ -557,12 +544,10 @@ def _run_chapter_generation_internal(
                 "overall_assessment": "",
             }
 
-        with _progress_lock:
-            _progress_store[token]["loose_thread_report"] = threads_report
+        progress_manager.update(token, {"loose_thread_report": threads_report})
 
         # --- Reader Immersion Testing ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Reader immersion testing"
+        progress_manager.update(token, {"step": "Reader immersion testing"})
         immersion_raw = call_llm(
             build_reader_immersion_tester_prompt(
                 title=title, all_summaries=summaries,
@@ -581,12 +566,10 @@ def _run_chapter_generation_internal(
                 "recommendations": [],
             }
 
-        with _progress_lock:
-            _progress_store[token]["reader_immersion_report"] = immersion_report
+        progress_manager.update(token, {"reader_immersion_report": immersion_report})
 
         # --- Pacing & Tension Heatmap ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Pacing & tension heatmap"
+        progress_manager.update(token, {"step": "Pacing & tension heatmap"})
         heatmap_raw = call_llm(
             build_pacing_tension_heatmap_prompt(
                 title=title, all_summaries=summaries, total_chapters=total_chapters,
@@ -601,12 +584,10 @@ def _run_chapter_generation_internal(
                 "overall_pacing_assessment": "",
             }
 
-        with _progress_lock:
-            _progress_store[token]["pacing_heatmap"] = pacing_heatmap
+        progress_manager.update(token, {"pacing_heatmap": pacing_heatmap})
 
         # --- Character Relationship Map ---
-        with _progress_lock:
-            _progress_store[token]["step"] = "Mapping character relationships"
+        progress_manager.update(token, {"step": "Mapping character relationships"})
         relationship_raw = call_llm(
             build_character_relationship_prompt(
                 title=title, genre=genre,
@@ -619,8 +600,7 @@ def _run_chapter_generation_internal(
         except json.JSONDecodeError:
             relationship_map = {"characters": [], "relationships": []}
 
-        with _progress_lock:
-            _progress_store[token]["character_relationship_map"] = relationship_map
+        progress_manager.update(token, {"character_relationship_map": relationship_map})
 
         _set_step("Complete")
 
@@ -633,15 +613,16 @@ def _run_chapter_generation_internal(
             "Content rejection during generation for token %s (after retries exhausted): %s",
             token, exc,
         )
-        with _progress_lock:
-            _progress_store[token]["status"] = "error"
-            _progress_store[token]["error"] = (
+        progress_manager.update(token, {
+            "status": "error",
+            "error": (
                 "The AI service rejected chapter content due to content policy, even after "
                 "automatic sanitisation retries. This can happen with horror, violence, or "
                 "other mature themes. Your progress has been saved — you can try resuming "
                 "or revising the chapter outline to use less explicit language."
-            )
-            _progress_store[token]["error_code"] = "content_rejection"
+            ),
+            "error_code": "content_rejection",
+        })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
@@ -649,10 +630,11 @@ def _run_chapter_generation_internal(
 
     except ChapterTimeoutError as exc:
         logger.error("Chapter timeout during generation for token %s: %s", token, exc)
-        with _progress_lock:
-            _progress_store[token]["status"] = "error"
-            _progress_store[token]["error"] = str(exc)
-            _progress_store[token]["error_code"] = "chapter_timeout"
+        progress_manager.update(token, {
+            "status": "error",
+            "error": str(exc),
+            "error_code": "chapter_timeout",
+        })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
@@ -660,13 +642,14 @@ def _run_chapter_generation_internal(
 
     except CircuitBreakerError as exc:
         logger.error("Circuit breaker tripped during generation for token %s: %s", token, exc)
-        with _progress_lock:
-            _progress_store[token]["status"] = "error"
-            _progress_store[token]["error"] = (
+        progress_manager.update(token, {
+            "status": "error",
+            "error": (
                 "LLM API is unavailable — 3 consecutive calls failed. "
                 "Please check your API key, endpoint, and rate limits, then try again."
-            )
-            _progress_store[token]["error_code"] = "circuit_breaker"
+            ),
+            "error_code": "circuit_breaker",
+        })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
@@ -674,14 +657,15 @@ def _run_chapter_generation_internal(
 
     except AllProvidersExhaustedError as exc:
         logger.error("All LLM providers exhausted for token %s: %s", token, exc)
-        with _progress_lock:
-            _progress_store[token]["status"] = "error"
-            _progress_store[token]["error"] = (
+        progress_manager.update(token, {
+            "status": "error",
+            "error": (
                 "All configured LLM providers failed. Check your API keys, "
                 "endpoints, and rate limits, then try again. "
                 "Your progress has been saved."
-            )
-            _progress_store[token]["error_code"] = "all_providers_exhausted"
+            ),
+            "error_code": "all_providers_exhausted",
+        })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
@@ -689,9 +673,10 @@ def _run_chapter_generation_internal(
 
     except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.error("Chapter generation failed for token %s: %s", token, exc)
-        with _progress_lock:
-            _progress_store[token]["status"] = "error"
-            _progress_store[token]["error"] = friendly_llm_error(exc)
+        progress_manager.update(token, {
+            "status": "error",
+            "error": friendly_llm_error(exc),
+        })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
@@ -724,8 +709,7 @@ def revise_chapter() -> Response | tuple[Response, int]:
     if not instructions:
         return jsonify({"error": "Revision instructions are required."}), 400
 
-    with _progress_lock:
-        progress_data = _progress_store.get(token)
+    progress_data = progress_manager.get(token)
 
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
@@ -847,12 +831,13 @@ def revise_chapter() -> Response | tuple[Response, int]:
         except json.JSONDecodeError:
             consistency = {"issues": [], "overall_assessment": ""}
 
-        with _progress_lock:
-            _progress_store[token]["status"] = "done"
-            _progress_store[token]["step"] = f"Chapter {chapter_number}: revised"
-            _progress_store[token]["chapters_done"] = chapters_done
-            _progress_store[token]["consistency"] = consistency
-            response_payload = dict(_progress_store[token])
+        progress_manager.update(token, {
+            "status": "done",
+            "step": f"Chapter {chapter_number}: revised",
+            "chapters_done": chapters_done,
+            "consistency": consistency,
+        })
+        response_payload = progress_manager.get(token)
 
         return jsonify(response_payload)
 
@@ -875,8 +860,7 @@ _LIGHTWEIGHT_FIELDS = ("status", "current", "total", "step", "error", "error_cod
 @generation_bp.route("/progress/<token>")
 def progress(token: str) -> Response | tuple[Response, int]:
     """Lightweight poll endpoint – returns only status/step fields, not chapter content."""
-    with _progress_lock:
-        data = _progress_store.get(token)
+    data = progress_manager.get(token)
     if data is None:
         return jsonify({"error": "Unknown token"}), 404
     light = {k: data[k] for k in _LIGHTWEIGHT_FIELDS if k in data}
@@ -886,8 +870,7 @@ def progress(token: str) -> Response | tuple[Response, int]:
 @generation_bp.route("/progress/<token>/full")
 def progress_full(token: str) -> Response | tuple[Response, int]:
     """Full progress endpoint – returns the complete payload including chapter content and reports."""
-    with _progress_lock:
-        data = _progress_store.get(token)
+    data = progress_manager.get(token)
     if data is None:
         return jsonify({"error": "Unknown token"}), 404
     return jsonify(dict(data))

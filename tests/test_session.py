@@ -12,7 +12,7 @@ import pytest
 from pathlib import Path
 
 import novelforge.config as config
-from novelforge.progress import _progress_store, _progress_lock
+from novelforge.progress import progress_manager
 
 
 def _make_chapters(n: int) -> list[dict]:
@@ -86,14 +86,14 @@ class TestSaveAndLoadCycle:
         from novelforge.session.persistence import save_session_state, get_session_id
 
         token = "test-save-progress"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "running",
-                "current": 3,
-                "total": 10,
-                "step": "Chapter 3: polishing",
-                "chapters_done": _make_chapters(3),
-            }
+        progress_manager.create(token, {
+            "status": "running",
+            "current": 3,
+            "total": 10,
+            "step": "Chapter 3: polishing",
+            "chapters_done": _make_chapters(3),
+            "error": None,
+        })
 
         with app.test_request_context():
             import flask
@@ -118,8 +118,7 @@ class TestSaveAndLoadCycle:
 
             # Cleanup
             session_file.unlink(missing_ok=True)
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
 
 
 class TestCrashRecovery:
@@ -133,14 +132,14 @@ class TestCrashRecovery:
 
         token = "crash-test-token"
         chapters_done = _make_chapters(3)
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "running",
-                "current": 3,
-                "total": 10,
-                "step": "Chapter 4: drafting",
-                "chapters_done": chapters_done,
-            }
+        progress_manager.create(token, {
+            "status": "running",
+            "current": 3,
+            "total": 10,
+            "step": "Chapter 4: drafting",
+            "chapters_done": chapters_done,
+            "error": None,
+        })
 
         # Phase 1: Save state (simulates normal operation)
         with app.test_request_context():
@@ -163,8 +162,7 @@ class TestCrashRecovery:
             session_id = get_session_id()
 
         # Phase 2: Simulate crash — clear everything
-        with _progress_lock:
-            _progress_store.clear()
+        progress_manager.clear()
 
         # Phase 3: Restore from file (simulates restart)
         session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
@@ -190,31 +188,29 @@ class TestCrashRecovery:
             assert sess["story_architecture"]["architecture_type"] == "three-act"
 
             # Progress store should be restored too
-            with _progress_lock:
-                assert token in _progress_store
-                assert _progress_store[token]["current"] == 3
-                assert len(_progress_store[token]["chapters_done"]) == 3
+            restored = progress_manager.get(token)
+            assert restored is not None
+            assert restored["current"] == 3
+            assert len(restored["chapters_done"]) == 3
 
         # Cleanup
         session_file.unlink(missing_ok=True)
-        with _progress_lock:
-            _progress_store.pop(token, None)
+        progress_manager.delete(token)
 
     def test_partial_generation_3_of_10(self, app):
         """Simulate crash after 3 of 10 chapters; verify partial state is restorable."""
         from novelforge.session.persistence import save_session_state, get_session_id
 
         token = "partial-3-of-10"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "running",
-                "current": 3,
-                "total": 10,
-                "step": "Chapter 4: drafting",
-                "chapters_done": _make_chapters(3),
-                "error": None,
-                "_live": True,
-            }
+        progress_manager.create(token, {
+            "status": "running",
+            "current": 3,
+            "total": 10,
+            "step": "Chapter 4: drafting",
+            "chapters_done": _make_chapters(3),
+            "error": None,
+            "_live": True,
+        })
 
         with app.test_request_context():
             import flask
@@ -245,8 +241,7 @@ class TestCrashRecovery:
 
         # Cleanup
         session_file.unlink(missing_ok=True)
-        with _progress_lock:
-            _progress_store.pop(token, None)
+        progress_manager.delete(token)
 
 
 class TestPersistCompletedChapters:
@@ -542,12 +537,10 @@ class TestRebuildStaleProgress:
             assert result["chapters_done"] == chapters
             assert result["error"] is None
 
-            with _progress_lock:
-                stored = _progress_store.get(token)
+            stored = progress_manager.get(token)
             assert stored == result
         finally:
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
 
     def test_uses_total_chapters_param(self):
         """total_chapters parameter is reflected in the rebuilt snapshot."""
@@ -559,8 +552,7 @@ class TestRebuildStaleProgress:
             result = rebuild_stale_progress(chapters, 10, token)
             assert result["total"] == 10
         finally:
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
 
     def test_fallback_total_when_zero(self):
         """When total_chapters is 0, total falls back to len(completed_chapters)."""
@@ -572,8 +564,7 @@ class TestRebuildStaleProgress:
             result = rebuild_stale_progress(chapters, 0, token)
             assert result["total"] == 4
         finally:
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
 
 
 # ---------------------------------------------------------------------------
@@ -608,11 +599,9 @@ class TestRestoreSessionRebuildsBrokenProgress:
         }
 
         with app.test_request_context():
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
             restore_session_from_state(state)
-            with _progress_lock:
-                rebuilt = _progress_store.get(token)
+            rebuilt = progress_manager.get(token)
 
         try:
             assert rebuilt is not None
@@ -621,8 +610,7 @@ class TestRestoreSessionRebuildsBrokenProgress:
             assert rebuilt["step"] == "Complete"
             assert len(rebuilt["chapters_done"]) == 5
         finally:
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
 
     def test_restore_rebuilds_when_no_progress_data(self, app):
         """Missing progress_data with completed chapters triggers a rebuild."""
@@ -642,20 +630,17 @@ class TestRestoreSessionRebuildsBrokenProgress:
         }
 
         with app.test_request_context():
-            with _progress_lock:
-                _progress_store.pop(token, None)
-                assert token not in _progress_store, "token must be absent before restore"
+            progress_manager.delete(token)
+            assert progress_manager.get(token) is None, "token must be absent before restore"
             restore_session_from_state(state)
-            with _progress_lock:
-                rebuilt = _progress_store.get(token)
+            rebuilt = progress_manager.get(token)
 
         try:
             assert rebuilt is not None
             assert rebuilt["status"] == "done"
             assert len(rebuilt["chapters_done"]) == 3
         finally:
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
 
     def test_restore_preserves_valid_progress_data(self, app):
         """Valid (done) progress_data is stored as-is without a rebuild."""
@@ -684,19 +669,16 @@ class TestRestoreSessionRebuildsBrokenProgress:
         }
 
         with app.test_request_context():
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
             restore_session_from_state(state)
-            with _progress_lock:
-                stored = _progress_store.get(token)
+            stored = progress_manager.get(token)
 
         try:
             assert stored is not None
             assert stored.get("extra_key") == "preserved"
             assert stored["status"] == "done"
         finally:
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
 
     def test_restore_preserves_live_running_progress(self, app):
         """Running progress with _live=True is stored as-is (active generation)."""
@@ -710,6 +692,7 @@ class TestRestoreSessionRebuildsBrokenProgress:
             "total": 10,
             "step": "Chapter 3: drafting",
             "chapters_done": chapters,
+            "error": None,
             "_live": True,
         }
         state = {
@@ -724,16 +707,13 @@ class TestRestoreSessionRebuildsBrokenProgress:
         }
 
         with app.test_request_context():
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
             restore_session_from_state(state)
-            with _progress_lock:
-                stored = _progress_store.get(token)
+            stored = progress_manager.get(token)
 
         try:
             assert stored is not None
             assert stored["status"] == "running"
             assert stored.get("_live") is True
         finally:
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
