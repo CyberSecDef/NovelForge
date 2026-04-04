@@ -254,14 +254,12 @@ class TestRoutes:
             "step": "Complete",
             "chapters_done": [],
             "error": None,
+            "snapshot": {"title": "My Great Novel"},
             "consistency": {
                 "overall_assessment": "Strong arc with minor pacing issues.",
                 "issues": ["Chapter 3 timeline inconsistency"],
             },
         })
-
-        with client.session_transaction() as sess:
-            sess["title"] = "My Great Novel"
 
         r = client.post(
             "/export_editors_notes",

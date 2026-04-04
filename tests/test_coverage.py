@@ -670,13 +670,12 @@ class TestManuscriptExport:
             "total": 2,
             "step": "Complete",
             "error": None,
+            "snapshot": {"title": "Export File Test"},
             "chapters_done": [
                 {"number": 1, "title": "Opening", "content": "Chapter one content."},
                 {"number": 2, "title": "Finale", "content": "Chapter two content."},
             ],
         })
-        with client.session_transaction() as sess:
-            sess["title"] = "Export File Test"
 
         r = client.post("/export", data=json.dumps({"token": token}),
                         content_type="application/json")

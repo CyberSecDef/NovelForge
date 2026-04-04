@@ -48,7 +48,7 @@ def export_novel() -> Response | tuple[Response, int]:
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
 
-    title = session.get("title", "Novel")
+    title = (progress_data.get("snapshot") or {}).get("title", "Novel")
     chapters_done = progress_data.get("chapters_done", [])
 
     markdown_content = _format_manuscript(title, chapters_done)
@@ -73,8 +73,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
 
-    title = session.get("title", "Novel")
-
+    title = (progress_data.get("snapshot") or {}).get("title", "Novel")
     consistency = progress_data.get("consistency", {})
     global_continuity_audit = progress_data.get("global_continuity_audit", {})
     narrative_compression_report = progress_data.get("narrative_compression_report", {})
@@ -490,10 +489,11 @@ def generate_illustrations() -> Response | tuple[Response, int]:
     if not config.IMAGE_API_KEY:
         return jsonify({"error": "IMAGE_API_KEY not configured. Set it in your .env file."}), 400
 
-    title = session.get("title", "Novel")
-    genre = session.get("genre", "")
-    premise = session.get("premise", "")
-    character_list = session.get("character_list", [])
+    snapshot = progress_data.get("snapshot") or {}
+    title = snapshot.get("title", "Novel")
+    genre = snapshot.get("genre", "")
+    premise = snapshot.get("premise", "")
+    character_list = snapshot.get("character_list", [])
     chapters_done = progress_data.get("chapters_done", [])
     all_summaries = [str(ch.get("summary", "")) for ch in chapters_done]
 
