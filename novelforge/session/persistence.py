@@ -299,6 +299,16 @@ def restore_session_from_state(state: dict) -> None:
     """
     state = validate_session_state(state)
 
+    # Clean up the old session's progress entry before loading the new state.
+    # This prevents stale entries when switching sessions (token mismatch).
+    old_token = session.get("progress_token", "")
+    new_token = state.get("progress_token", "")
+    if old_token and old_token != new_token:
+        progress_manager.delete(old_token)
+        logger.debug(
+            "Removed stale progress entry for token %s (replaced by session load)", old_token
+        )
+
     # Restore session variables
     session["premise"] = state.get("premise", "")
     session["genre"] = state.get("genre", "")

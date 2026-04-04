@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, request, session
 
 import novelforge.config as config
+from novelforge.progress import progress_manager
 from novelforge.session.persistence import (
     get_session_file_path,
     list_session_summaries,
@@ -68,6 +69,11 @@ def delete_session() -> Response:
     except Exception as e:
         logger.error(f"Failed to delete session file: {e}")
 
+    token = session.get("progress_token", "")
+    if token:
+        progress_manager.delete(token)
+        logger.debug("Removed progress entry for token %s (session deleted)", token)
+
     session.clear()
     return jsonify({"status": "success", "message": "Session deleted"})
 
@@ -86,6 +92,11 @@ def new_session() -> Response:
             logger.info(f"Archived LLM log to {archive_path}")
         except Exception as e:
             logger.error(f"Failed to archive LLM log: {e}")
+
+    token = session.get("progress_token", "")
+    if token:
+        progress_manager.delete(token)
+        logger.debug("Removed progress entry for token %s (new session started)", token)
 
     session.clear()
 
