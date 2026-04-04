@@ -2,6 +2,7 @@
 
 import json
 import logging
+import sys
 import threading
 from pathlib import Path
 
@@ -115,7 +116,13 @@ def create_app(*, testing: bool = False) -> Flask:
         app.config["TESTING"] = True
 
     # Validate configuration – warns in debug/testing, exits in production
-    config.validate_config(debug=app.debug or testing)
+    try:
+        config.validate_config(debug=app.debug or testing)
+    except config.ConfigurationError as exc:
+        # Errors were already logged individually inside validate_config();
+        # re-log the summary here so the startup failure is visible in one line.
+        logging.getLogger(__name__).critical("Startup aborted: %s", exc)
+        sys.exit(1)
 
     # Register route blueprints
     register_blueprints(app)
