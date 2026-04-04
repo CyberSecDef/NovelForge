@@ -456,7 +456,7 @@ class TestSessions:
     def test_load_nonexistent_session(self, client):
         r = client.post(
             "/load_session",
-            data=json.dumps({"session_id": "nonexistent-uuid"}),
+            data=json.dumps({"session_id": "00000000-0000-0000-0000-000000000000"}),
             content_type="application/json",
         )
         assert r.status_code == 404

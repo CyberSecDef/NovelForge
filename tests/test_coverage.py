@@ -624,9 +624,10 @@ class TestSessionRoutesCoverage:
         import novelforge.config as config
         novels_dir = Path(config.NOVELS_DIR)
         novels_dir.mkdir(parents=True, exist_ok=True)
-        test_file = novels_dir / "loadable-uuid.json"
+        valid_uuid = "aabbccdd-eeff-0011-2233-445566778899"
+        test_file = novels_dir / f"{valid_uuid}.json"
         test_file.write_text(json.dumps({
-            "session_id": "loadable-uuid",
+            "session_id": valid_uuid,
             "title": "Loaded Novel",
             "premise": "Test premise",
             "genre": "Fantasy",
@@ -636,7 +637,7 @@ class TestSessionRoutesCoverage:
 
         r = client.post(
             "/load_session",
-            data=json.dumps({"session_id": "loadable-uuid"}),
+            data=json.dumps({"session_id": valid_uuid}),
             content_type="application/json",
         )
         assert r.status_code == 200
