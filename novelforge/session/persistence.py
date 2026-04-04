@@ -386,6 +386,11 @@ def load_session_by_id(session_id: str) -> dict | None:
     validated state dict ready for :func:`restore_session_from_state`.
     """
     session_file = resolve_session_path(session_id)  # raises ValueError if invalid
+    # Defense-in-depth: ensure the resolved path is inside NOVELS_DIR even
+    # though resolve_session_path() has already validated the UUID format.
+    expected_dir = Path(config.NOVELS_DIR).resolve()
+    if session_file.resolve().parent != expected_dir:
+        raise ValueError(f"Session file path outside sessions directory: {session_id!r}")
     if not session_file.exists():
         return None
     state = json.loads(session_file.read_text(encoding="utf-8"))

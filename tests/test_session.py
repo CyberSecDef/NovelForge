@@ -958,7 +958,7 @@ class TestLoadSessionById:
         assert state["word_count"] == 50000
 
 
-class TestRouteUsesPersisteceLayer:
+class TestRouteUsesPersistenceLayer:
     """Verify that route handlers delegate to persistence helpers, not raw JSON."""
 
     def test_list_sessions_route_uses_list_session_summaries(self, app, mocker):
