@@ -7,7 +7,6 @@ and fill in your values before running the application.
 
 import logging
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -126,6 +125,22 @@ NOVELS_DIR = str(PROJECT_ROOT / os.environ.get("NOVELS_DIR", "sessions/novels"))
 LOGS_DIR = str(PROJECT_ROOT / os.environ.get("LOGS_DIR", "logs"))
 
 
+class ConfigurationError(Exception):
+    """Raised by validate_config() when one or more required settings are missing or invalid.
+
+    Attributes:
+        errors: Ordered list of human-readable error messages describing each
+                configuration problem that was detected.
+    """
+
+    def __init__(self, errors: list[str]) -> None:
+        self.errors = list(errors)
+        super().__init__(
+            "Configuration validation failed:\n"
+            + "\n".join(f"  - {e}" for e in self.errors)
+        )
+
+
 def ensure_app_dirs() -> None:
     """Create all required application directories and verify they are writeable.
 
@@ -210,4 +225,4 @@ def validate_config(*, debug: bool = False) -> None:
         else:
             for msg in errors:
                 _logger.error("CONFIG ERROR: %s", msg)
-            sys.exit(1)
+            raise ConfigurationError(errors)
