@@ -89,12 +89,9 @@ def create_app(*, testing: bool = False) -> Flask:
     app.config["WTF_CSRF_TIME_LIMIT"] = 604800  # 7 days in seconds
     app.config["WTF_CSRF_SSL_STRICT_MODE"] = False
 
-    # Ensure directories exist BEFORE initializing sessions
-    Path(config.SESSION_FILE_DIR).mkdir(parents=True, exist_ok=True)
-    Path(config.EXPORT_DIR).mkdir(parents=True, exist_ok=True)
-    Path(config.EXPORT_DIR, "illustrations").mkdir(parents=True, exist_ok=True)
-    Path(config.LOGS_DIR).mkdir(parents=True, exist_ok=True)
-    Path(config.NOVELS_DIR).mkdir(parents=True, exist_ok=True)
+    # Ensure all required directories exist and are writeable BEFORE initializing
+    # sessions or attaching any logging file handlers.
+    config.ensure_app_dirs()
 
     # Configure filesystem-based sessions using CacheLib directly
     # (avoids deprecated SESSION_FILE_DIR / FileSystemSessionInterface)
