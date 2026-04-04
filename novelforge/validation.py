@@ -29,13 +29,19 @@ ALLOWED_GENRES = {
 
 def validate_outline_input(data: dict) -> tuple[bool, str]:
     """Validate the /generate_outline form data. Returns (ok, error_message)."""
-    premise = data.get("premise", "").strip()
+    premise = data.get("premise", "")
+    if not isinstance(premise, str):
+        return False, "Story premise must be a string."
+    premise = premise.strip()
     if not premise:
         return False, "Story premise is required."
     if len(premise) > 2000:
         return False, "Story premise must be 2000 characters or fewer."
 
-    genre = data.get("genre", "").strip()
+    genre = data.get("genre", "")
+    if not isinstance(genre, str):
+        return False, "Genre must be a string."
+    genre = genre.strip()
     if genre not in ALLOWED_GENRES:
         return False, f"Invalid genre. Choose from: {', '.join(sorted(ALLOWED_GENRES))}."
 
@@ -58,11 +64,15 @@ def validate_outline_input(data: dict) -> tuple[bool, str]:
         return False, "Word count must be a valid number."
 
     special_events = data.get("special_events", "")
-    if isinstance(special_events, str) and len(special_events) > 5000:
+    if not isinstance(special_events, str):
+        return False, "Special events must be a string."
+    if len(special_events) > 5000:
         return False, "Special events must be 5,000 characters or fewer."
 
     special_instructions = data.get("special_instructions", "")
-    if isinstance(special_instructions, str) and len(special_instructions) > 5000:
+    if not isinstance(special_instructions, str):
+        return False, "Special instructions must be a string."
+    if len(special_instructions) > 5000:
         return False, "Special instructions must be 5,000 characters or fewer."
 
     return True, ""
