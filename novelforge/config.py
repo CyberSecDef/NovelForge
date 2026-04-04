@@ -10,6 +10,47 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+# Collects errors discovered while parsing numeric environment variables at
+# import time so that validate_config() can surface them all at once instead
+# of crashing with a bare ValueError.
+_CONFIG_PARSE_ERRORS: list[str] = []
+
+
+def get_env_int(name: str, default: int, *, min_value: int | None = None) -> int:
+    """Return the integer value of environment variable *name*.
+
+    Falls back to *default* if the variable is unset or cannot be converted to
+    ``int``.  If *min_value* is given, values below the minimum are rejected in
+    the same way.  All problems are recorded in the module-level
+    ``_CONFIG_PARSE_ERRORS`` list so that :func:`validate_config` can report
+    them as structured errors rather than raising a raw :class:`ValueError` at
+    import time.
+
+    Returns:
+        The parsed integer, or *default* when the value is missing, malformed,
+        or out of the allowed range.
+
+    Side effects:
+        Appends a human-readable error string to ``_CONFIG_PARSE_ERRORS`` for
+        every rejected value so the problem is visible at validation time.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        _CONFIG_PARSE_ERRORS.append(
+            f"{name} must be an integer (got {raw!r}); using default {default}."
+        )
+        return default
+    if min_value is not None and value < min_value:
+        _CONFIG_PARSE_ERRORS.append(
+            f"{name} must be >= {min_value} (got {value!r}); using default {default}."
+        )
+        return default
+    return value
+
 # Project root: parent of the novelforge/ package directory
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -87,23 +128,23 @@ IMAGE_SIZE = os.environ.get("IMAGE_SIZE", "1024x1024")
 # ---------------------------------------------------------------------------
 
 # Retry and timeout settings for LLM API calls
-LLM_MAX_RETRIES = int(os.environ.get("LLM_MAX_RETRIES", "5"))
-LLM_RETRY_DELAY = int(os.environ.get("LLM_RETRY_DELAY", "5"))  # base seconds
-LLM_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "240"))  # request timeout seconds
-IMAGE_TIMEOUT = int(os.environ.get("IMAGE_TIMEOUT", "120"))  # image API timeout
+LLM_MAX_RETRIES = get_env_int("LLM_MAX_RETRIES", 5, min_value=0)
+LLM_RETRY_DELAY = get_env_int("LLM_RETRY_DELAY", 5, min_value=0)  # base seconds
+LLM_TIMEOUT = get_env_int("LLM_TIMEOUT", 240, min_value=1)  # request timeout seconds
+IMAGE_TIMEOUT = get_env_int("IMAGE_TIMEOUT", 120, min_value=1)  # image API timeout
 
 # Circuit breaker: consecutive failures before tripping
-LLM_CIRCUIT_BREAKER_THRESHOLD = int(os.environ.get("LLM_CIRCUIT_BREAKER_THRESHOLD", "3"))
+LLM_CIRCUIT_BREAKER_THRESHOLD = get_env_int("LLM_CIRCUIT_BREAKER_THRESHOLD", 3, min_value=1)
 
 # Per-chapter wall-clock timeout (seconds) – 60 minutes default
-PER_CHAPTER_TIMEOUT = int(os.environ.get("PER_CHAPTER_TIMEOUT", "3600"))
+PER_CHAPTER_TIMEOUT = get_env_int("PER_CHAPTER_TIMEOUT", 3600, min_value=1)
 
 # ---------------------------------------------------------------------------
 # Input validation limits (override via environment variables)
 # ---------------------------------------------------------------------------
 
-MAX_CHAPTERS = int(os.environ.get("MAX_CHAPTERS", "100"))
-MAX_WORD_COUNT = int(os.environ.get("MAX_WORD_COUNT", "500000"))
+MAX_CHAPTERS = get_env_int("MAX_CHAPTERS", 100, min_value=1)
+MAX_WORD_COUNT = get_env_int("MAX_WORD_COUNT", 500000, min_value=1)
 
 # ---------------------------------------------------------------------------
 # Flask
@@ -178,6 +219,9 @@ def validate_config(*, debug: bool = False) -> None:
     _logger = logging.getLogger(__name__)
     errors: list[str] = []
     warnings: list[str] = []
+
+    # Surface any numeric env-var parsing errors collected at import time
+    errors.extend(_CONFIG_PARSE_ERRORS)
 
     # Validate all configured LLM providers
     for i, provider in enumerate(LLM_PROVIDERS):
