@@ -1,7 +1,4 @@
 """NovelForge – Flask backend for AI-powered novel generation."""
-from dotenv import load_dotenv
-load_dotenv()
-
 from novelforge import create_app
 
 app = create_app()
