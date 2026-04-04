@@ -550,7 +550,7 @@ class TestMultipleSimultaneousErrors:
         assert "genre" in result.errors
         assert "chapters" in result.errors
         assert "word_count" in result.errors
-        assert len(result.errors) >= 4
+        assert len(result.errors) == 4
 
     def test_two_numeric_fields_invalid_simultaneously(self):
         result = validate_outline_input({

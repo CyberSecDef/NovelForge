@@ -55,7 +55,7 @@ def generate_outline() -> Response | tuple[Response, int]:
     special_instructions = result.values.get("special_instructions", "")
 
     # Store sanitised inputs in session for later phases
-    session["premise"] = str(premise)
+    session["premise"] = premise
     session["genre"] = genre
     session["chapters"] = chapters
     session["word_count"] = word_count
