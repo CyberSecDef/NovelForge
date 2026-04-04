@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import tempfile
 import uuid
 from pathlib import Path
@@ -39,6 +40,30 @@ def _atomic_write(filepath: Path, content: str) -> None:
         except OSError:
             pass
         raise
+
+# ---------------------------------------------------------------------------
+# Session ID validation and safe path resolution
+# ---------------------------------------------------------------------------
+
+# Session IDs must be standard UUIDs: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+_SESSION_ID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
+def resolve_session_path(session_id: str) -> Path:
+    """Validate *session_id* and return the absolute path to its JSON file.
+
+    Session IDs must be well-formed UUIDs
+    (``xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx``).  Any other value raises
+    :exc:`ValueError` so callers can return a 4xx error before touching the
+    filesystem.
+    """
+    if not isinstance(session_id, str) or not _SESSION_ID_RE.match(session_id):
+        raise ValueError(f"Invalid session_id: {session_id!r}")
+    return Path(config.NOVELS_DIR) / f"{session_id}.json"
+
 
 # ---------------------------------------------------------------------------
 # Session state schema validation
@@ -327,7 +352,7 @@ def persist_completed_chapters(
     status, and chapter data stay in sync on disk.
     """
     try:
-        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+        session_file = resolve_session_path(session_id)
         if not session_file.exists():
             return
         state = json.loads(session_file.read_text(encoding="utf-8"))

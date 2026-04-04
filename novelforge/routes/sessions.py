@@ -11,7 +11,7 @@ from flask import Blueprint, Response, jsonify, request, session
 import novelforge.config as config
 from novelforge.progress import progress_manager
 from novelforge.session.persistence import (
-    get_session_file_path, restore_session_from_state,
+    get_session_file_path, restore_session_from_state, resolve_session_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,11 @@ def load_session() -> Response | tuple[Response, int]:
     if not target_id:
         return jsonify({"error": "session_id is required."}), 400
 
-    session_file = Path(config.NOVELS_DIR) / f"{target_id}.json"
+    try:
+        session_file = resolve_session_path(target_id)
+    except ValueError:
+        return jsonify({"error": "Invalid session_id."}), 400
+
     if not session_file.exists():
         return jsonify({"error": "Session not found."}), 404
 

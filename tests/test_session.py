@@ -291,8 +291,8 @@ class TestPersistCompletedChapters:
     def test_persist_to_nonexistent_file(self):
         """Persisting to a missing session file should not crash."""
         from novelforge.session.persistence import persist_completed_chapters
-        # Should silently return without error
-        persist_completed_chapters("nonexistent-uuid", _make_chapters(3))
+        # Valid UUID format but no corresponding file; should silently return without error
+        persist_completed_chapters("00000000-0000-0000-0000-000000000000", _make_chapters(3))
 
 
 class TestClearSession:
@@ -717,3 +717,80 @@ class TestRestoreSessionRebuildsBrokenProgress:
             assert stored.get("_live") is True
         finally:
             progress_manager.delete(token)
+
+
+class TestResolveSessionPath:
+    """Test the resolve_session_path validation helper."""
+
+    def test_valid_uuid_returns_correct_filename(self):
+        from novelforge.session.persistence import resolve_session_path
+
+        path = resolve_session_path("12345678-1234-1234-1234-123456789abc")
+        assert path.name == "12345678-1234-1234-1234-123456789abc.json"
+
+    def test_valid_uuid_uppercase_accepted(self):
+        from novelforge.session.persistence import resolve_session_path
+
+        path = resolve_session_path("12345678-1234-1234-1234-123456789ABC")
+        assert path.name == "12345678-1234-1234-1234-123456789ABC.json"
+
+    @pytest.mark.parametrize("bad_id", [
+        "",                                          # empty string
+        "   ",                                       # whitespace only
+        "nonexistent-uuid",                          # plausible but not a UUID
+        "foo",                                       # no dashes at all
+        "../etc/passwd",                             # path traversal (single)
+        "../../etc/passwd",                          # path traversal (nested)
+        "12345678-1234-1234-1234-123456789abc.json", # with .json suffix
+        "12345678/1234/1234/1234/123456789abc",      # forward slashes
+        "12345678\\1234-1234-1234-123456789abc",     # backslash
+        "12345678-1234-1234-1234-12345678901",       # wrong length (too short in last group)
+        "12345678-1234-1234-1234-12345678901z",      # non-hex character
+        " 12345678-1234-1234-1234-123456789abc",     # leading space
+        "12345678-1234-1234-1234-123456789abc ",     # trailing space
+        "\x0012345678-1234-1234-1234-123456789abc",  # null byte prefix
+    ])
+    def test_invalid_ids_raise_value_error(self, bad_id: str) -> None:
+        from novelforge.session.persistence import resolve_session_path
+
+        with pytest.raises(ValueError):
+            resolve_session_path(bad_id)
+
+
+class TestLoadSessionRouteValidation:
+    """Test that /load_session rejects invalid session IDs with HTTP 400."""
+
+    @pytest.mark.parametrize("bad_id", [
+        "../etc/passwd",
+        "../../secret",
+        "foo",
+        "nonexistent-uuid",
+        "12345678-1234-1234-1234-123456789abc.json",
+        "12345678/1234/1234/1234/123456789abc",
+        " ",
+        "\x00bad",
+    ])
+    def test_invalid_session_id_returns_400(self, client, bad_id: str) -> None:
+        r = client.post(
+            "/load_session",
+            data=json.dumps({"session_id": bad_id}),
+            content_type="application/json",
+        )
+        assert r.status_code == 400
+        assert "error" in r.get_json()
+
+    def test_missing_session_id_returns_400(self, client) -> None:
+        r = client.post(
+            "/load_session",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        assert r.status_code == 400
+
+    def test_valid_uuid_not_on_disk_returns_404(self, client) -> None:
+        r = client.post(
+            "/load_session",
+            data=json.dumps({"session_id": "12345678-1234-1234-1234-123456789abc"}),
+            content_type="application/json",
+        )
+        assert r.status_code == 404
