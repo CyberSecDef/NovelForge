@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from typing import Any, Mapping, cast
 
 import requests
 from flask import Blueprint, Response, jsonify, request, session
@@ -863,7 +864,8 @@ def progress(token: str) -> Response | tuple[Response, int]:
     data = progress_manager.get(token)
     if data is None:
         return jsonify({"error": "Unknown token"}), 404
-    light = {k: data[k] for k in _LIGHTWEIGHT_FIELDS if k in data}
+    safe_data = cast(Mapping[str, Any], data)
+    light = {k: safe_data[k] for k in _LIGHTWEIGHT_FIELDS if k in safe_data}
     return jsonify(light)
 
 
