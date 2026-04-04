@@ -33,6 +33,63 @@ def _format_manuscript(title: str, chapters_done: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _md_text(text: object) -> str:
+    """Escape a value for inline Markdown (list items, bold labels, headings).
+
+    All line-ending variants (LF, CR+LF, bare CR) are replaced with a single
+    space so that the content stays on one logical line and cannot break
+    surrounding Markdown structure.
+    """
+    return str(text).replace("\r\n", "\n").replace("\r", "\n").replace("\n", " ")
+
+
+def _md_table_cell(text: object) -> str:
+    """Escape a value for a Markdown table cell.
+
+    - Pipe characters are escaped as ``\\|`` to avoid splitting the column.
+    - All line-ending variants are replaced with a space (raw newlines break
+      the table row).
+    """
+    return (
+        str(text)
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\n", " ")
+        .replace("|", r"\|")
+    )
+
+
+def _mermaid_node_label(text: object) -> str:
+    """Escape a value for a Mermaid node label inside ``["…"]`` syntax.
+
+    Double-quotes are replaced with the Mermaid HTML entity ``#quot;`` so they
+    cannot close the label prematurely.  All line-ending variants are collapsed
+    to a space.
+    """
+    return (
+        str(text)
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\n", " ")
+        .replace('"', "#quot;")
+    )
+
+
+def _mermaid_edge_label(text: object) -> str:
+    """Escape a value for a Mermaid edge label used with ``-- "…" -->`` syntax.
+
+    Double-quotes are replaced with ``#quot;``; all line-ending variants become
+    spaces.  Pipes do not need escaping in this quoting style.
+    """
+    return (
+        str(text)
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\n", " ")
+        .replace('"', "#quot;")
+    )
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -97,7 +154,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
     if not has_content:
         return jsonify({"error": "No editor's notes are available for this novel."}), 400
 
-    lines = [f"# {title} - Editor's Notes\n"]
+    lines = [f"# {_md_text(title)} - Editor's Notes\n"]
     lines.append("This document contains all diagnostic reports from the novel generation process. ")
     lines.append("Use these notes to identify chapters that may need revision.\n")
 
@@ -107,12 +164,12 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         lines.append("## 1. Consistency Pass\n")
         overall_assessment = (consistency.get("overall_assessment") or "").strip()
         if overall_assessment:
-            lines.append(f"**Overall Assessment:** {overall_assessment}\n")
+            lines.append(f"**Overall Assessment:** {_md_text(overall_assessment)}\n")
         issues = consistency.get("issues") or []
         if issues:
             lines.append("**Issues:**\n")
             for issue in issues:
-                lines.append(f"- {issue}")
+                lines.append(f"- {_md_text(issue)}")
             lines.append("")
 
     # 2. Global Continuity Audit
@@ -122,9 +179,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         overall = (global_continuity_audit.get("overall_assessment") or "").strip()
         integrity = (global_continuity_audit.get("overall_integrity") or "").strip()
         if integrity:
-            lines.append(f"**Overall Integrity:** {integrity}\n")
+            lines.append(f"**Overall Integrity:** {_md_text(integrity)}\n")
         if overall:
-            lines.append(f"**Assessment:** {overall}\n")
+            lines.append(f"**Assessment:** {_md_text(overall)}\n")
         contradictions = global_continuity_audit.get("contradictions") or []
         if contradictions:
             lines.append("**Contradictions:**\n")
@@ -132,21 +189,21 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(c, dict):
                     chapters = c.get("chapters", [])
                     desc = c.get("description", str(c))
-                    lines.append(f"- Chapters {chapters}: {desc}")
+                    lines.append(f"- Chapters {chapters}: {_md_text(desc)}")
                 else:
-                    lines.append(f"- {c}")
+                    lines.append(f"- {_md_text(c)}")
             lines.append("")
         char_errors = global_continuity_audit.get("character_state_errors") or []
         if char_errors:
             lines.append("**Character State Errors:**\n")
             for e in char_errors:
-                lines.append(f"- {e}" if isinstance(e, str) else f"- {e}")
+                lines.append(f"- {_md_text(e)}")
             lines.append("")
         timeline_errors = global_continuity_audit.get("timeline_errors") or []
         if timeline_errors:
             lines.append("**Timeline Errors:**\n")
             for e in timeline_errors:
-                lines.append(f"- {e}" if isinstance(e, str) else f"- {e}")
+                lines.append(f"- {_md_text(e)}")
             lines.append("")
 
     # 3. Narrative Compression Report
@@ -156,9 +213,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         priority = (narrative_compression_report.get("compression_priority") or "").strip()
         overall = (narrative_compression_report.get("overall_assessment") or "").strip()
         if priority:
-            lines.append(f"**Compression Priority:** {priority}\n")
+            lines.append(f"**Compression Priority:** {_md_text(priority)}\n")
         if overall:
-            lines.append(f"**Assessment:** {overall}\n")
+            lines.append(f"**Assessment:** {_md_text(overall)}\n")
         redundant = narrative_compression_report.get("redundant_sequences") or []
         if redundant:
             lines.append("**Redundant Sequences:**\n")
@@ -167,11 +224,11 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                     chapters = r.get("chapters", [])
                     pattern = r.get("pattern", "")
                     rec = r.get("recommendation", "")
-                    lines.append(f"- Chapters {chapters}: {pattern}")
+                    lines.append(f"- Chapters {chapters}: {_md_text(pattern)}")
                     if rec:
-                        lines.append(f"  - *Recommendation:* {rec}")
+                        lines.append(f"  - *Recommendation:* {_md_text(rec)}")
                 else:
-                    lines.append(f"- {r}")
+                    lines.append(f"- {_md_text(r)}")
             lines.append("")
         emotional = narrative_compression_report.get("emotional_beat_repetitions") or []
         if emotional:
@@ -181,11 +238,11 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                     chapters = e.get("chapters", [])
                     beat = e.get("beat", "")
                     rec = e.get("recommendation", "")
-                    lines.append(f"- Chapters {chapters}: {beat}")
+                    lines.append(f"- Chapters {chapters}: {_md_text(beat)}")
                     if rec:
-                        lines.append(f"  - *Recommendation:* {rec}")
+                        lines.append(f"  - *Recommendation:* {_md_text(rec)}")
                 else:
-                    lines.append(f"- {e}")
+                    lines.append(f"- {_md_text(e)}")
             lines.append("")
 
     # 4-9: remaining reports (abbreviated for space but identical logic)
@@ -195,9 +252,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         integrity = (character_resolution_report.get("resolution_integrity") or "").strip()
         overall = (character_resolution_report.get("overall_assessment") or "").strip()
         if integrity:
-            lines.append(f"**Resolution Integrity:** {integrity}\n")
+            lines.append(f"**Resolution Integrity:** {_md_text(integrity)}\n")
         if overall:
-            lines.append(f"**Assessment:** {overall}\n")
+            lines.append(f"**Assessment:** {_md_text(overall)}\n")
         unresolved = character_resolution_report.get("unresolved_characters") or []
         if unresolved:
             lines.append("**Unresolved Characters:**\n")
@@ -205,9 +262,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(u, dict):
                     name = u.get("character", u.get("name", "Unknown"))
                     issue = u.get("issue", u.get("description", str(u)))
-                    lines.append(f"- **{name}**: {issue}")
+                    lines.append(f"- **{_md_text(name)}**: {_md_text(issue)}")
                 else:
-                    lines.append(f"- {u}")
+                    lines.append(f"- {_md_text(u)}")
             lines.append("")
         resolutions = character_resolution_report.get("character_resolutions") or []
         if resolutions:
@@ -216,9 +273,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(r, dict):
                     name = r.get("character", r.get("name", "Unknown"))
                     status = r.get("status", r.get("resolution", str(r)))
-                    lines.append(f"- **{name}**: {status}")
+                    lines.append(f"- **{_md_text(name)}**: {_md_text(status)}")
                 else:
-                    lines.append(f"- {r}")
+                    lines.append(f"- {_md_text(r)}")
             lines.append("")
 
     if thematic_payoff_report:
@@ -227,9 +284,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         integrity = (thematic_payoff_report.get("thematic_integrity") or "").strip()
         overall = (thematic_payoff_report.get("overall_assessment") or "").strip()
         if integrity:
-            lines.append(f"**Thematic Integrity:** {integrity}\n")
+            lines.append(f"**Thematic Integrity:** {_md_text(integrity)}\n")
         if overall:
-            lines.append(f"**Assessment:** {overall}\n")
+            lines.append(f"**Assessment:** {_md_text(overall)}\n")
         abandoned = thematic_payoff_report.get("abandoned_themes") or []
         if abandoned:
             lines.append("**Abandoned Themes:**\n")
@@ -237,9 +294,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(t, dict):
                     theme = t.get("theme", t.get("name", str(t)))
                     reason = t.get("reason", t.get("description", ""))
-                    lines.append(f"- **{theme}**" + (f": {reason}" if reason else ""))
+                    lines.append(f"- **{_md_text(theme)}**" + (f": {_md_text(reason)}" if reason else ""))
                 else:
-                    lines.append(f"- {t}")
+                    lines.append(f"- {_md_text(t)}")
             lines.append("")
         weak = thematic_payoff_report.get("weak_payoffs") or []
         if weak:
@@ -248,9 +305,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(w, dict):
                     theme = w.get("theme", w.get("name", str(w)))
                     issue = w.get("issue", w.get("description", ""))
-                    lines.append(f"- **{theme}**" + (f": {issue}" if issue else ""))
+                    lines.append(f"- **{_md_text(theme)}**" + (f": {_md_text(issue)}" if issue else ""))
                 else:
-                    lines.append(f"- {w}")
+                    lines.append(f"- {_md_text(w)}")
             lines.append("")
 
     if climax_integrity_report:
@@ -260,9 +317,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         overall = (climax_integrity_report.get("overall_assessment") or "").strip()
         climax_chapter = climax_integrity_report.get("climax_chapter")
         if climax_chapter:
-            lines.append(f"**Climax Chapter:** {climax_chapter}\n")
+            lines.append(f"**Climax Chapter:** {_md_text(climax_chapter)}\n")
         if integrity:
-            lines.append(f"**Climax Integrity:** {integrity}\n")
+            lines.append(f"**Climax Integrity:** {_md_text(integrity)}\n")
         checks = []
         if climax_integrity_report.get("climax_decision_present") is False:
             checks.append("Missing climax decision")
@@ -283,10 +340,10 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         if failures:
             lines.append("**Integrity Failures:**\n")
             for f in failures:
-                lines.append(f"- {f}" if isinstance(f, str) else f"- {f}")
+                lines.append(f"- {_md_text(f)}")
             lines.append("")
         if overall:
-            lines.append(f"**Assessment:** {overall}\n")
+            lines.append(f"**Assessment:** {_md_text(overall)}\n")
 
     if loose_thread_report:
         lines.append("---\n")
@@ -294,9 +351,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         integrity = (loose_thread_report.get("thread_integrity") or "").strip()
         overall = (loose_thread_report.get("overall_assessment") or "").strip()
         if integrity:
-            lines.append(f"**Thread Integrity:** {integrity}\n")
+            lines.append(f"**Thread Integrity:** {_md_text(integrity)}\n")
         if overall:
-            lines.append(f"**Assessment:** {overall}\n")
+            lines.append(f"**Assessment:** {_md_text(overall)}\n")
         unresolved = loose_thread_report.get("unresolved_threads") or []
         if unresolved:
             lines.append("**Unresolved Threads:**\n")
@@ -304,9 +361,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(t, dict):
                     thread = t.get("thread", t.get("description", str(t)))
                     chapters = t.get("chapters", t.get("introduced_in", ""))
-                    lines.append(f"- {thread}" + (f" (Chapters: {chapters})" if chapters else ""))
+                    lines.append(f"- {_md_text(thread)}" + (f" (Chapters: {chapters})" if chapters else ""))
                 else:
-                    lines.append(f"- {t}")
+                    lines.append(f"- {_md_text(t)}")
             lines.append("")
         dangling = loose_thread_report.get("dangling_setup_elements") or []
         if dangling:
@@ -314,9 +371,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
             for d in dangling:
                 if isinstance(d, dict):
                     element = d.get("element", d.get("description", str(d)))
-                    lines.append(f"- {element}")
+                    lines.append(f"- {_md_text(element)}")
                 else:
-                    lines.append(f"- {d}")
+                    lines.append(f"- {_md_text(d)}")
             lines.append("")
         intentional = loose_thread_report.get("intentionally_open_threads") or []
         if intentional:
@@ -324,9 +381,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
             for t in intentional:
                 if isinstance(t, dict):
                     thread = t.get("thread", t.get("description", str(t)))
-                    lines.append(f"- {thread}")
+                    lines.append(f"- {_md_text(thread)}")
                 else:
-                    lines.append(f"- {t}")
+                    lines.append(f"- {_md_text(t)}")
             lines.append("")
 
     if reader_immersion_report:
@@ -338,15 +395,15 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         tension = (reader_immersion_report.get("tension_curve") or "").strip()
         stakes = (reader_immersion_report.get("stakes_clarity") or "").strip()
         if overall_rating:
-            lines.append(f"**Overall Rating:** {overall_rating}\n")
+            lines.append(f"**Overall Rating:** {_md_text(overall_rating)}\n")
         if engagement_score is not None:
             lines.append(f"**Engagement Score:** {engagement_score}/10\n")
         if pacing:
-            lines.append(f"**Pacing Assessment:** {pacing}\n")
+            lines.append(f"**Pacing Assessment:** {_md_text(pacing)}\n")
         if tension:
-            lines.append(f"**Tension Curve:** {tension}\n")
+            lines.append(f"**Tension Curve:** {_md_text(tension)}\n")
         if stakes:
-            lines.append(f"**Stakes Clarity:** {stakes}\n")
+            lines.append(f"**Stakes Clarity:** {_md_text(stakes)}\n")
         weak_chapters = reader_immersion_report.get("weak_chapters") or []
         if weak_chapters:
             lines.append("**Weak Chapters (need revision):**\n")
@@ -354,9 +411,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(w, dict):
                     chapter = w.get("chapter", w.get("number", "?"))
                     reason = w.get("reason", w.get("issue", str(w)))
-                    lines.append(f"- **Chapter {chapter}**: {reason}")
+                    lines.append(f"- **Chapter {_md_text(chapter)}**: {_md_text(reason)}")
                 else:
-                    lines.append(f"- {w}")
+                    lines.append(f"- {_md_text(w)}")
             lines.append("")
         breaks = reader_immersion_report.get("immersion_breaks") or []
         if breaks:
@@ -365,15 +422,15 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(b, dict):
                     chapter = b.get("chapter", "?")
                     desc = b.get("description", b.get("issue", str(b)))
-                    lines.append(f"- Chapter {chapter}: {desc}")
+                    lines.append(f"- Chapter {_md_text(chapter)}: {_md_text(desc)}")
                 else:
-                    lines.append(f"- {b}")
+                    lines.append(f"- {_md_text(b)}")
             lines.append("")
         recommendations = reader_immersion_report.get("recommendations") or []
         if recommendations:
             lines.append("**Recommendations:**\n")
             for r in recommendations:
-                lines.append(f"- {r}" if isinstance(r, str) else f"- {r}")
+                lines.append(f"- {_md_text(r)}")
             lines.append("")
 
     if pacing_heatmap:
@@ -381,7 +438,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         lines.append("## 9. Pacing & Tension Heatmap\n")
         overall = (pacing_heatmap.get("overall_pacing_assessment") or "").strip()
         if overall:
-            lines.append(f"**Overall Pacing Assessment:** {overall}\n")
+            lines.append(f"**Overall Pacing Assessment:** {_md_text(overall)}\n")
         metrics = pacing_heatmap.get("chapter_metrics") or []
         if metrics:
             def _bar(value: int) -> str:
@@ -416,9 +473,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                 if isinstance(fs, dict):
                     chapters = fs.get("chapters", [])
                     issue = fs.get("issue", "")
-                    lines.append(f"- Chapters {chapters}: {issue}")
+                    lines.append(f"- Chapters {chapters}: {_md_text(issue)}")
                 else:
-                    lines.append(f"- {fs}")
+                    lines.append(f"- {_md_text(fs)}")
             lines.append("")
 
     # 10. Character Relationship Map
@@ -435,7 +492,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         for idx, name in enumerate(rel_chars):
             cid = f"C{idx}"
             id_map[name] = cid
-            lines.append(f'    {cid}["{name}"]')
+            lines.append(f'    {cid}["{_mermaid_node_label(name)}"]')
         seen: set[str] = set()
         for rel in rel_edges:
             from_id = id_map.get(str(rel.get("from", "")))
@@ -446,8 +503,8 @@ def export_editors_notes() -> Response | tuple[Response, int]:
             if edge_key in seen:
                 continue
             seen.add(edge_key)
-            label = str(rel.get("type", "")).replace('"', "'")
-            lines.append(f"    {from_id} -->|{label}| {to_id}")
+            label = _mermaid_edge_label(rel.get("type", ""))
+            lines.append(f'    {from_id} -- "{label}" --> {to_id}')
         lines.append("```\n")
 
         # Also render as a text table for plain Markdown readers
@@ -459,7 +516,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
             to = rel.get("to", "?")
             rtype = rel.get("type", "?")
             desc = rel.get("label", "")
-            lines.append(f"| {fr} | {to} | {rtype} | {desc} |")
+            lines.append(f"| {_md_table_cell(fr)} | {_md_table_cell(to)} | {_md_table_cell(rtype)} | {_md_table_cell(desc)} |")
         lines.append("")
 
     markdown_content = "\n".join(lines)
