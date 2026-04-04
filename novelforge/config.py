@@ -10,6 +10,16 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load environment variables from the project-root .env file before any
+# os.environ reads happen below.  Using an explicit path (derived from this
+# file's location) keeps behaviour identical regardless of the working
+# directory at startup.  ``override=False`` ensures that variables already
+# present in the process environment (set by the deployment platform, CI,
+# or the operator) are never replaced by .env values.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
+
 # Collects errors discovered while parsing numeric environment variables at
 # import time so that validate_config() can surface them all at once instead
 # of crashing with a bare ValueError.
