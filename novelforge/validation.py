@@ -2,7 +2,29 @@
 
 import novelforge.config as config
 
-ALLOWED_GENRES = {"Fantasy", "Sci-Fi", "Mystery", "Romance", "Horror", "Thriller", "Historical"}
+ALLOWED_GENRES = {
+    "Adventure",
+    "Contemporary Fiction",
+    "Crime",
+    "Dystopian",
+    "Fantasy",
+    "Gothic Fiction",
+    "Historical Fiction",
+    "Horror",
+    "Literary Fiction",
+    "Magical Realism",
+    "Mystery",
+    "Noir",
+    "Paranormal",
+    "Romance",
+    "Satire Humor",
+    "Science Fiction",
+    "Speculative Fiction",
+    "Thriller",
+    "Urban Fantasy",
+    "Western",
+    "Young Adult",
+}
 
 
 def validate_outline_input(data: dict) -> tuple[bool, str]:

@@ -181,13 +181,27 @@ def select_voice_seed(genre: str = "", premise: str = "") -> dict[str, str]:
     """
     # Weight certain voices toward certain genres
     weights: dict[str, list[str]] = {
+        "Adventure": ["visceral_kinetic", "sparse_cinematic", "sharp_angular"],
+        "Contemporary Fiction": ["conversational_intimate", "dry_wit", "dense_literary"],
+        "Crime": ["dry_wit", "sparse_cinematic", "sharp_angular"],
+        "Dystopian": ["sharp_angular", "dense_literary", "sparse_cinematic"],
         "Fantasy": ["lyrical_flowing", "gothic_atmospheric", "dense_literary"],
-        "Sci-Fi": ["sharp_angular", "sparse_cinematic", "visceral_kinetic"],
-        "Mystery": ["dry_wit", "sparse_cinematic", "sharp_angular"],
-        "Romance": ["lyrical_flowing", "conversational_intimate", "dense_literary"],
+        "Gothic Fiction": ["gothic_atmospheric", "dense_literary", "lyrical_flowing"],
+        "Historical Fiction": ["dense_literary", "lyrical_flowing", "gothic_atmospheric"],
         "Horror": ["gothic_atmospheric", "visceral_kinetic", "sharp_angular"],
+        "Literary Fiction": ["dense_literary", "lyrical_flowing", "conversational_intimate"],
+        "Magical Realism": ["lyrical_flowing", "gothic_atmospheric", "dense_literary"],
+        "Mystery": ["dry_wit", "sparse_cinematic", "sharp_angular"],
+        "Noir": ["dry_wit", "sparse_cinematic", "sharp_angular"],
+        "Paranormal": ["gothic_atmospheric", "visceral_kinetic", "lyrical_flowing"],
+        "Romance": ["lyrical_flowing", "conversational_intimate", "dense_literary"],
+        "Satire Humor": ["dry_wit", "conversational_intimate", "sparse_cinematic"],
+        "Science Fiction": ["sharp_angular", "sparse_cinematic", "visceral_kinetic"],
+        "Speculative Fiction": ["dense_literary", "sharp_angular", "sparse_cinematic"],
         "Thriller": ["visceral_kinetic", "sharp_angular", "sparse_cinematic"],
-        "Historical": ["dense_literary", "lyrical_flowing", "gothic_atmospheric"],
+        "Urban Fantasy": ["visceral_kinetic", "lyrical_flowing", "gothic_atmospheric"],
+        "Western": ["sparse_cinematic", "sharp_angular", "visceral_kinetic"],
+        "Young Adult": ["conversational_intimate", "visceral_kinetic", "lyrical_flowing"],
     }
 
     preferred = weights.get(genre, [])
