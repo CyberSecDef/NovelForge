@@ -126,6 +126,33 @@ NOVELS_DIR = str(PROJECT_ROOT / os.environ.get("NOVELS_DIR", "sessions/novels"))
 LOGS_DIR = str(PROJECT_ROOT / os.environ.get("LOGS_DIR", "logs"))
 
 
+def ensure_app_dirs() -> None:
+    """Create all required application directories and verify they are writeable.
+
+    Called at application start-up (before any logging handlers are attached or
+    session stores are initialised) so that every subsequent write to these
+    directories can succeed without a runtime ``FileNotFoundError`` or
+    ``PermissionError``.
+
+    Raises:
+        PermissionError: if a directory exists but is not writeable by the
+            current process.
+    """
+    required_dirs: list[Path] = [
+        Path(SESSION_FILE_DIR),
+        Path(EXPORT_DIR),
+        Path(EXPORT_DIR) / "illustrations",
+        Path(LOGS_DIR),
+        Path(NOVELS_DIR),
+    ]
+    for directory in required_dirs:
+        directory.mkdir(parents=True, exist_ok=True)
+        if not os.access(directory, os.W_OK):
+            raise PermissionError(
+                f"Application directory is not writeable: {directory}"
+            )
+
+
 def validate_config(*, debug: bool = False) -> None:
     """Validate configuration at startup.
 

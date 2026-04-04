@@ -16,6 +16,10 @@ import novelforge.config as config
 logger = logging.getLogger(__name__)
 
 # Set up dedicated LLM logger that writes JSON objects to logs/llm.log
+# Ensure the log directory exists before creating the FileHandler so that this
+# module can be safely imported before create_app() runs (e.g. in tests).
+from pathlib import Path as _Path
+_Path(config.LOGS_DIR).mkdir(parents=True, exist_ok=True)
 llm_logger = logging.getLogger("llm_requests")
 llm_logger.setLevel(logging.INFO)
 llm_handler = logging.FileHandler(os.path.join(config.LOGS_DIR, "llm.log"))
