@@ -115,18 +115,18 @@ class TestRoutes:
         assert b"NovelForge" in r.data
 
     def test_index_does_not_mutate_progress_store_with_stale_progress(self, client):
-        """GET / must not write to _progress_store even when progress is stale."""
-        from novelforge.progress import _progress_store, _progress_lock
+        """GET / must not write to progress_manager even when progress is stale."""
+        from novelforge.progress import progress_manager
 
         token = "test-index-no-write-stale"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "running",
-                "current": 3,
-                "total": 5,
-                "step": "Chapter 3: drafting",
-                "chapters_done": [{"number": i + 1} for i in range(3)],
-            }
+        progress_manager.create(token, {
+            "status": "running",
+            "current": 3,
+            "total": 5,
+            "step": "Chapter 3: drafting",
+            "chapters_done": [{"number": i + 1} for i in range(3)],
+            "error": None,
+        })
 
         try:
             with client.session_transaction() as sess:
@@ -135,37 +135,32 @@ class TestRoutes:
                 sess["chapters"] = 5
                 sess["completed_chapters"] = [{"number": i + 1} for i in range(5)]
 
-            with _progress_lock:
-                store_snapshot = {k: dict(v) for k, v in _progress_store.items()}
+            store_snapshot = progress_manager.snapshot()
 
             r = client.get("/")
             assert r.status_code == 200
 
-            with _progress_lock:
-                store_after = {k: dict(v) for k, v in _progress_store.items()}
-            assert store_after == store_snapshot, "GET / must not mutate _progress_store"
+            store_after = progress_manager.snapshot()
+            assert store_after == store_snapshot, "GET / must not mutate progress_manager"
         finally:
-            with _progress_lock:
-                _progress_store.pop(token, None)
+            progress_manager.delete(token)
 
     def test_index_does_not_insert_into_progress_store_without_token(self, client):
-        """GET / must not insert new keys into _progress_store when no token."""
-        from novelforge.progress import _progress_store, _progress_lock
+        """GET / must not insert new keys into progress_manager when no token."""
+        from novelforge.progress import progress_manager
 
         with client.session_transaction() as sess:
             sess["title"] = "No Token Novel"
             sess["chapters"] = 3
             sess["completed_chapters"] = [{"number": i + 1} for i in range(3)]
 
-        with _progress_lock:
-            before_keys = set(_progress_store.keys())
+        before_keys = set(progress_manager.keys())
 
         r = client.get("/")
         assert r.status_code == 200
 
-        with _progress_lock:
-            after_keys = set(_progress_store.keys())
-        assert after_keys == before_keys, "GET / must not insert into _progress_store"
+        after_keys = set(progress_manager.keys())
+        assert after_keys == before_keys, "GET / must not insert into progress_manager"
 
     def test_generate_outline_empty_body(self, client):
         r = client.post(
@@ -249,17 +244,21 @@ class TestRoutes:
         assert r.status_code == 400
 
     def test_export_editors_notes_success_filename(self, client):
-        from novelforge.progress import _progress_lock, _progress_store
+        from novelforge.progress import progress_manager
 
         token = "test-token-editors-notes"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "done",
-                "consistency": {
-                    "overall_assessment": "Strong arc with minor pacing issues.",
-                    "issues": ["Chapter 3 timeline inconsistency"],
-                },
-            }
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 0,
+            "total": 0,
+            "step": "Complete",
+            "chapters_done": [],
+            "error": None,
+            "consistency": {
+                "overall_assessment": "Strong arc with minor pacing issues.",
+                "issues": ["Chapter 3 timeline inconsistency"],
+            },
+        })
 
         with client.session_transaction() as sess:
             sess["title"] = "My Great Novel"
@@ -276,15 +275,18 @@ class TestRoutes:
         assert payload["download_url"].endswith("My_Great_Novel-Editors_Notes.md")
 
     def test_revise_chapter_requires_instructions(self, client):
-        from novelforge.progress import _progress_lock, _progress_store
+        from novelforge.progress import progress_manager
 
         token = "test-token-revise-empty"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "done",
-                "chapters_done": [{"number": 1, "title": "Ch1", "content": "Text", "summary": "S"}],
-                "consistency": {"issues": [], "overall_assessment": ""},
-            }
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 1,
+            "total": 1,
+            "step": "Complete",
+            "chapters_done": [{"number": 1, "title": "Ch1", "content": "Text", "summary": "S"}],
+            "error": None,
+            "consistency": {"issues": [], "overall_assessment": ""},
+        })
 
         r = client.post(
             "/revise_chapter",
@@ -294,41 +296,41 @@ class TestRoutes:
         assert r.status_code == 400
 
     def test_revise_chapter_success_reruns_agents(self, client, monkeypatch):
-        from novelforge.progress import _progress_lock, _progress_store
+        from novelforge.progress import progress_manager
 
         token = "test-token-revise-success"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "done",
-                "current": 2,
-                "total": 2,
-                "step": "Complete",
-                "chapters_done": [
-                    {"number": 1, "title": "Ch1", "content": "Old chapter 1", "summary": "Old summary 1"},
-                    {"number": 2, "title": "Ch2", "content": "Old chapter 2", "summary": "Old summary 2"},
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 2,
+            "total": 2,
+            "step": "Complete",
+            "chapters_done": [
+                {"number": 1, "title": "Ch1", "content": "Old chapter 1", "summary": "Old summary 1"},
+                {"number": 2, "title": "Ch2", "content": "Old chapter 2", "summary": "Old summary 2"},
+            ],
+            "error": None,
+            "consistency": {"issues": [], "overall_assessment": ""},
+            "snapshot": {
+                "title": "My Novel",
+                "genre": "Fantasy",
+                "chapters": 2,
+                "chapter_list": [
+                    {"number": 1, "title": "Ch1", "summary": "Outline 1"},
+                    {"number": 2, "title": "Ch2", "summary": "Outline 2"},
                 ],
-                "consistency": {"issues": [], "overall_assessment": ""},
-                "snapshot": {
-                    "title": "My Novel",
-                    "genre": "Fantasy",
-                    "chapters": 2,
-                    "chapter_list": [
-                        {"number": 1, "title": "Ch1", "summary": "Outline 1"},
-                        {"number": 2, "title": "Ch2", "summary": "Outline 2"},
-                    ],
-                    "character_list": [],
-                    "special_instructions": "",
-                    "story_architecture": {},
-                    "master_timeline": {},
-                    "character_fate_registry": {},
-                    "character_arc_plan": {},
-                    "antagonist_motivation_plan": {},
-                    "technology_rules": {},
-                    "theme_reinforcement": {},
-                    "pov_focal_character_plan": {},
-                    "narrative_perspective": "third_person",
-                },
-            }
+                "character_list": [],
+                "special_instructions": "",
+                "story_architecture": {},
+                "master_timeline": {},
+                "character_fate_registry": {},
+                "character_arc_plan": {},
+                "antagonist_motivation_plan": {},
+                "technology_rules": {},
+                "theme_reinforcement": {},
+                "pov_focal_character_plan": {},
+                "narrative_perspective": "third_person",
+            },
+        })
 
         def fake_call_llm(messages, json_mode=False, **kwargs):
             user_content = messages[-1]["content"]
@@ -364,40 +366,40 @@ class TestRoutes:
 
     def test_revise_chapter_uses_snapshot_not_live_session(self, client, monkeypatch):
         """Editing the session after generation must not affect revision semantics."""
-        from novelforge.progress import _progress_lock, _progress_store
+        from novelforge.progress import progress_manager
 
         token = "test-token-snapshot-isolation"
         original_title = "Original Title"
         changed_title = "Completely Different Title"
 
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "done",
-                "current": 1,
-                "total": 1,
-                "step": "Complete",
-                "chapters_done": [
-                    {"number": 1, "title": "Ch1", "content": "Chapter content", "summary": "Summary"},
-                ],
-                "consistency": {"issues": [], "overall_assessment": ""},
-                "snapshot": {
-                    "title": original_title,
-                    "genre": "Fantasy",
-                    "chapters": 1,
-                    "chapter_list": [{"number": 1, "title": "Ch1", "summary": "Outline 1"}],
-                    "character_list": [],
-                    "special_instructions": "Original instructions",
-                    "story_architecture": {},
-                    "master_timeline": {},
-                    "character_fate_registry": {},
-                    "character_arc_plan": {},
-                    "antagonist_motivation_plan": {},
-                    "technology_rules": {},
-                    "theme_reinforcement": {},
-                    "pov_focal_character_plan": {},
-                    "narrative_perspective": "first_person",
-                },
-            }
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 1,
+            "total": 1,
+            "step": "Complete",
+            "chapters_done": [
+                {"number": 1, "title": "Ch1", "content": "Chapter content", "summary": "Summary"},
+            ],
+            "error": None,
+            "consistency": {"issues": [], "overall_assessment": ""},
+            "snapshot": {
+                "title": original_title,
+                "genre": "Fantasy",
+                "chapters": 1,
+                "chapter_list": [{"number": 1, "title": "Ch1", "summary": "Outline 1"}],
+                "character_list": [],
+                "special_instructions": "Original instructions",
+                "story_architecture": {},
+                "master_timeline": {},
+                "character_fate_registry": {},
+                "character_arc_plan": {},
+                "antagonist_motivation_plan": {},
+                "technology_rules": {},
+                "theme_reinforcement": {},
+                "pov_focal_character_plan": {},
+                "narrative_perspective": "first_person",
+            },
+        })
 
         # Simulate a session edit that diverges from the original snapshot
         with client.session_transaction() as sess:

@@ -10,7 +10,7 @@ import os
 import time
 import pytest
 
-from novelforge.progress import _progress_store, _progress_lock
+from novelforge.progress import progress_manager
 
 
 class TestGenerateOutline:
@@ -263,11 +263,12 @@ class TestGenerateChapters:
         token = r.get_json()["token"]
 
         # Inject heavyweight data into the store to simulate a completed chapter
-        with _progress_lock:
-            _progress_store[token]["chapters_done"] = [
+        progress_manager.update(token, {
+            "chapters_done": [
                 {"number": 1, "title": "Ch1", "content": "x" * 5000, "summary": "s"},
-            ]
-            _progress_store[token]["consistency"] = {"issues": [], "overall_assessment": "good"}
+            ],
+            "consistency": {"issues": [], "overall_assessment": "good"},
+        })
 
         r2 = client.get(f"/progress/{token}")
         assert r2.status_code == 200
@@ -294,11 +295,12 @@ class TestGenerateChapters:
         token = r.get_json()["token"]
 
         chapter_content = "x" * 5000
-        with _progress_lock:
-            _progress_store[token]["chapters_done"] = [
+        progress_manager.update(token, {
+            "chapters_done": [
                 {"number": 1, "title": "Ch1", "content": chapter_content, "summary": "s"},
-            ]
-            _progress_store[token]["consistency"] = {"issues": [], "overall_assessment": "good"}
+            ],
+            "consistency": {"issues": [], "overall_assessment": "good"},
+        })
 
         r2 = client.get(f"/progress/{token}/full")
         assert r2.status_code == 200
@@ -324,20 +326,20 @@ class TestReviseChapter:
 
     def test_revise_returns_updated_content(self, client, mock_llm):
         token = "test-revise-integration"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "done",
-                "current": 1,
-                "total": 1,
-                "step": "Complete",
-                "chapters_done": [
-                    {"number": 1, "title": "Ch1", "content": "Original text.", "summary": "Old summary"},
-                ],
-                "consistency": {"issues": [], "overall_assessment": ""},
-                "snapshot": {
-                    "title": "Test",
-                    "genre": "Fantasy",
-                    "chapters": 1,
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 1,
+            "total": 1,
+            "step": "Complete",
+            "error": None,
+            "chapters_done": [
+                {"number": 1, "title": "Ch1", "content": "Original text.", "summary": "Old summary"},
+            ],
+            "consistency": {"issues": [], "overall_assessment": ""},
+            "snapshot": {
+                "title": "Test",
+                "genre": "Fantasy",
+                "chapters": 1,
                     "chapter_list": [{"number": 1, "title": "Ch1", "summary": "Outline"}],
                     "character_list": [],
                     "special_instructions": "",
@@ -351,7 +353,7 @@ class TestReviseChapter:
                     "pov_focal_character_plan": {},
                     "narrative_perspective": "third_person",
                 },
-            }
+        })
 
         r = client.post(
             "/revise_chapter",
@@ -372,23 +374,23 @@ class TestExport:
     """Export routes with mocked progress data."""
 
     def _seed_done(self, client, token="export-test"):
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "done",
-                "current": 2,
-                "total": 2,
-                "step": "Complete",
-                "chapters_done": [
-                    {"number": 1, "title": "Ch1", "content": "Chapter 1 text.", "summary": "S1"},
-                    {"number": 2, "title": "Ch2", "content": "Chapter 2 text.", "summary": "S2"},
-                ],
-                "consistency": {"issues": [], "overall_assessment": "Good"},
-                "pacing_heatmap": {"chapter_metrics": [], "flat_sections": [], "overall_pacing_assessment": ""},
-                "reader_immersion_report": {},
-                "global_continuity_audit": {},
-                "narrative_compression_report": {},
-                "character_resolution_report": {},
-            }
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 2,
+            "total": 2,
+            "step": "Complete",
+            "error": None,
+            "chapters_done": [
+                {"number": 1, "title": "Ch1", "content": "Chapter 1 text.", "summary": "S1"},
+                {"number": 2, "title": "Ch2", "content": "Chapter 2 text.", "summary": "S2"},
+            ],
+            "consistency": {"issues": [], "overall_assessment": "Good"},
+            "pacing_heatmap": {"chapter_metrics": [], "flat_sections": [], "overall_pacing_assessment": ""},
+            "reader_immersion_report": {},
+            "global_continuity_audit": {},
+            "narrative_compression_report": {},
+            "character_resolution_report": {},
+        })
         with client.session_transaction() as sess:
             sess["title"] = "Export Test Novel"
 
@@ -404,10 +406,8 @@ class TestExport:
         assert "download_url" in r.get_json()
 
     def test_export_not_complete(self, client):
-        from novelforge.progress import _progress_store, _progress_lock
         token = "export-incomplete"
-        with _progress_lock:
-            _progress_store[token] = {"status": "running", "current": 1, "total": 5}
+        progress_manager.create(token, {"status": "running", "current": 1, "total": 5, "step": "", "chapters_done": [], "error": None})
         r = client.post(
             "/export",
             data=json.dumps({"token": token}),
@@ -497,13 +497,16 @@ class TestIllustrations:
         monkeypatch.setattr(config, "IMAGE_API_KEY", "")
 
         token = "illust-no-key"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "done",
-                "chapters_done": [
-                    {"number": 1, "title": "Ch1", "content": "Text", "summary": "S"},
-                ],
-            }
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 1,
+            "total": 1,
+            "step": "Complete",
+            "error": None,
+            "chapters_done": [
+                {"number": 1, "title": "Ch1", "content": "Text", "summary": "S"},
+            ],
+        })
         with client.session_transaction() as sess:
             sess["title"] = "Test"
             sess["genre"] = "Fantasy"

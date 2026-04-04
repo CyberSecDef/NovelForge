@@ -11,22 +11,20 @@ import time
 import pytest
 
 from novelforge.progress import (
-    _progress_store, _progress_lock,
+    progress_manager,
     set_correlation_token, get_correlation_token, clear_correlation_token,
 )
 
 
 class TestProgressStoreThreadSafety:
-    """Verify _progress_store handles concurrent reads and writes correctly."""
+    """Verify ProgressManager handles concurrent reads and writes correctly."""
 
     def setup_method(self):
         """Clean progress store before each test."""
-        with _progress_lock:
-            _progress_store.clear()
+        progress_manager.clear()
 
     def teardown_method(self):
-        with _progress_lock:
-            _progress_store.clear()
+        progress_manager.clear()
 
     def test_concurrent_writes_no_data_loss(self):
         """Multiple threads writing different tokens should not lose entries."""
@@ -38,13 +36,14 @@ class TestProgressStoreThreadSafety:
             try:
                 barrier.wait(timeout=5)
                 token = f"token-{idx}"
-                with _progress_lock:
-                    _progress_store[token] = {
-                        "status": "running",
-                        "current": 0,
-                        "total": 10,
-                        "thread": idx,
-                    }
+                progress_manager.create(token, {
+                    "status": "running",
+                    "current": 0,
+                    "total": 10,
+                    "step": "",
+                    "chapters_done": [],
+                    "error": None,
+                })
             except Exception as e:
                 errors.append(e)
 
@@ -55,16 +54,17 @@ class TestProgressStoreThreadSafety:
             t.join(timeout=10)
 
         assert not errors
-        with _progress_lock:
-            assert len(_progress_store) == num_threads
-            for i in range(num_threads):
-                assert f"token-{i}" in _progress_store
+        assert len(progress_manager.keys()) == num_threads
+        for i in range(num_threads):
+            assert progress_manager.get(f"token-{i}") is not None
 
     def test_concurrent_read_write(self):
         """Readers and writers accessing the store concurrently should not crash."""
         token = "shared-token"
-        with _progress_lock:
-            _progress_store[token] = {"status": "running", "current": 0, "total": 50}
+        progress_manager.create(token, {
+            "status": "running", "current": 0, "total": 50,
+            "step": "", "chapters_done": [], "error": None,
+        })
 
         errors = []
         stop = threading.Event()
@@ -72,9 +72,7 @@ class TestProgressStoreThreadSafety:
         def writer():
             try:
                 for i in range(50):
-                    with _progress_lock:
-                        _progress_store[token]["current"] = i + 1
-                        _progress_store[token]["step"] = f"Step {i + 1}"
+                    progress_manager.update(token, {"current": i + 1, "step": f"Step {i + 1}"})
                     time.sleep(0.001)
                 stop.set()
             except Exception as e:
@@ -84,8 +82,7 @@ class TestProgressStoreThreadSafety:
         def reader():
             try:
                 while not stop.is_set():
-                    with _progress_lock:
-                        data = dict(_progress_store.get(token, {}))
+                    data = progress_manager.get(token) or {}
                     # Verify data consistency — current should be an int
                     if "current" in data:
                         assert isinstance(data["current"], int)
@@ -105,37 +102,34 @@ class TestProgressStoreThreadSafety:
             r.join(timeout=10)
 
         assert not errors
-        with _progress_lock:
-            assert _progress_store[token]["current"] == 50
+        assert progress_manager.get(token)["current"] == 50
 
     def test_concurrent_chapter_append(self):
         """Simulates multiple chapters being appended from a background thread."""
         token = "append-test"
-        with _progress_lock:
-            _progress_store[token] = {
-                "status": "running",
-                "current": 0,
-                "total": 10,
-                "chapters_done": [],
-            }
+        progress_manager.create(token, {
+            "status": "running", "current": 0, "total": 10,
+            "step": "", "chapters_done": [], "error": None,
+        })
 
         def generate():
+            local_chapters: list = []
             for i in range(10):
                 chapter = {"number": i + 1, "title": f"Ch{i+1}", "content": f"Text {i+1}"}
-                with _progress_lock:
-                    _progress_store[token]["chapters_done"].append(chapter)
-                    _progress_store[token]["current"] = i + 1
+                local_chapters.append(chapter)
+                progress_manager.update(token, {
+                    "chapters_done": list(local_chapters),
+                    "current": i + 1,
+                })
                 time.sleep(0.002)
-            with _progress_lock:
-                _progress_store[token]["status"] = "done"
+            progress_manager.update(token, {"status": "done"})
 
         poll_results = []
 
         def poller():
             while True:
-                with _progress_lock:
-                    data = dict(_progress_store.get(token, {}))
-                    done = list(data.get("chapters_done", []))
+                data = progress_manager.get(token) or {}
+                done = list(data.get("chapters_done", []))
                 poll_results.append(len(done))
                 if data.get("status") == "done":
                     break
@@ -149,9 +143,9 @@ class TestProgressStoreThreadSafety:
         gen_t.join(timeout=10)
         poll_t.join(timeout=10)
 
-        with _progress_lock:
-            assert _progress_store[token]["status"] == "done"
-            assert len(_progress_store[token]["chapters_done"]) == 10
+        final = progress_manager.get(token)
+        assert final["status"] == "done"
+        assert len(final["chapters_done"]) == 10
 
         # Poll results should show monotonically increasing chapter counts
         for i in range(1, len(poll_results)):
@@ -160,18 +154,22 @@ class TestProgressStoreThreadSafety:
 
     def test_two_tokens_isolated(self):
         """Two generation tokens should not interfere with each other."""
-        with _progress_lock:
-            _progress_store["novel-a"] = {"status": "running", "current": 0, "chapters_done": []}
-            _progress_store["novel-b"] = {"status": "running", "current": 0, "chapters_done": []}
+        for tok in ("novel-a", "novel-b"):
+            progress_manager.create(tok, {
+                "status": "running", "current": 0, "total": 10,
+                "step": "", "chapters_done": [], "error": None,
+            })
 
         def gen(token, count):
+            local_chapters: list = []
             for i in range(count):
-                with _progress_lock:
-                    _progress_store[token]["chapters_done"].append({"number": i + 1})
-                    _progress_store[token]["current"] = i + 1
+                local_chapters.append({"number": i + 1})
+                progress_manager.update(token, {
+                    "chapters_done": list(local_chapters),
+                    "current": i + 1,
+                })
                 time.sleep(0.001)
-            with _progress_lock:
-                _progress_store[token]["status"] = "done"
+            progress_manager.update(token, {"status": "done"})
 
         t_a = threading.Thread(target=gen, args=("novel-a", 5))
         t_b = threading.Thread(target=gen, args=("novel-b", 8))
@@ -180,11 +178,12 @@ class TestProgressStoreThreadSafety:
         t_a.join(timeout=10)
         t_b.join(timeout=10)
 
-        with _progress_lock:
-            assert len(_progress_store["novel-a"]["chapters_done"]) == 5
-            assert len(_progress_store["novel-b"]["chapters_done"]) == 8
-            assert _progress_store["novel-a"]["status"] == "done"
-            assert _progress_store["novel-b"]["status"] == "done"
+        data_a = progress_manager.get("novel-a")
+        data_b = progress_manager.get("novel-b")
+        assert len(data_a["chapters_done"]) == 5
+        assert len(data_b["chapters_done"]) == 8
+        assert data_a["status"] == "done"
+        assert data_b["status"] == "done"
 
 
 class TestCorrelationIDIsolation:
@@ -266,12 +265,10 @@ class TestConcurrentGenerationRequests:
     """Test behavior when the generation endpoint is hit concurrently."""
 
     def setup_method(self):
-        with _progress_lock:
-            _progress_store.clear()
+        progress_manager.clear()
 
     def teardown_method(self):
-        with _progress_lock:
-            _progress_store.clear()
+        progress_manager.clear()
 
     def _setup_session_data(self, client):
         with client.session_transaction() as sess:
@@ -308,9 +305,9 @@ class TestConcurrentGenerationRequests:
         assert r.status_code == 200
         token = r.get_json()["token"]
         assert token
-        with _progress_lock:
-            assert token in _progress_store
-            assert _progress_store[token]["status"] == "running"
+        data = progress_manager.get(token)
+        assert data is not None
+        assert data["status"] == "running"
 
     def test_duplicate_generation_request_blocked_with_409(self, client, monkeypatch):
         """Second POST /generate_chapters while first is still running returns 409."""
@@ -334,9 +331,8 @@ class TestConcurrentGenerationRequests:
         assert body2["token"] == token1
 
         # Only one entry in progress store
-        with _progress_lock:
-            assert token1 in _progress_store
-            assert len(_progress_store) == 1
+        assert progress_manager.get(token1) is not None
+        assert len(progress_manager.keys()) == 1
 
     def test_new_generation_allowed_after_previous_completes(self, client, monkeypatch):
         """POST /generate_chapters is allowed once the previous generation finishes."""
@@ -351,8 +347,7 @@ class TestConcurrentGenerationRequests:
         token1 = r1.get_json()["token"]
 
         # Simulate the first generation completing
-        with _progress_lock:
-            _progress_store[token1]["status"] = "done"
+        progress_manager.update(token1, {"status": "done"})
 
         # Session data persists; no need to re-seed before the second request
         r2 = client.post("/generate_chapters", data=json.dumps({}),
@@ -361,9 +356,9 @@ class TestConcurrentGenerationRequests:
         token2 = r2.get_json()["token"]
         assert token2 != token1
 
-        with _progress_lock:
-            assert token2 in _progress_store
-            assert _progress_store[token2]["status"] == "running"
+        data2 = progress_manager.get(token2)
+        assert data2 is not None
+        assert data2["status"] == "running"
 
     def test_rapid_repeat_calls_all_blocked_after_first(self, client, monkeypatch):
         """Rapid repeated calls from the same session are blocked after the first."""
@@ -381,8 +376,7 @@ class TestConcurrentGenerationRequests:
         assert responses[0] == 200
         assert all(s == 409 for s in responses[1:])
         # Only one entry in the progress store
-        with _progress_lock:
-            assert len(_progress_store) == 1
+        assert len(progress_manager.keys()) == 1
 
 
 class TestCircuitBreakerThreadSafety:
