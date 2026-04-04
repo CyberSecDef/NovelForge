@@ -4,9 +4,11 @@ import logging
 from pathlib import Path
 
 import yaml
-from jinja2 import Template
+from jinja2 import Environment, StrictUndefined, UndefinedError
 
 logger = logging.getLogger(__name__)
+
+_jinja_env = Environment(undefined=StrictUndefined, autoescape=False)
 
 
 _prompts_cache: dict | None = None
@@ -67,13 +69,24 @@ def _load_prompts() -> dict:
 
 
 def render_prompt(name: str, **context) -> list[dict]:
-    """Render a named prompt from prompts.yml using Jinja2 and return a message list."""
+    """Render a named prompt from prompts.yml using Jinja2 and return a message list.
+
+    Raises:
+        KeyError: If the prompt name is not found in prompts.yml.
+        ValueError: If the template references a context key that was not supplied.
+    """
     prompts = _load_prompts()
     if name not in prompts:
         raise KeyError(f"Prompt '{name}' not found in prompts.yml")
     prompt = prompts[name]
-    system_text = Template(prompt["system"]).render(**context)
-    user_text = Template(prompt["user"]).render(**context)
+    env = _jinja_env
+    try:
+        system_text = env.from_string(prompt["system"]).render(**context)
+        user_text = env.from_string(prompt["user"]).render(**context)
+    except UndefinedError as exc:
+        raise ValueError(
+            f"Prompt '{name}' rendering failed: {exc}"
+        ) from exc
     return [
         {"role": "system", "content": system_text.strip()},
         {"role": "user", "content": user_text.strip()},

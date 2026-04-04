@@ -528,6 +528,75 @@ class TestPromptsLoading:
         with pytest.raises(ValueError, match="duplicate prompt name"):
             prompts_mod._load_prompts()
 
+    def test_render_prompt_missing_context_key_raises(self, monkeypatch):
+        """Missing template variable should raise ValueError with prompt name."""
+        import novelforge.llm.prompts as prompts_mod
+        monkeypatch.setattr(
+            prompts_mod,
+            "_prompts_cache",
+            {
+                "test_strict": {
+                    "name": "test_strict",
+                    "system": "You are a helper.",
+                    "user": "Hello {{ missing_var }}",
+                }
+            },
+        )
+        with pytest.raises(ValueError, match="test_strict"):
+            prompts_mod.render_prompt("test_strict")
+
+    def test_render_prompt_missing_context_key_names_variable(self, monkeypatch):
+        """Error message should identify the undefined variable."""
+        import novelforge.llm.prompts as prompts_mod
+        monkeypatch.setattr(
+            prompts_mod,
+            "_prompts_cache",
+            {
+                "test_strict2": {
+                    "name": "test_strict2",
+                    "system": "{{ undefined_field }} is missing",
+                    "user": "user text",
+                }
+            },
+        )
+        with pytest.raises(ValueError, match="undefined_field"):
+            prompts_mod.render_prompt("test_strict2")
+
+    def test_render_prompt_all_keys_provided_succeeds(self, monkeypatch):
+        """When all required context keys are provided, rendering should succeed."""
+        import novelforge.llm.prompts as prompts_mod
+        monkeypatch.setattr(
+            prompts_mod,
+            "_prompts_cache",
+            {
+                "test_complete": {
+                    "name": "test_complete",
+                    "system": "System: {{ sys_val }}",
+                    "user": "User: {{ user_val }}",
+                }
+            },
+        )
+        msgs = prompts_mod.render_prompt("test_complete", sys_val="S", user_val="U")
+        assert msgs[0]["content"] == "System: S"
+        assert msgs[1]["content"] == "User: U"
+
+    def test_render_prompt_partial_context_raises(self, monkeypatch):
+        """Providing only some required context keys should still raise ValueError."""
+        import novelforge.llm.prompts as prompts_mod
+        monkeypatch.setattr(
+            prompts_mod,
+            "_prompts_cache",
+            {
+                "test_partial": {
+                    "name": "test_partial",
+                    "system": "System ok",
+                    "user": "Need {{ alpha }} and {{ beta }}",
+                }
+            },
+        )
+        with pytest.raises(ValueError, match="test_partial"):
+            prompts_mod.render_prompt("test_partial", alpha="provided")
+
 
 # ---------------------------------------------------------------------------
 # Session routes coverage
