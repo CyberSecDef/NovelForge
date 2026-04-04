@@ -6,6 +6,7 @@ has a distinct prose voice, preventing the uniform "measured, steady,
 deliberate" style that LLMs default to.
 """
 
+import re
 import random
 
 # Each voice seed defines a prose style, emotional register, and
@@ -171,13 +172,61 @@ _VOICE_SEEDS: list[dict[str, str]] = [
     },
 ]
 
+# Keywords in the premise that signal an affinity for each voice style.
+# Matched against lowercased, punctuation-stripped premise tokens.
+_PREMISE_KEYWORDS: dict[str, list[str]] = {
+    "sharp_angular": [
+        "betrayal", "revenge", "gritty", "brutal", "ruthless", "harsh",
+        "cold", "grim", "bleak", "violent", "crime", "war",
+    ],
+    "lyrical_flowing": [
+        "love", "dream", "beautiful", "wonder", "magical", "tender",
+        "ethereal", "poetic", "romantic", "longing", "memory", "lush",
+    ],
+    "dry_wit": [
+        "absurd", "comedy", "satirical", "humor", "humorous", "irony",
+        "awkward", "bizarre", "quirky", "mundane", "office", "bureaucratic",
+    ],
+    "visceral_kinetic": [
+        "fight", "battle", "chase", "escape", "survival", "combat",
+        "action", "danger", "adrenaline", "hunt", "race", "clash",
+    ],
+    "sparse_cinematic": [
+        "heist", "detective", "investigation", "spy", "surveillance",
+        "silent", "thriller", "noir", "stakeout", "witness",
+    ],
+    "dense_literary": [
+        "identity", "society", "culture", "philosophy", "meaning", "truth",
+        "intellectual", "introspective", "existential", "history", "legacy",
+    ],
+    "conversational_intimate": [
+        "family", "friendship", "community", "relationship", "confession",
+        "personal", "coming-of-age", "neighbors", "childhood", "diary",
+    ],
+    "gothic_atmospheric": [
+        "haunted", "ghost", "shadow", "horror", "supernatural", "decaying",
+        "cursed", "ancient", "dread", "darkness", "sinister", "eerie",
+    ],
+}
+
+# Maximum extra copies a voice can earn from premise keyword matches.
+_PREMISE_KEYWORD_BOOST: int = 3
+
 
 def select_voice_seed(genre: str = "", premise: str = "") -> dict[str, str]:
     """
     Select a voice seed for a new novel.
 
-    Uses genre and premise as entropy sources to bias selection toward
-    appropriate voices, but always includes randomness to avoid predictability.
+    Uses both *genre* and *premise* as signals to bias selection toward
+    appropriate voices, while always including randomness to avoid
+    predictability.
+
+    Genre weights are applied first: voices that match the genre receive
+    3× the base weight.  Premise keywords then add further weight — up to
+    ``_PREMISE_KEYWORD_BOOST`` extra copies per voice — so that the actual
+    wording of the premise genuinely influences which prose style is
+    selected.  With no genre or premise supplied all voices are equally
+    likely.
     """
     # Weight certain voices toward certain genres
     weights: dict[str, list[str]] = {
@@ -206,10 +255,20 @@ def select_voice_seed(genre: str = "", premise: str = "") -> dict[str, str]:
 
     preferred = weights.get(genre, [])
 
-    # Build weighted selection: preferred voices get 3x weight
+    # Normalise premise to a set of lowercase word tokens for keyword matching.
+    premise_tokens = set(re.sub(r"[^a-z\s]", " ", premise.lower()).split())
+
+    # Build weighted selection pool.
+    # - Genre-preferred voices start with 3× base weight.
+    # - Each premise keyword match adds 1 extra copy (capped at _PREMISE_KEYWORD_BOOST).
     pool: list[dict[str, str]] = []
     for seed in _VOICE_SEEDS:
         copies = 3 if seed["name"] in preferred else 1
+        keyword_matches = sum(
+            1 for kw in _PREMISE_KEYWORDS.get(seed["name"], [])
+            if kw in premise_tokens
+        )
+        copies += min(keyword_matches, _PREMISE_KEYWORD_BOOST)
         pool.extend([seed] * copies)
 
     return random.choice(pool)
