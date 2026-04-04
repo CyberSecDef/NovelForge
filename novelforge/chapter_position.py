@@ -37,12 +37,24 @@ yields ``[Hook, Inciting Incident, Climax, Resolution]``).
 
 
 class ChapterPosition:
-    """Calculate narrative position metadata for a chapter within a novel."""
+    """Calculate narrative position metadata for a chapter within a novel.
+
+    Both *chapter_num* and *total_chapters* are clamped to sensible bounds on
+    construction so that all derived properties (phase, act, zone checks, …)
+    always reflect a structurally valid position:
+
+    * ``total_chapters`` is clamped to at least 1.
+    * ``chapter_num`` is clamped to ``[1, total_chapters]`` after
+      ``total_chapters`` has been normalised.
+
+    The normalised values are stored as ``chapter_num`` and ``total_chapters``
+    so callers can inspect the effective position that was actually used.
+    """
 
     def __init__(self, chapter_num: int, total_chapters: int) -> None:
-        self.chapter_num = chapter_num
         self.total_chapters = max(1, total_chapters)
-        self.position_pct = (chapter_num / self.total_chapters * 100) if self.total_chapters > 0 else 50
+        self.chapter_num = max(1, min(chapter_num, self.total_chapters))
+        self.position_pct = self.chapter_num / self.total_chapters * 100
 
     # --- Landmark chapters ---
 
