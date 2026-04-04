@@ -68,6 +68,11 @@ class ProviderConfig:
     label: str  # human-readable label for logging (e.g. "primary", "provider_2")
 
 
+# Maximum numbered fallback index scanned when building the provider list.
+# Indices 2 … _MAX_PROVIDER_INDEX are checked; any with a URL set are included.
+_MAX_PROVIDER_INDEX = 20
+
+
 def _parse_llm_providers() -> list[ProviderConfig]:
     """
     Build an ordered list of LLM providers from environment variables.
@@ -75,6 +80,13 @@ def _parse_llm_providers() -> list[ProviderConfig]:
     The primary provider uses LLM_API_URL / LLM_API_KEY / LLM_MODEL.
     Fallbacks use numbered suffixes: LLM_API_URL_2, LLM_API_KEY_2, LLM_MODEL_2, etc.
     A fallback is only added if at least its URL is set.
+
+    All indices from 2 to :data:`_MAX_PROVIDER_INDEX` are scanned so that
+    sparse numbering (e.g. provider 2 absent but provider 3 present) is
+    discovered rather than silently dropped.  Any gaps found between index 2
+    and the highest defined index are recorded in
+    :data:`_CONFIG_PARSE_ERRORS` so that :func:`validate_config` can surface
+    them to the operator.
     """
     providers: list[ProviderConfig] = []
 
@@ -86,18 +98,32 @@ def _parse_llm_providers() -> list[ProviderConfig]:
         url=primary_url, api_key=primary_key, model=primary_model, label="primary",
     ))
 
-    # Numbered fallbacks (_2, _3, …)
-    idx = 2
-    while True:
-        url = os.environ.get(f"LLM_API_URL_{idx}", "")
-        if not url:
-            break
-        key = os.environ.get(f"LLM_API_KEY_{idx}", "")
-        model = os.environ.get(f"LLM_MODEL_{idx}", primary_model)
-        providers.append(ProviderConfig(
-            url=url, api_key=key, model=model, label=f"provider_{idx}",
-        ))
-        idx += 1
+    # Discover all numbered fallbacks in range [2, _MAX_PROVIDER_INDEX]
+    defined_indices = [
+        idx for idx in range(2, _MAX_PROVIDER_INDEX + 1)
+        if os.environ.get(f"LLM_API_URL_{idx}", "")
+    ]
+
+    if defined_indices:
+        # Detect gaps: every index from 2 up to the highest defined one is
+        # expected to be present.  Missing slots in that range are gaps.
+        full_range = set(range(2, max(defined_indices) + 1))
+        gap_indices = sorted(full_range - set(defined_indices))
+        if gap_indices:
+            _CONFIG_PARSE_ERRORS.append(
+                "LLM provider numbering has gaps at index(es) "
+                + ", ".join(str(i) for i in gap_indices)
+                + ". All defined providers will still be used; "
+                "consider renumbering them consecutively to avoid confusion."
+            )
+
+        for idx in defined_indices:
+            url = os.environ.get(f"LLM_API_URL_{idx}", "")
+            key = os.environ.get(f"LLM_API_KEY_{idx}", "")
+            model = os.environ.get(f"LLM_MODEL_{idx}", primary_model)
+            providers.append(ProviderConfig(
+                url=url, api_key=key, model=model, label=f"provider_{idx}",
+            ))
 
     return providers
 
