@@ -14,6 +14,8 @@ pronounceable, and are stylistically calibrated per genre:
 
 from __future__ import annotations
 
+from novelforge.validation import ALLOWED_GENRES
+
 # ---------------------------------------------------------------------------
 # Genre → style-group mapping
 # ---------------------------------------------------------------------------
@@ -46,6 +48,13 @@ _GENRE_GROUP: dict[str, str] = {
     "Horror":    "thriller",
     "Adventure": "thriller",
 }
+
+# Validate that every allowed genre has a name-pool mapping.
+_missing_name_genres = ALLOWED_GENRES - _GENRE_GROUP.keys()
+assert not _missing_name_genres, (
+    f"Genres missing from _GENRE_GROUP in names.py: {sorted(_missing_name_genres)}. "
+    f"Add a style-group mapping for each."
+)
 
 # ---------------------------------------------------------------------------
 # Name pool data

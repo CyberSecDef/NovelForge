@@ -219,7 +219,12 @@ def create_app(*, testing: bool = False) -> Flask:
             if illustrations:
                 session_data["illustrations"] = illustrations
 
-        return render_template("index.html", session_data=session_data)
+        from novelforge.validation import ALLOWED_GENRES
+        return render_template(
+            "index.html",
+            session_data=session_data,
+            allowed_genres=sorted(ALLOWED_GENRES),
+        )
 
     @app.route("/llm_log")
     def get_llm_log() -> Response:

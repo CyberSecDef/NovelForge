@@ -585,7 +585,7 @@ except (KeyError, ValueError) as exc:
 
 ## Low Priority / Quality
 
-### 14. Genre Lists Duplicated in Three Places — OPEN
+### 14. ~~Genre Lists Duplicated in Three Places~~ DONE
 
 **Files:**
 - `novelforge/validation.py` lines 10-32 (`ALLOWED_GENRES` set)

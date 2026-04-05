@@ -9,6 +9,8 @@ deliberate" style that LLMs default to.
 import re
 import random
 
+from novelforge.validation import ALLOWED_GENRES
+
 # Each voice seed defines a prose style, emotional register, and
 # sensory preference. One is selected per novel and injected into
 # every chapter draft and refinement prompt.
@@ -212,6 +214,38 @@ _PREMISE_KEYWORDS: dict[str, list[str]] = {
 # Maximum extra copies a voice can earn from premise keyword matches.
 _PREMISE_KEYWORD_BOOST: int = 3
 
+# Genre → preferred voice names mapping (used to bias selection)
+_GENRE_VOICE_WEIGHTS: dict[str, list[str]] = {
+    "Adventure": ["visceral_kinetic", "sparse_cinematic", "sharp_angular"],
+    "Contemporary Fiction": ["conversational_intimate", "dry_wit", "dense_literary"],
+    "Crime": ["dry_wit", "sparse_cinematic", "sharp_angular"],
+    "Dystopian": ["sharp_angular", "dense_literary", "sparse_cinematic"],
+    "Fantasy": ["lyrical_flowing", "gothic_atmospheric", "dense_literary"],
+    "Gothic Fiction": ["gothic_atmospheric", "dense_literary", "lyrical_flowing"],
+    "Historical Fiction": ["dense_literary", "lyrical_flowing", "gothic_atmospheric"],
+    "Horror": ["gothic_atmospheric", "visceral_kinetic", "sharp_angular"],
+    "Literary Fiction": ["dense_literary", "lyrical_flowing", "conversational_intimate"],
+    "Magical Realism": ["lyrical_flowing", "gothic_atmospheric", "dense_literary"],
+    "Mystery": ["dry_wit", "sparse_cinematic", "sharp_angular"],
+    "Noir": ["dry_wit", "sparse_cinematic", "sharp_angular"],
+    "Paranormal": ["gothic_atmospheric", "visceral_kinetic", "lyrical_flowing"],
+    "Romance": ["lyrical_flowing", "conversational_intimate", "dense_literary"],
+    "Satire Humor": ["dry_wit", "conversational_intimate", "sparse_cinematic"],
+    "Science Fiction": ["sharp_angular", "sparse_cinematic", "visceral_kinetic"],
+    "Speculative Fiction": ["dense_literary", "sharp_angular", "sparse_cinematic"],
+    "Thriller": ["visceral_kinetic", "sharp_angular", "sparse_cinematic"],
+    "Urban Fantasy": ["visceral_kinetic", "lyrical_flowing", "gothic_atmospheric"],
+    "Western": ["sparse_cinematic", "sharp_angular", "visceral_kinetic"],
+    "Young Adult": ["conversational_intimate", "visceral_kinetic", "lyrical_flowing"],
+}
+
+# Validate that every allowed genre has voice weights.
+_missing_voice_genres = ALLOWED_GENRES - _GENRE_VOICE_WEIGHTS.keys()
+assert not _missing_voice_genres, (
+    f"Genres missing from _GENRE_VOICE_WEIGHTS in voice.py: {sorted(_missing_voice_genres)}. "
+    f"Add a voice weight mapping for each."
+)
+
 
 def select_voice_seed(genre: str = "", premise: str = "") -> dict[str, str]:
     """
@@ -228,32 +262,7 @@ def select_voice_seed(genre: str = "", premise: str = "") -> dict[str, str]:
     selected.  With no genre or premise supplied all voices are equally
     likely.
     """
-    # Weight certain voices toward certain genres
-    weights: dict[str, list[str]] = {
-        "Adventure": ["visceral_kinetic", "sparse_cinematic", "sharp_angular"],
-        "Contemporary Fiction": ["conversational_intimate", "dry_wit", "dense_literary"],
-        "Crime": ["dry_wit", "sparse_cinematic", "sharp_angular"],
-        "Dystopian": ["sharp_angular", "dense_literary", "sparse_cinematic"],
-        "Fantasy": ["lyrical_flowing", "gothic_atmospheric", "dense_literary"],
-        "Gothic Fiction": ["gothic_atmospheric", "dense_literary", "lyrical_flowing"],
-        "Historical Fiction": ["dense_literary", "lyrical_flowing", "gothic_atmospheric"],
-        "Horror": ["gothic_atmospheric", "visceral_kinetic", "sharp_angular"],
-        "Literary Fiction": ["dense_literary", "lyrical_flowing", "conversational_intimate"],
-        "Magical Realism": ["lyrical_flowing", "gothic_atmospheric", "dense_literary"],
-        "Mystery": ["dry_wit", "sparse_cinematic", "sharp_angular"],
-        "Noir": ["dry_wit", "sparse_cinematic", "sharp_angular"],
-        "Paranormal": ["gothic_atmospheric", "visceral_kinetic", "lyrical_flowing"],
-        "Romance": ["lyrical_flowing", "conversational_intimate", "dense_literary"],
-        "Satire Humor": ["dry_wit", "conversational_intimate", "sparse_cinematic"],
-        "Science Fiction": ["sharp_angular", "sparse_cinematic", "visceral_kinetic"],
-        "Speculative Fiction": ["dense_literary", "sharp_angular", "sparse_cinematic"],
-        "Thriller": ["visceral_kinetic", "sharp_angular", "sparse_cinematic"],
-        "Urban Fantasy": ["visceral_kinetic", "lyrical_flowing", "gothic_atmospheric"],
-        "Western": ["sparse_cinematic", "sharp_angular", "visceral_kinetic"],
-        "Young Adult": ["conversational_intimate", "visceral_kinetic", "lyrical_flowing"],
-    }
-
-    preferred = weights.get(genre, [])
+    preferred = _GENRE_VOICE_WEIGHTS.get(genre, [])
 
     # Normalise premise to a set of lowercase word tokens for keyword matching.
     premise_tokens = set(re.sub(r"[^a-z\s]", " ", premise.lower()).split())
