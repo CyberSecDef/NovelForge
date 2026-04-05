@@ -136,16 +136,16 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         return jsonify({"error": "Novel generation not complete."}), 400
 
     title = (progress_data.get("snapshot") or {}).get("title", "Novel")
-    consistency = progress_data.get("consistency", {})
-    global_continuity_audit = progress_data.get("global_continuity_audit", {})
-    narrative_compression_report = progress_data.get("narrative_compression_report", {})
-    character_resolution_report = progress_data.get("character_resolution_report", {})
-    thematic_payoff_report = progress_data.get("thematic_payoff_report", {})
-    climax_integrity_report = progress_data.get("climax_integrity_report", {})
-    loose_thread_report = progress_data.get("loose_thread_report", {})
-    reader_immersion_report = progress_data.get("reader_immersion_report", {})
-    pacing_heatmap = progress_data.get("pacing_heatmap", {})
-    character_relationship_map = progress_data.get("character_relationship_map", {})
+    consistency = progress_data.get("consistency") or {}
+    global_continuity_audit = progress_data.get("global_continuity_audit") or {}
+    narrative_compression_report = progress_data.get("narrative_compression_report") or {}
+    character_resolution_report = progress_data.get("character_resolution_report") or {}
+    thematic_payoff_report = progress_data.get("thematic_payoff_report") or {}
+    climax_integrity_report = progress_data.get("climax_integrity_report") or {}
+    loose_thread_report = progress_data.get("loose_thread_report") or {}
+    reader_immersion_report = progress_data.get("reader_immersion_report") or {}
+    pacing_heatmap = progress_data.get("pacing_heatmap") or {}
+    character_relationship_map = progress_data.get("character_relationship_map") or {}
 
     has_content = any([
         consistency.get("overall_assessment") or consistency.get("issues"),

@@ -324,9 +324,11 @@ class TestGenerateChapters:
 class TestReviseChapter:
     """Chapter revision with mocked LLM."""
 
-    def test_revise_returns_updated_content(self, client, mock_llm):
-        token = "test-revise-integration"
-        progress_manager.create(token, {
+    def _make_token(self, suffix: str = "") -> str:
+        return f"test-revise-{suffix}" if suffix else "test-revise-integration"
+
+    def _create_progress(self, token: str, *, with_reports: bool = False, session_id: str = "") -> None:
+        state: dict = {
             "status": "done",
             "current": 1,
             "total": 1,
@@ -340,22 +342,37 @@ class TestReviseChapter:
                 "title": "Test",
                 "genre": "Fantasy",
                 "chapters": 1,
-                    "chapter_list": [{"number": 1, "title": "Ch1", "summary": "Outline"}],
-                    "character_list": [],
-                    "special_instructions": "",
-                    "story_architecture": {},
-                    "master_timeline": {},
-                    "character_fate_registry": {},
-                    "character_arc_plan": {},
-                    "antagonist_motivation_plan": {},
-                    "technology_rules": {},
-                    "theme_reinforcement": {},
-                    "pov_focal_character_plan": {},
-                    "narrative_perspective": "third_person",
-                },
-        })
+                "chapter_list": [{"number": 1, "title": "Ch1", "summary": "Outline"}],
+                "character_list": [],
+                "special_instructions": "",
+                "story_architecture": {},
+                "master_timeline": {},
+                "character_fate_registry": {},
+                "character_arc_plan": {},
+                "antagonist_motivation_plan": {},
+                "technology_rules": {},
+                "theme_reinforcement": {},
+                "pov_focal_character_plan": {},
+                "narrative_perspective": "third_person",
+                **({"session_id": session_id} if session_id else {}),
+            },
+        }
+        if with_reports:
+            state.update({
+                "global_continuity_audit": {"overall_integrity": "good", "contradictions": []},
+                "narrative_compression_report": {"compression_priority": "low"},
+                "character_resolution_report": {"resolution_integrity": "good"},
+                "thematic_payoff_report": {"thematic_integrity": "good"},
+                "climax_integrity_report": {"climax_integrity": "good"},
+                "loose_thread_report": {"thread_integrity": "good"},
+                "reader_immersion_report": {"engagement_score": 8},
+                "pacing_heatmap": {"chapter_metrics": []},
+                "character_relationship_map": {"characters": [], "relationships": []},
+            })
+        progress_manager.create(token, state)
 
-        r = client.post(
+    def _post_revise(self, client, token: str):
+        return client.post(
             "/revise_chapter",
             data=json.dumps({
                 "token": token,
@@ -364,10 +381,79 @@ class TestReviseChapter:
             }),
             content_type="application/json",
         )
+
+    def test_revise_returns_updated_content(self, client, mock_llm):
+        token = self._make_token("content")
+        self._create_progress(token)
+        r = self._post_revise(client, token)
         assert r.status_code == 200
         data = r.get_json()
         assert data["status"] == "done"
         assert data["chapters_done"][0]["content"] != "Original text."
+
+    def test_revise_invalidates_derived_reports(self, client, mock_llm):
+        """After revision, all derived report fields must be set to None."""
+        from novelforge.routes.generation import _DERIVED_REPORT_FIELDS
+        token = self._make_token("invalidation")
+        self._create_progress(token, with_reports=True)
+        r = self._post_revise(client, token)
+        assert r.status_code == 200
+        data = r.get_json()
+        for field in _DERIVED_REPORT_FIELDS:
+            assert data.get(field) is None, f"Expected {field} to be None after revision"
+
+    def test_revise_persists_chapters(self, client, mock_llm, tmp_path, monkeypatch):
+        """Revision must call persist_completed_chapters so changes survive a restart."""
+        import novelforge.config as config
+        monkeypatch.setattr(config, "NOVELS_DIR", str(tmp_path))
+
+        session_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        token = self._make_token("persist")
+        self._create_progress(token, session_id=session_id)
+
+        # Create an initial session file so persistence has something to update
+        session_file = tmp_path / f"{session_id}.json"
+        session_file.write_text(json.dumps({
+            "session_id": session_id,
+            "title": "Test",
+            "completed_chapters": [],
+        }))
+
+        r = self._post_revise(client, token)
+        assert r.status_code == 200
+
+        saved = json.loads(session_file.read_text())
+        # persist_completed_chapters stores chapters under "completed_chapters"
+        assert len(saved.get("completed_chapters", [])) == 1
+        assert saved["completed_chapters"][0]["content"] != "Original text."
+
+    def test_revise_persistence_includes_invalidated_reports(self, client, mock_llm, tmp_path, monkeypatch):
+        """Persisted state after revision reflects the invalidated (None) report values."""
+        from novelforge.routes.generation import _DERIVED_REPORT_FIELDS
+        import novelforge.config as config
+        monkeypatch.setattr(config, "NOVELS_DIR", str(tmp_path))
+
+        session_id = "11111111-2222-3333-4444-555555555555"
+        token = self._make_token("persist-invalidate")
+        self._create_progress(token, with_reports=True, session_id=session_id)
+
+        session_file = tmp_path / f"{session_id}.json"
+        session_file.write_text(json.dumps({
+            "session_id": session_id,
+            "title": "Test",
+            "chapters_done": [],
+        }))
+
+        r = self._post_revise(client, token)
+        assert r.status_code == 200
+
+        saved = json.loads(session_file.read_text())
+        progress_data = saved.get("progress_data", {})
+        for field in _DERIVED_REPORT_FIELDS:
+            assert progress_data.get(field) is None, (
+                f"Expected stale {field} to be persisted as None"
+            )
+
 
 
 class TestExport:
