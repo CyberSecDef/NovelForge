@@ -13,6 +13,7 @@ class TechnologyRulesAgent(BaseAgent):
     prompt_action = "Planning Technology Rules"
 
     def build_prompt(self, **ctx) -> list[dict]:
+        """Build the technology rules prompt from outline and genre context."""
         title = ctx["title"]
         premise = ctx["premise"]
         genre = ctx["genre"]
@@ -27,11 +28,13 @@ class TechnologyRulesAgent(BaseAgent):
                              chapters_text=chapters_text, special_instructions=special_instructions or "")
 
     def build_fallback(self, **ctx) -> dict:
+        """Build a deterministic fallback technology ruleset from the chapter list."""
         chapter_list = ctx.get("chapter_list", [])
         return self._build_fallback_impl(chapter_list)
 
     @staticmethod
     def _build_fallback_impl(chapter_list: list[dict]) -> dict:
+        """Create a deterministic fallback with a single surveillance system and chapter constraints."""
         safe_chapter_list = _safe_chapter_list(chapter_list)
         total_chapters = max(1, len(safe_chapter_list))
         systems = [
@@ -67,6 +70,7 @@ class TechnologyRulesAgent(BaseAgent):
         }
 
     def normalise(self, data: dict, **ctx) -> dict:
+        """Validate and merge LLM technology rules with deterministic fallback."""
         chapter_list = ctx.get("chapter_list", [])
         fallback = self._build_fallback_impl(chapter_list)
         if not isinstance(data, dict):
@@ -129,6 +133,7 @@ class TechnologyRulesAgent(BaseAgent):
         }
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
+        """Format technology systems and constraints as a prompt snippet for a chapter."""
         if not isinstance(plan, dict):
             return ""
 
@@ -183,12 +188,15 @@ _technology_rules_agent = TechnologyRulesAgent()
 
 
 def plan_technology_rules(**kwargs: object) -> dict:
+    """Delegate to the singleton TechnologyRulesAgent instance."""
     return _technology_rules_agent.plan(**kwargs)
 
 
 def normalise_technology_rules(technology_data: dict, chapter_list: list[dict]) -> dict:
+    """Delegate normalisation to the singleton TechnologyRulesAgent."""
     return _technology_rules_agent.normalise(technology_data, chapter_list=chapter_list)
 
 
 def get_chapter_technology_context(technology_rules: dict, chapter_num: int) -> str:
+    """Delegate context formatting to the singleton TechnologyRulesAgent."""
     return _technology_rules_agent.get_chapter_context(technology_rules, chapter_num)

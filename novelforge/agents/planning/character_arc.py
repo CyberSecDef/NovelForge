@@ -13,6 +13,7 @@ class CharacterArcPlanAgent(BaseAgent):
     prompt_action = "Planning Character Arcs"
 
     def build_prompt(self, **ctx) -> list[dict]:
+        """Build the character arc planning prompt from character and chapter context."""
         title = ctx["title"]
         premise = ctx["premise"]
         genre = ctx["genre"]
@@ -43,6 +44,7 @@ class CharacterArcPlanAgent(BaseAgent):
         )
 
     def build_fallback(self, **ctx) -> dict:
+        """Build a deterministic fallback arc plan from character and chapter lists."""
         character_list = ctx.get("character_list", [])
         chapter_list = ctx.get("chapter_list", [])
         return self._build_fallback_impl(character_list, chapter_list)
@@ -119,6 +121,7 @@ class CharacterArcPlanAgent(BaseAgent):
         }
 
     def normalise(self, data: dict, **ctx) -> dict:
+        """Validate and merge LLM arc plan with deterministic fallback."""
         character_list = ctx.get("character_list", [])
         chapter_list = ctx.get("chapter_list", [])
         fallback = self._build_fallback_impl(character_list, chapter_list)
@@ -198,6 +201,7 @@ class CharacterArcPlanAgent(BaseAgent):
         }
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
+        """Format arc beats and constraints as a prompt snippet for a chapter."""
         if not isinstance(plan, dict):
             return ""
 
@@ -258,12 +262,15 @@ _character_arc_plan_agent = CharacterArcPlanAgent()
 
 
 def plan_character_arc_plan(**kwargs: object) -> dict:
+    """Delegate to the singleton CharacterArcPlanAgent instance."""
     return _character_arc_plan_agent.plan(**kwargs)
 
 
 def normalise_character_arc_plan(arc_data: dict, character_list: list[dict], chapter_list: list[dict]) -> dict:
+    """Delegate normalisation to the singleton CharacterArcPlanAgent."""
     return _character_arc_plan_agent.normalise(arc_data, character_list=character_list, chapter_list=chapter_list)
 
 
 def get_chapter_arc_context(character_arc_plan: dict, chapter_num: int) -> str:
+    """Delegate context formatting to the singleton CharacterArcPlanAgent."""
     return _character_arc_plan_agent.get_chapter_context(character_arc_plan, chapter_num)

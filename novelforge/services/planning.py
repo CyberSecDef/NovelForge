@@ -186,6 +186,7 @@ def run_selective_planning(
     }
 
     def _needs_regen(agent_key: str) -> bool:
+        """Return True if the agent's input hash differs from the stored hash."""
         return bool(new_hashes.get(agent_key) != prev_hashes.get(agent_key))
 
     results: dict[str, dict] = {}

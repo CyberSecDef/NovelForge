@@ -54,6 +54,7 @@ def build_perspective_prompt(narrative_perspective: str) -> str:
 
 
 def _format_characters(character_list: list[dict]) -> str:
+    """Format a character list as a human-readable string for prompt injection."""
     if not character_list:
         return "No characters defined."
     lines = []

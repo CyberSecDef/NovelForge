@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def _build_system_prompt(role: str) -> dict[str, str]:
+    """Wrap a role description into an LLM system-message dict."""
     return {"role": "system", "content": role}
 
 
@@ -17,6 +18,7 @@ def choose_story_architecture_mode(total_chapters: int) -> str:
 
 
 def _coerce_positive_int(value: object, default: int) -> int:
+    """Safely coerce *value* to a positive int, returning *default* on failure."""
     try:
         coerced = int(value)  # type: ignore[call-overload]
         return coerced if coerced > 0 else default

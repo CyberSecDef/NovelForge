@@ -251,6 +251,7 @@ def _run_chapter_generation_internal(
             )
 
     def _set_step(step_label: str) -> None:
+        """Update the progress step label and persist a throttled snapshot."""
         progress_manager.update(token, {"step": step_label})
         _persist_progress()  # throttled; force=True callers use _persist_progress directly
 

@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 def run_scene_variety_compression_auditor(chapter_text: str, chapter_summary: str, chapter_num: int, title: str,
                                            degraded_passes: list[dict] | None = None) -> str:
+    """Run the scene variety audit, returning directives or empty string on failure."""
     try:
         return call_llm(
             build_scene_variety_compression_auditor_prompt(
@@ -71,6 +72,7 @@ def run_scene_variety_compression_auditor(chapter_text: str, chapter_summary: st
 
 def run_per_chapter_compression_check(chapter_num: int, chapter_summary: str, previous_summaries: str, title: str,
                                        degraded_passes: list[dict] | None = None) -> str:
+    """Run the post-chapter compression check, returning guidance or empty string on failure."""
     if chapter_num <= 1 or not previous_summaries.strip():
         return ""
     try:
@@ -97,6 +99,7 @@ def run_per_chapter_compression_check(chapter_num: int, chapter_summary: str, pr
 
 def run_character_state_updater(chapter_text: str, chapter_summary: str, characters_text: str, chapter_num: int, title: str,
                                  degraded_passes: list[dict] | None = None) -> str:
+    """Run the character state updater, returning state changes or empty string on failure."""
     try:
         return call_llm(
             build_character_state_updater_prompt(
@@ -125,6 +128,7 @@ def run_continuity_gatekeeper(
     chapter_arc_context: str = "", character_state_log: str = "",
     degraded_passes: list[dict] | None = None,
 ) -> str:
+    """Run the pre-chapter continuity gatekeeper, returning a brief or empty string on failure."""
     try:
         return call_llm(
             build_continuity_gatekeeper_prompt(
@@ -156,6 +160,7 @@ def run_chapter_rhythm_classifier(
     chapter_architecture_context: str = "",
     degraded_passes: list[dict] | None = None,
 ) -> dict:
+    """Run the chapter rhythm classifier, returning a dict with shape recommendation or PASS_FAILURE_KEY on failure."""
     try:
         raw = call_llm(
             build_chapter_rhythm_classifier_prompt(
@@ -218,6 +223,7 @@ def _run_all_chapter_agents(
     if ctx is None:
         ctx = ChapterContext()
     def _check_deadline() -> None:
+        """Raise ChapterTimeoutError if the per-chapter deadline has passed."""
         if deadline and time.monotonic() > deadline:
             raise ChapterTimeoutError(
                 f"Chapter {chapter_num} exceeded the {PER_CHAPTER_TIMEOUT // 60}-minute time limit."
@@ -225,6 +231,7 @@ def _run_all_chapter_agents(
 
     # Local shorthand: every agent call goes through the content-retry wrapper
     def _safe(build_msgs: Callable[[str], list[dict]], txt: str, *, action: str, json_mode: bool = False) -> str:
+        """Call the LLM via the content-retry wrapper."""
         return _call_with_content_retry(
             build_msgs, txt, action=action,
             chapter_num=chapter_num, title=title, json_mode=json_mode,

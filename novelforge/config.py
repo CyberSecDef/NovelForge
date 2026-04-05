@@ -255,6 +255,7 @@ class ConfigurationError(Exception):
     """
 
     def __init__(self, errors: list[str]) -> None:
+        """Initialise with a human-readable configuration error message."""
         self.errors = list(errors)
         super().__init__(
             "Configuration validation failed:\n"

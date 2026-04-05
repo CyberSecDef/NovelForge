@@ -86,6 +86,7 @@ class ProgressManager:
     """
 
     def __init__(self) -> None:
+        """Initialise an empty progress store with a threading lock."""
         self._store: dict[str, ProgressState] = {}
         self._lock = threading.Lock()
 
@@ -229,6 +230,7 @@ class CorrelationFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """Inject the current thread's correlation token into the log record."""
         record.correlation_token = get_correlation_token()  # type: ignore[attr-defined]
         return True
 
@@ -243,6 +245,7 @@ class CorrelationFormatter(logging.Formatter):
     """
 
     def format(self, record: logging.LogRecord) -> str:
+        """Format the log record, prepending the correlation token if present."""
         token = getattr(record, "correlation_token", "")
         if token:
             original_msg = record.msg

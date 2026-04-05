@@ -12,6 +12,7 @@ class ThemeReinforcementAgent(BaseAgent):
     prompt_action = "Planning Theme Reinforcement"
 
     def build_prompt(self, **ctx) -> list[dict]:
+        """Build the theme reinforcement prompt from outline and genre context."""
         title = ctx["title"]
         premise = ctx["premise"]
         genre = ctx["genre"]
@@ -26,11 +27,13 @@ class ThemeReinforcementAgent(BaseAgent):
                              chapters_text=chapters_text, special_instructions=special_instructions or "")
 
     def build_fallback(self, **ctx) -> dict:
+        """Build a deterministic fallback theme plan from the chapter list."""
         chapter_list = ctx.get("chapter_list", [])
         return self._build_fallback_impl(chapter_list)
 
     @staticmethod
     def _build_fallback_impl(chapter_list: list[dict]) -> dict:
+        """Create a deterministic fallback with two default themes and chapter appearances."""
         safe_chapter_list = _safe_chapter_list(chapter_list)
         fallback_themes = [
             {
@@ -76,6 +79,7 @@ class ThemeReinforcementAgent(BaseAgent):
         }
 
     def normalise(self, data: dict, **ctx) -> dict:
+        """Validate and merge LLM theme reinforcement plan with deterministic fallback."""
         chapter_list = ctx.get("chapter_list", [])
         fallback = self._build_fallback_impl(chapter_list)
         if not isinstance(data, dict):
@@ -133,6 +137,7 @@ class ThemeReinforcementAgent(BaseAgent):
         }
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
+        """Format theme appearances and guidance as a prompt snippet for a chapter."""
         if not isinstance(plan, dict):
             return ""
 
@@ -192,12 +197,15 @@ _theme_reinforcement_agent = ThemeReinforcementAgent()
 
 
 def plan_theme_reinforcement(**kwargs: object) -> dict:
+    """Delegate to the singleton ThemeReinforcementAgent instance."""
     return _theme_reinforcement_agent.plan(**kwargs)
 
 
 def normalise_theme_reinforcement(theme_data: dict, chapter_list: list[dict]) -> dict:
+    """Delegate normalisation to the singleton ThemeReinforcementAgent."""
     return _theme_reinforcement_agent.normalise(theme_data, chapter_list=chapter_list)
 
 
 def get_chapter_theme_context(theme_reinforcement: dict, chapter_num: int) -> str:
+    """Delegate context formatting to the singleton ThemeReinforcementAgent."""
     return _theme_reinforcement_agent.get_chapter_context(theme_reinforcement, chapter_num)

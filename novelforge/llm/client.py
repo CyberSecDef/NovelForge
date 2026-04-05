@@ -73,6 +73,7 @@ class LLMCircuitBreaker:
     """
 
     def __init__(self, threshold: int = CIRCUIT_BREAKER_THRESHOLD):
+        """Initialise with the given failure threshold."""
         self._threshold = threshold
         self._consecutive_failures = 0
         self._tripped = False
@@ -80,11 +81,13 @@ class LLMCircuitBreaker:
         self._lock = threading.Lock()
 
     def record_success(self) -> None:
+        """Record a successful call, resetting the failure counter."""
         with self._lock:
             self._consecutive_failures = 0
             self._tripped = False
 
     def record_failure(self, error: str) -> None:
+        """Record a failed call; trip the breaker if threshold is reached."""
         with self._lock:
             self._consecutive_failures += 1
             self._last_error = error
@@ -105,6 +108,7 @@ class LLMCircuitBreaker:
                 )
 
     def reset(self) -> None:
+        """Manually reset the breaker to closed state."""
         with self._lock:
             self._consecutive_failures = 0
             self._tripped = False
@@ -112,11 +116,13 @@ class LLMCircuitBreaker:
 
     @property
     def is_tripped(self) -> bool:
+        """Return True if the breaker is currently tripped."""
         with self._lock:
             return self._tripped
 
     @property
     def failure_count(self) -> int:
+        """Return the current consecutive failure count."""
         with self._lock:
             return self._consecutive_failures
 
@@ -140,6 +146,7 @@ class ContentRejectionError(Exception):
     """
 
     def __init__(self, message: str, *, status_code: int | None = None, response_body: str | None = None):
+        """Initialise with message and optional status_code and response_body."""
         super().__init__(message)
         self.status_code = status_code
         self.response_body = response_body

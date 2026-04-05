@@ -52,6 +52,7 @@ class ChapterPosition:
     """
 
     def __init__(self, chapter_num: int, total_chapters: int) -> None:
+        """Initialise position metadata for *chapter_num* within a *total_chapters*-chapter novel."""
         self.total_chapters = max(1, total_chapters)
         self.chapter_num = max(1, min(chapter_num, self.total_chapters))
         self.position_pct = self.chapter_num / self.total_chapters * 100

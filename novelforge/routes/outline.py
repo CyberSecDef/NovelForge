@@ -183,6 +183,7 @@ def approve_outline() -> Response | tuple[Response, int]:
     # String fields are stored as plain text; XSS escaping is handled at
     # render time by Jinja2 auto-escape and jQuery .text().
     def sanitise_str(v: object) -> object:
+        """Return the value unchanged (sanitisation handled by Jinja2 auto-escape)."""
         return v
 
     # -------------------------------------------------------------------------
@@ -259,6 +260,7 @@ def approve_outline() -> Response | tuple[Response, int]:
 
     # Helper: read a key from the working copy, falling back to the live session
     def _from_working(key: str, default: object = "") -> object:
+        """Read a key from the working copy, falling back to the live session."""
         return working.get(key, session.get(key, default))
 
     # Resolve planning inputs from the working copy (post-rename values)

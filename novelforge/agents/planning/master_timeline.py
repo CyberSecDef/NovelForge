@@ -13,6 +13,7 @@ class MasterTimelineAgent(BaseAgent):
     prompt_action = "Planning Master Timeline"
 
     def build_prompt(self, **ctx) -> list[dict]:
+        """Build the master timeline planning prompt from outline and character context."""
         title = ctx["title"]
         premise = ctx["premise"]
         genre = ctx["genre"]
@@ -42,6 +43,7 @@ class MasterTimelineAgent(BaseAgent):
         )
 
     def build_fallback(self, **ctx) -> dict:
+        """Build a deterministic fallback timeline from chapter and character lists."""
         chapter_list = ctx.get("chapter_list", [])
         character_list = ctx.get("character_list", [])
         return self._build_fallback_impl(chapter_list, character_list)
@@ -100,6 +102,7 @@ class MasterTimelineAgent(BaseAgent):
         }
 
     def normalise(self, data: dict, **ctx) -> dict:
+        """Validate and merge LLM timeline output with deterministic fallback."""
         chapter_list = ctx.get("chapter_list", [])
         character_list = ctx.get("character_list", [])
         fallback = self._build_fallback_impl(chapter_list, character_list)
@@ -179,6 +182,7 @@ class MasterTimelineAgent(BaseAgent):
         return merged
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
+        """Format timeline events and character states as a prompt snippet for a chapter."""
         if not isinstance(plan, dict):
             return ""
 
@@ -251,12 +255,15 @@ _master_timeline_agent = MasterTimelineAgent()
 
 
 def plan_master_timeline(**kwargs: object) -> dict:
+    """Delegate to the singleton MasterTimelineAgent instance."""
     return _master_timeline_agent.plan(**kwargs)
 
 
 def normalise_master_timeline(timeline_data: dict, chapter_list: list[dict], character_list: list[dict]) -> dict:
+    """Delegate normalisation to the singleton MasterTimelineAgent."""
     return _master_timeline_agent.normalise(timeline_data, chapter_list=chapter_list, character_list=character_list)
 
 
 def get_chapter_timeline_context(master_timeline: dict, chapter_num: int) -> str:
+    """Delegate context formatting to the singleton MasterTimelineAgent."""
     return _master_timeline_agent.get_chapter_context(master_timeline, chapter_num)

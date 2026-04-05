@@ -447,6 +447,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         metrics = pacing_heatmap.get("chapter_metrics") or []
         if metrics:
             def _bar(value: int) -> str:
+                """Return a 10-character block bar representing a 0-100 percentage value."""
                 clamped = max(0, min(100, int(value)))
                 filled = round(clamped / 10)
                 return "\u2588" * filled + "\u2591" * (10 - filled)

@@ -13,6 +13,7 @@ class CharacterFateRegistryAgent(BaseAgent):
     prompt_action = "Planning Character Fate Registry"
 
     def build_prompt(self, **ctx) -> list[dict]:
+        """Build the character fate registry prompt from character list and timeline."""
         title = ctx["title"]
         premise = ctx["premise"]
         genre = ctx["genre"]
@@ -55,6 +56,7 @@ class CharacterFateRegistryAgent(BaseAgent):
         )
 
     def build_fallback(self, **ctx) -> dict:
+        """Build a deterministic fallback registry from character list and chapter count."""
         character_list = ctx.get("character_list", [])
         chapter_list = ctx.get("chapter_list", [])
         total_chapters = ctx.get("total_chapters", max(1, len(chapter_list)))
@@ -106,6 +108,7 @@ class CharacterFateRegistryAgent(BaseAgent):
         }
 
     def normalise(self, data: dict, **ctx) -> dict:
+        """Validate and merge LLM fate registry with deterministic fallback."""
         character_list = ctx.get("character_list", [])
         chapter_list = ctx.get("chapter_list", [])
         total_chapters = ctx.get("total_chapters", max(1, len(chapter_list)))
@@ -208,12 +211,14 @@ class CharacterFateRegistryAgent(BaseAgent):
         return merged
 
     def plan(self, **ctx) -> dict:
+        """Inject total_chapters into context, then delegate to BaseAgent.plan()."""
         chapter_list = ctx.get("chapter_list", [])
         total_chapters = max(1, len(chapter_list))
         ctx["total_chapters"] = total_chapters
         return super().plan(**ctx)
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
+        """Format fate registry entries relevant to a specific chapter."""
         if not isinstance(plan, dict):
             return ""
 
@@ -278,12 +283,15 @@ _character_fate_registry_agent = CharacterFateRegistryAgent()
 
 
 def plan_character_fate_registry(**kwargs: object) -> dict:
+    """Delegate to the singleton CharacterFateRegistryAgent instance."""
     return _character_fate_registry_agent.plan(**kwargs)
 
 
 def normalise_character_fate_registry(registry_data: dict, character_list: list[dict], total_chapters: int) -> dict:
+    """Delegate normalisation to the singleton CharacterFateRegistryAgent."""
     return _character_fate_registry_agent.normalise(registry_data, character_list=character_list, total_chapters=total_chapters)
 
 
 def get_chapter_fate_context(character_fate_registry: dict, chapter_num: int) -> str:
+    """Delegate context formatting to the singleton CharacterFateRegistryAgent."""
     return _character_fate_registry_agent.get_chapter_context(character_fate_registry, chapter_num)

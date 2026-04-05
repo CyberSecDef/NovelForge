@@ -13,6 +13,7 @@ class PovFocalCharacterAgent(BaseAgent):
     prompt_action = "Planning POV & Focal Characters"
 
     def build_prompt(self, **ctx) -> list[dict]:
+        """Build the POV and focal character prompt from character arcs and perspective."""
         title = ctx["title"]
         premise = ctx["premise"]
         genre = ctx["genre"]
@@ -65,12 +66,14 @@ class PovFocalCharacterAgent(BaseAgent):
         )
 
     def build_fallback(self, **ctx) -> dict:
+        """Build a deterministic fallback POV plan from character and chapter lists."""
         character_list = ctx.get("character_list", [])
         chapter_list = ctx.get("chapter_list", [])
         return self._build_fallback_impl(character_list, chapter_list)
 
     @staticmethod
     def _build_fallback_impl(character_list: list[dict], chapter_list: list[dict]) -> dict:
+        """Create a deterministic round-robin POV assignment with protagonist priority."""
         safe_characters = [c for c in (character_list or []) if isinstance(c, dict) and str(c.get("name", "")).strip()]
         if not safe_characters:
             safe_characters = [{"name": "Protagonist", "role": "protagonist"}]
@@ -110,6 +113,7 @@ class PovFocalCharacterAgent(BaseAgent):
         }
 
     def normalise(self, data: dict, **ctx) -> dict:
+        """Validate and merge LLM POV plan with deterministic fallback."""
         character_list = ctx.get("character_list", [])
         chapter_list = ctx.get("chapter_list", [])
         fallback = self._build_fallback_impl(character_list, chapter_list)
@@ -174,6 +178,7 @@ class PovFocalCharacterAgent(BaseAgent):
         }
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
+        """Format POV assignment and justification as a prompt snippet for a chapter."""
         if not isinstance(plan, dict):
             return ""
         chapter_pov_plan = plan.get("chapter_pov_plan", [])
@@ -211,12 +216,15 @@ _pov_focal_character_agent = PovFocalCharacterAgent()
 
 
 def plan_pov_focal_character(**kwargs: object) -> dict:
+    """Delegate to the singleton PovFocalCharacterAgent instance."""
     return _pov_focal_character_agent.plan(**kwargs)
 
 
 def normalise_pov_focal_character_plan(plan_data: dict, character_list: list[dict], chapter_list: list[dict]) -> dict:
+    """Delegate normalisation to the singleton PovFocalCharacterAgent."""
     return _pov_focal_character_agent.normalise(plan_data, character_list=character_list, chapter_list=chapter_list)
 
 
 def get_chapter_pov_context(pov_plan: dict, chapter_num: int) -> str:
+    """Delegate context formatting to the singleton PovFocalCharacterAgent."""
     return _pov_focal_character_agent.get_chapter_context(pov_plan, chapter_num)

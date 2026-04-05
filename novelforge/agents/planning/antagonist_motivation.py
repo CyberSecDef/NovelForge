@@ -13,6 +13,7 @@ class AntagonistMotivationAgent(BaseAgent):
     prompt_action = "Planning Antagonist Motivation"
 
     def build_prompt(self, **ctx) -> list[dict]:
+        """Build the antagonist motivation prompt from character list and timeline."""
         title = ctx["title"]
         premise = ctx["premise"]
         genre = ctx["genre"]
@@ -54,12 +55,14 @@ class AntagonistMotivationAgent(BaseAgent):
         )
 
     def build_fallback(self, **ctx) -> dict:
+        """Build a deterministic fallback motivation plan from character and chapter lists."""
         character_list = ctx.get("character_list", [])
         chapter_list = ctx.get("chapter_list", [])
         return self._build_fallback_impl(character_list, chapter_list)
 
     @staticmethod
     def _build_fallback_impl(character_list: list[dict], chapter_list: list[dict]) -> dict:
+        """Create a deterministic fallback with escalation plans for identified antagonists."""
         safe_chapter_list = _safe_chapter_list(chapter_list)
         total_chapters = max(1, len(safe_chapter_list))
 
@@ -126,6 +129,7 @@ class AntagonistMotivationAgent(BaseAgent):
         }
 
     def normalise(self, data: dict, **ctx) -> dict:
+        """Validate and merge LLM antagonist plan with deterministic fallback."""
         character_list = ctx.get("character_list", [])
         chapter_list = ctx.get("chapter_list", [])
         fallback = self._build_fallback_impl(character_list, chapter_list)
@@ -207,6 +211,7 @@ class AntagonistMotivationAgent(BaseAgent):
         }
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
+        """Format antagonist escalation steps and constraints for a chapter."""
         if not isinstance(plan, dict):
             return ""
 
@@ -274,12 +279,15 @@ _antagonist_motivation_agent = AntagonistMotivationAgent()
 
 
 def plan_antagonist_motivation_plan(**kwargs: object) -> dict:
+    """Delegate to the singleton AntagonistMotivationAgent instance."""
     return _antagonist_motivation_agent.plan(**kwargs)
 
 
 def normalise_antagonist_motivation_plan(plan_data: dict, character_list: list[dict], chapter_list: list[dict]) -> dict:
+    """Delegate normalisation to the singleton AntagonistMotivationAgent."""
     return _antagonist_motivation_agent.normalise(plan_data, character_list=character_list, chapter_list=chapter_list)
 
 
 def get_chapter_antagonist_context(antagonist_motivation_plan: dict, chapter_num: int) -> str:
+    """Delegate context formatting to the singleton AntagonistMotivationAgent."""
     return _antagonist_motivation_agent.get_chapter_context(antagonist_motivation_plan, chapter_num)

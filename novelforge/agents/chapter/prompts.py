@@ -15,6 +15,7 @@ from novelforge.agents.chapter._helpers import _FORBIDDEN_WORDS, _SOFT_LIMITED_W
 # ---------------------------------------------------------------------------
 
 def build_title_prompt(premise: str, genre: str) -> list[dict[str, str]]:
+    """Build the title generation prompt from premise and genre."""
     return render_prompt("title", premise=premise, genre=genre)
 
 
@@ -22,6 +23,7 @@ def build_outline_prompt(
     premise: str, genre: str, chapters: int, word_count: int,
     special_events: str, special_instructions: str,
 ) -> list[dict[str, str]]:
+    """Build the chapter outline prompt from premise, genre, and word count."""
     return render_prompt(
         "outline", premise=premise, genre=genre, chapters=chapters,
         word_count=f"{word_count:,}", special_events=special_events or "",
@@ -67,6 +69,7 @@ def build_chapter_draft_prompt(
     chapter_rhythm_shape: str = "", chapter_rhythm_reason: str = "", chapter_pov_context: str = "",
     voice_prompt: str = "", perspective_prompt: str = "",
 ) -> list[dict[str, str]]:
+    """Build the initial chapter draft prompt with all planning context."""
     return render_prompt(
         "chapter_draft",
         title=title, genre=genre, premise=premise,
@@ -99,6 +102,7 @@ def build_chapter_draft_prompt(
 # ---------------------------------------------------------------------------
 
 def build_prose_refinement_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the prose refinement prompt for dialogue and scene momentum."""
     return render_prompt("prose_refinement_agent", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
@@ -106,6 +110,7 @@ def build_voice_dialogue_differentiation_prompt(
     chapter_text: str, chapter_num: int, title: str,
     characters_text: str, perspective_prompt: str = "",
 ) -> list[dict[str, str]]:
+    """Build the voice and dialogue differentiation prompt for character-specific speech."""
     return render_prompt(
         "voice_dialogue_differentiation",
         title=title, chapter_num=chapter_num,
@@ -116,12 +121,14 @@ def build_voice_dialogue_differentiation_prompt(
 
 
 def build_scene_variety_compression_auditor_prompt(chapter_text: str, chapter_summary: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the scene variety and compression audit prompt."""
     return render_prompt("scene_variety_compression_auditor", title=title, chapter_num=chapter_num,
                          chapter_summary=chapter_summary, chapter_text=chapter_text)
 
 
 def build_structure_agent_prompt(chapter_text: str, chapter_num: int, total_chapters: int, outline_summary: str,
                                   chapter_architecture_context: str = "") -> list[dict[str, str]]:
+    """Build the structure validation prompt with phase hints from ChapterPosition."""
     from novelforge.chapter_position import ChapterPosition
     phase_hint = ChapterPosition(chapter_num, total_chapters).get_structure_phase_hint()
     return render_prompt(
@@ -135,6 +142,7 @@ def build_character_agent_prompt(chapter_text: str, characters_text: str, chapte
                                   chapter_fate_context: str = "", chapter_arc_context: str = "",
                                   chapter_antagonist_context: str = "", chapter_pov_context: str = "",
                                   perspective_prompt: str = "") -> list[dict[str, str]]:
+    """Build the character deepening prompt with fate, arc, and POV context."""
     return render_prompt(
         "character_agent", title=title, chapter_num=chapter_num,
         characters_text=characters_text,
@@ -150,6 +158,7 @@ def build_character_agent_prompt(chapter_text: str, characters_text: str, chapte
 def build_context_analyzer_prompt(chapter_text: str, previous_summaries: str, chapter_num: int, title: str,
                                    chapter_timeline_context: str = "", chapter_technology_context: str = "",
                                    chapter_theme_context: str = "", gatekeeper_brief: str = "") -> list[dict[str, str]]:
+    """Build the continuity and context analysis prompt."""
     return render_prompt(
         "context_analyzer", title=title, chapter_num=chapter_num,
         previous_summaries=previous_summaries or "",
@@ -163,15 +172,18 @@ def build_context_analyzer_prompt(chapter_text: str, previous_summaries: str, ch
 
 def build_synthesizer_prompt(chapter_text: str, chapter_num: int, title: str, genre: str,
                               perspective_prompt: str = "") -> list[dict[str, str]]:
+    """Build the voice and theme synthesis prompt."""
     return render_prompt("synthesizer", title=title, genre=genre, chapter_num=chapter_num,
                          perspective_prompt=perspective_prompt or "", chapter_text=chapter_text)
 
 
 def build_quality_controller_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the engagement, pacing, and tension quality check prompt."""
     return render_prompt("quality_controller", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_num: int, title: str, scene_audit_directives: str = "") -> list[dict[str, str]]:
+    """Build the developmental editing prompt with scene audit directives."""
     return render_prompt(
         "editing_agent", title=title, chapter_num=chapter_num,
         chapter_summary=chapter_summary,
@@ -183,6 +195,7 @@ def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_
 def build_narrative_momentum_distinctiveness_prompt(
     chapter_text: str, previous_summaries: str, chapter_summary: str, chapter_num: int, title: str, total_chapters: int,
 ) -> list[dict[str, str]]:
+    """Build the cross-chapter redundancy and escalation prompt."""
     from novelforge.chapter_position import ChapterPosition
     escalation_target = ChapterPosition(chapter_num, total_chapters).get_escalation_target()
     return render_prompt(
@@ -197,6 +210,7 @@ def build_human_oddities_prompt(
     chapter_text: str, chapter_num: int, title: str,
     total_chapters: int, characters_text: str,
 ) -> list[dict[str, str]]:
+    """Build the human oddities injection prompt for non-plot-serving moments."""
     return render_prompt(
         "human_oddities",
         title=title, chapter_num=chapter_num,
@@ -208,6 +222,7 @@ def build_human_oddities_prompt(
 
 def build_operational_distinctiveness_prompt(chapter_text: str, previous_summaries: str, chapter_summary: str,
                                               chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the operational distinctiveness prompt for strategy variation."""
     return render_prompt(
         "operational_distinctiveness", title=title, chapter_num=chapter_num,
         chapter_summary=chapter_summary, previous_summaries=previous_summaries or "",
@@ -216,10 +231,12 @@ def build_operational_distinctiveness_prompt(chapter_text: str, previous_summari
 
 
 def build_polish_agent_prompt(chapter_text: str, chapter_num: int, title: str, genre: str) -> list[dict[str, str]]:
+    """Build the grammar, style, and vivid language polish prompt."""
     return render_prompt("polish_agent", title=title, genre=genre, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the anti-LLM pattern removal prompt with forbidden word lists."""
     return render_prompt(
         "anti_llm_agent", title=title, chapter_num=chapter_num,
         chapter_text=chapter_text, forbidden_words=", ".join(_FORBIDDEN_WORDS),
@@ -259,14 +276,17 @@ def build_vocabulary_fix_prompt(
 
 
 def build_metaphor_reduction_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the metaphor density reduction prompt."""
     return render_prompt("metaphor_reduction", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_copy_edit_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the copy-edit prompt for prose repetitions and dash cleanup."""
     return render_prompt("copy_edit", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_chapter_summary_prompt(chapter_text: str, chapter_num: int) -> list[dict[str, str]]:
+    """Build the 100-200 word continuity summary prompt."""
     return render_prompt("chapter_summary", chapter_num=chapter_num, chapter_text=chapter_text)
 
 
@@ -279,6 +299,7 @@ def build_continuity_gatekeeper_prompt(
     chapter_timeline_context: str = "", chapter_fate_context: str = "",
     chapter_arc_context: str = "", character_state_log: str = "",
 ) -> list[dict[str, str]]:
+    """Build the pre-chapter continuity validation prompt."""
     return render_prompt(
         "continuity_gatekeeper",
         chapter_num=chapter_num, chapter_title=chapter_title,
@@ -295,6 +316,7 @@ def build_chapter_rhythm_classifier_prompt(
     chapter_num: int, chapter_title: str, chapter_summary: str, previous_summaries: str, title: str,
     chapter_architecture_context: str = "",
 ) -> list[dict[str, str]]:
+    """Build the chapter rhythm classification prompt."""
     return render_prompt(
         "chapter_rhythm_classifier", title=title, chapter_num=chapter_num,
         chapter_title=chapter_title, chapter_summary=chapter_summary,
@@ -308,6 +330,7 @@ def build_chapter_rhythm_classifier_prompt(
 # ---------------------------------------------------------------------------
 
 def build_per_chapter_compression_check_prompt(chapter_num: int, chapter_summary: str, previous_summaries: str, title: str) -> list[dict[str, str]]:
+    """Build the post-chapter compression check prompt."""
     return render_prompt(
         "per_chapter_compression_check", title=title, chapter_num=chapter_num,
         chapter_summary=chapter_summary, previous_summaries=previous_summaries,
@@ -315,6 +338,7 @@ def build_per_chapter_compression_check_prompt(chapter_num: int, chapter_summary
 
 
 def build_character_state_updater_prompt(chapter_text: str, chapter_summary: str, characters_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the post-chapter character state tracking prompt."""
     return render_prompt(
         "character_state_updater", title=title, chapter_num=chapter_num,
         characters_text=characters_text, chapter_summary=chapter_summary,
@@ -334,6 +358,7 @@ def build_chapter_revision_prompt(
     chapter_theme_context: str = "", gatekeeper_brief: str = "",
     perspective_prompt: str = "",
 ) -> list[dict[str, str]]:
+    """Build the chapter revision prompt with user instructions and planning context."""
     return render_prompt(
         "chapter_revision", title=title, chapter_num=chapter_num,
         chapter_outline_summary=chapter_outline_summary,
@@ -356,6 +381,7 @@ def build_chapter_revision_prompt(
 # ---------------------------------------------------------------------------
 
 def build_consistency_pass_prompt(title: str, all_summaries: list[str], special_instructions: str) -> list[dict[str, str]]:
+    """Build the post-manuscript consistency audit prompt."""
     summaries_text = "\n\n".join(
         f"Chapter {i+1}:\n{s}" for i, s in enumerate(all_summaries)
     )
@@ -365,6 +391,7 @@ def build_consistency_pass_prompt(title: str, all_summaries: list[str], special_
 
 def build_global_continuity_auditor_prompt(title: str, all_summaries: list[str], character_state_log: list[str],
                                             master_timeline: dict, character_fate_registry: dict) -> list[dict[str, str]]:
+    """Build the global continuity audit prompt with timeline and fate registry."""
     summaries_text = "\n\n".join(f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries))
 
     state_log_text = (
@@ -402,6 +429,7 @@ def build_global_continuity_auditor_prompt(title: str, all_summaries: list[str],
 
 
 def build_narrative_compression_editor_prompt(title: str, all_summaries: list[str], continuity_audit: dict | None = None) -> list[dict[str, str]]:
+    """Build the narrative compression analysis prompt."""
     summaries_text = "\n\n".join(f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries))
 
     audit_section = ""
@@ -424,6 +452,7 @@ def build_narrative_compression_editor_prompt(title: str, all_summaries: list[st
 
 def build_character_resolution_validator_prompt(title: str, all_summaries: list[str], character_arc_plan: dict,
                                                  character_fate_registry: dict, character_state_log: list[str]) -> list[dict[str, str]]:
+    """Build the character resolution validation prompt with arc and fate data."""
     summaries_text = "\n\n".join(f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries))
 
     arc_lines: list[str] = []
@@ -457,6 +486,7 @@ def build_character_resolution_validator_prompt(title: str, all_summaries: list[
 
 
 def build_thematic_payoff_analyzer_prompt(title: str, all_summaries: list[str], theme_reinforcement: dict, total_chapters: int) -> list[dict[str, str]]:
+    """Build the thematic payoff analysis prompt."""
     summaries_text = "\n\n".join(f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries))
 
     theme_lines: list[str] = []
@@ -484,6 +514,7 @@ def build_thematic_payoff_analyzer_prompt(title: str, all_summaries: list[str], 
 
 
 def build_climax_integrity_checker_prompt(title: str, all_summaries: list[str], character_arc_plan: dict, total_chapters: int) -> list[dict[str, str]]:
+    """Build the climax integrity check prompt with protagonist arc data."""
     summaries_text = "\n\n".join(f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries))
 
     arc_lines: list[str] = []
@@ -516,6 +547,7 @@ def build_climax_integrity_checker_prompt(title: str, all_summaries: list[str], 
 
 def build_loose_thread_resolver_prompt(title: str, all_summaries: list[str], character_state_log: list[str],
                                         continuity_audit: dict | None = None, resolution_report: dict | None = None) -> list[dict[str, str]]:
+    """Build the loose thread resolution prompt."""
     summaries_block = "\n".join(
         f"Chapter {i + 1}: {s}" for i, s in enumerate(all_summaries)
     ) or "No chapter summaries available."
@@ -542,6 +574,7 @@ def build_loose_thread_resolver_prompt(title: str, all_summaries: list[str], cha
 
 
 def build_reader_immersion_tester_prompt(title: str, all_summaries: list[str], character_arc_plan: dict | None = None, thematic_report: dict | None = None) -> list[dict[str, str]]:
+    """Build the reader immersion and engagement testing prompt."""
     summaries_block = "\n".join(
         f"Chapter {i + 1}: {s}" for i, s in enumerate(all_summaries)
     ) or "No chapter summaries available."
@@ -569,6 +602,7 @@ def build_reader_immersion_tester_prompt(title: str, all_summaries: list[str], c
 
 
 def build_pacing_tension_heatmap_prompt(title: str, all_summaries: list[str], total_chapters: int) -> list[dict[str, str]]:
+    """Build the per-chapter pacing and tension heatmap prompt."""
     summaries_text = "\n\n".join(f"Chapter {i + 1}:\n{s}" for i, s in enumerate(all_summaries))
     return render_prompt("pacing_tension_heatmap", title=title, total_chapters=total_chapters,
                          summaries_text=summaries_text)
@@ -577,6 +611,7 @@ def build_pacing_tension_heatmap_prompt(title: str, all_summaries: list[str], to
 def build_character_relationship_prompt(
     title: str, genre: str, character_list: list[dict], all_summaries: list[str],
 ) -> list[dict[str, str]]:
+    """Build the character relationship mapping prompt."""
     characters_text = "\n".join(
         f"- {c.get('name', '?')}: role={c.get('role', '')}; background={c.get('background', '')}; arc={c.get('arc', '')}"
         for c in character_list
@@ -591,6 +626,7 @@ def build_character_relationship_prompt(
 
 
 def build_illustration_prompt_generator_prompt(title: str, genre: str, premise: str, character_list: list[dict], all_summaries: list[str]) -> list[dict[str, str]]:
+    """Build the illustration prompt generation prompt for cover and scene art."""
     characters_text = "\n".join(
         f"- {c.get('name', '?')}: role={c.get('role', '')}; background={c.get('background', '')}"
         for c in character_list

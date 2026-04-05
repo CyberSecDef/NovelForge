@@ -14,6 +14,7 @@ class StoryArchitectureAgent(BaseAgent):
     prompt_action = "Planning Story Architecture"
 
     def build_prompt(self, **ctx) -> list[dict]:
+        """Build the story architecture planning prompt from outline and genre context."""
         title = ctx["title"]
         premise = ctx["premise"]
         genre = ctx["genre"]
@@ -38,6 +39,7 @@ class StoryArchitectureAgent(BaseAgent):
         )
 
     def build_fallback(self, **ctx) -> dict:
+        """Build a deterministic fallback using chapter list and total chapters."""
         chapter_list = ctx.get("chapter_list", [])
         total_chapters = ctx.get("total_chapters", max(1, len(chapter_list)))
         return self._build_fallback_impl(chapter_list, total_chapters)
@@ -127,6 +129,7 @@ class StoryArchitectureAgent(BaseAgent):
         _resolution = ChapterPosition.resolution_chapter(total_chapters)
 
         def _act_for_chapter(chapter_num: int) -> dict[str, object]:
+            """Return the act dict whose chapter range contains *chapter_num*."""
             for act in acts:
                 if int(act["chapter_start"]) <= chapter_num <= int(act["chapter_end"]):  # type: ignore[call-overload]
                     return act
@@ -207,6 +210,7 @@ class StoryArchitectureAgent(BaseAgent):
         }
 
     def normalise(self, data: dict, **ctx) -> dict:
+        """Validate and merge LLM architecture output with deterministic fallback."""
         chapter_list = ctx["chapter_list"]
         total_chapters = ctx.get("total_chapters", max(1, len(chapter_list)))
         fallback = self._build_fallback_impl(chapter_list, total_chapters)
@@ -284,12 +288,14 @@ class StoryArchitectureAgent(BaseAgent):
         }
 
     def plan(self, **ctx) -> dict:
+        """Inject total_chapters into context, then delegate to BaseAgent.plan()."""
         chapter_list = ctx.get("chapter_list", [])
         total_chapters = max(1, len(chapter_list))
         ctx["total_chapters"] = total_chapters
         return super().plan(**ctx)
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
+        """Format the architecture plan as a prompt snippet for a specific chapter."""
         if not isinstance(plan, dict):
             return ""
 
@@ -339,12 +345,15 @@ _story_architecture_agent = StoryArchitectureAgent()
 
 
 def plan_story_architecture(**kwargs: object) -> dict:
+    """Delegate to the singleton StoryArchitectureAgent instance."""
     return _story_architecture_agent.plan(**kwargs)
 
 
 def normalise_story_architecture(architecture_data: dict, chapter_list: list[dict], total_chapters: int) -> dict:
+    """Delegate normalisation to the singleton StoryArchitectureAgent."""
     return _story_architecture_agent.normalise(architecture_data, chapter_list=chapter_list, total_chapters=total_chapters)
 
 
 def get_chapter_architecture_context(story_architecture: dict, chapter_num: int) -> str:
+    """Delegate context formatting to the singleton StoryArchitectureAgent."""
     return _story_architecture_agent.get_chapter_context(story_architecture, chapter_num)
