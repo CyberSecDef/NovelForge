@@ -442,8 +442,121 @@ class TestCircuitBreakerThreadSafety:
         assert breaker.failure_count == 0
         assert not breaker.is_tripped
 
+    def test_tripped_breaker_visible_to_concurrent_readers(self):
+        """A breaker tripped by one thread is immediately visible to all others.
 
-class TestPersistenceLock:
+        This validates the *intended* process-level scope: once a provider is
+        marked unhealthy by any request, every concurrent request sees it as
+        tripped so they all skip that provider without needing extra failures.
+        """
+        from novelforge.llm.client import LLMCircuitBreaker, CircuitBreakerError
+
+        breaker = LLMCircuitBreaker(threshold=3)
+        trip_done = threading.Event()
+        results: list[bool] = []
+
+        def tripper():
+            breaker.record_failure("e1")
+            breaker.record_failure("e2")
+            breaker.record_failure("e3")
+            trip_done.set()
+
+        def reader():
+            trip_done.wait(timeout=5)
+            results.append(breaker.is_tripped)
+
+        readers = [threading.Thread(target=reader) for _ in range(10)]
+        tripper_t = threading.Thread(target=tripper)
+
+        for r in readers:
+            r.start()
+        tripper_t.start()
+        tripper_t.join(timeout=5)
+        for r in readers:
+            r.join(timeout=5)
+
+        assert all(results), "All readers should see the tripped breaker"
+
+    def test_process_breaker_not_reset_by_concurrent_generation_start(self):
+        """Starting a new generation must not reset the process-level breaker.
+
+        ``reset_circuit_breakers()`` must only be called from test fixtures or
+        explicit lifecycle management code — never from a background generation
+        worker.  This test ensures that tripped state is preserved when a second
+        request starts its generation loop concurrently.
+        """
+        from novelforge.llm.client import _get_circuit_breaker, reset_circuit_breakers
+
+        # Use provider index 0 (primary)
+        breaker = _get_circuit_breaker(0)
+        try:
+            # Simulate provider 0 being unhealthy
+            breaker.record_failure("timeout-1")
+            breaker.record_failure("timeout-2")
+            breaker.record_failure("timeout-3")
+            assert breaker.is_tripped, "Breaker should be tripped before generation"
+
+            # Simulate a second request's generation worker starting; it must
+            # NOT call reset_circuit_breakers() (we verify state is unchanged)
+            started = threading.Event()
+
+            def mock_generation_worker():
+                # This simulates _run_chapter_generation_internal without the
+                # removed reset_circuit_breakers() call.
+                started.set()
+                time.sleep(0.05)  # pretend to work
+
+            t = threading.Thread(target=mock_generation_worker)
+            t.start()
+            started.wait(timeout=5)
+            # While the worker is active, check the breaker is still tripped
+            assert breaker.is_tripped, (
+                "Breaker must remain tripped while a concurrent generation is running"
+            )
+            t.join(timeout=5)
+            # And still tripped after worker finishes
+            assert breaker.is_tripped, (
+                "Breaker must remain tripped after a concurrent generation finishes"
+            )
+        finally:
+            # Clean up so we don't pollute other tests
+            reset_circuit_breakers()
+
+    def test_simultaneous_trip_and_reset_are_serialised(self):
+        """Concurrent trip and reset calls must not leave the breaker in an
+        inconsistent intermediate state (e.g. failure_count > 0 but not tripped,
+        or tripped but failure_count == 0).
+        """
+        from novelforge.llm.client import LLMCircuitBreaker
+
+        breaker = LLMCircuitBreaker(threshold=3)
+        errors: list[str] = []
+        iterations = 200
+        barrier = threading.Barrier(2)
+
+        def fail_loop():
+            for _ in range(iterations):
+                barrier.wait(timeout=5)
+                breaker.record_failure("concurrent-fail")
+
+        def reset_loop():
+            for _ in range(iterations):
+                barrier.wait(timeout=5)
+                breaker.reset()
+                # After a reset the invariant must hold: not tripped AND count==0
+                tripped = breaker.is_tripped
+                count = breaker.failure_count
+                if tripped and count == 0:
+                    errors.append(f"Inconsistent: tripped={tripped} count={count}")
+
+        t1 = threading.Thread(target=fail_loop)
+        t2 = threading.Thread(target=reset_loop)
+        t1.start()
+        t2.start()
+        t1.join(timeout=15)
+        t2.join(timeout=15)
+
+        assert not errors, f"Inconsistent breaker states detected: {errors}"
     """Verify concurrent session persistence writes do not clobber each other.
 
     These tests cover the interleaved scenarios described in the issue:

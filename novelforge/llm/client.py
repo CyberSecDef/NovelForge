@@ -165,13 +165,33 @@ def _is_content_rejection(status_code: int | None, response_body: str | None) ->
     return any(pattern in body_lower for pattern in _CONTENT_REJECTION_PATTERNS)
 
 
-# Per-provider circuit breakers (keyed by provider index)
+# Per-provider circuit breakers (keyed by provider index).
+#
+# Intended scope: **process-level, per-provider**.
+# One breaker exists per configured LLM provider and is shared across all
+# concurrent requests.  This means that when a provider becomes unhealthy
+# (enough consecutive failures), *all* requests stop trying that provider
+# until it is healthy again — which is the correct behaviour for a
+# process-level reliability guard.
+#
+# What must NOT happen is ad-hoc resets from request handlers or generation
+# workers: resetting a breaker globally while another request is relying on
+# the tripped state can cause repeated failures and unpredictable behaviour.
+# The only legitimate callers of ``reset_circuit_breakers()`` are:
+#   • the test-suite fixture in ``tests/conftest.py``, which resets state
+#     between isolated test cases;
+#   • explicit operator tooling / admin endpoints (if added in future).
 _llm_circuit_breakers: dict[int, LLMCircuitBreaker] = {}
 _llm_cb_lock = threading.Lock()
 
 
 def _get_circuit_breaker(provider_idx: int) -> LLMCircuitBreaker:
-    """Get or create the circuit breaker for a given provider index."""
+    """Return the process-level circuit breaker for *provider_idx*.
+
+    Breakers are created lazily and cached for the lifetime of the process.
+    The returned object is shared across all concurrent requests; callers must
+    not call ``reset()`` on it outside of test-suite teardown.
+    """
     if provider_idx not in _llm_circuit_breakers:
         with _llm_cb_lock:
             if provider_idx not in _llm_circuit_breakers:
@@ -537,7 +557,20 @@ def get_llm_usage() -> dict:
 
 
 def reset_circuit_breakers() -> None:
-    """Reset all per-provider LLM circuit breakers."""
+    """Reset all per-provider LLM circuit breakers.
+
+    **Intended for test-suite teardown and explicit lifecycle management only.**
+
+    This function resets the process-level, per-provider breaker state for
+    *every* provider at once.  Calling it from a request handler or a
+    background generation worker is unsafe: it clears state that other
+    concurrent requests may be relying on, causing unpredictable cross-request
+    interference.
+
+    Legitimate callers:
+    • ``tests/conftest.py`` fixture — isolates state between test cases.
+    • An explicit admin/operator endpoint (if added in future).
+    """
     for cb in _llm_circuit_breakers.values():
         cb.reset()
 

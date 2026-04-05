@@ -20,7 +20,6 @@ from novelforge.progress import (
 from novelforge.llm.client import (
     call_llm, parse_llm_json, friendly_llm_error,
     reset_llm_usage, get_llm_usage,
-    reset_circuit_breakers,
     CircuitBreakerError, ChapterTimeoutError, ContentRejectionError,
     AllProvidersExhaustedError, PER_CHAPTER_TIMEOUT,
 )
@@ -240,8 +239,7 @@ def _run_chapter_generation_internal(
     from novelforge.agents.chapter import build_perspective_prompt
     perspective_prompt = build_perspective_prompt(snap.get("narrative_perspective", "third_person"))
 
-    # Reset circuit breakers for all providers at the start of generation
-    reset_circuit_breakers()
+    # Reset thread-local LLM token usage for this generation run
     reset_llm_usage()
     set_correlation_token(token)
 
