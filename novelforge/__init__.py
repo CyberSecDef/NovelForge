@@ -94,6 +94,11 @@ def create_app(*, testing: bool = False) -> Flask:
     # sessions or attaching any logging file handlers.
     config.ensure_app_dirs()
 
+    # Set up the dedicated LLM file logger now that the log directory exists.
+    # setup_llm_logger() is idempotent: repeated create_app() calls are safe.
+    from novelforge.llm.client import setup_llm_logger
+    setup_llm_logger()
+
     # Configure filesystem-based sessions using CacheLib directly
     # (avoids deprecated SESSION_FILE_DIR / FileSystemSessionInterface)
     from cachelib import FileSystemCache

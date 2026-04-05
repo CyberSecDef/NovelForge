@@ -15,17 +15,43 @@ import novelforge.config as config
 
 logger = logging.getLogger(__name__)
 
-# Set up dedicated LLM logger that writes JSON objects to logs/llm.log
-# Ensure the log directory exists before creating the FileHandler so that this
-# module can be safely imported before create_app() runs (e.g. in tests).
-from pathlib import Path as _Path
-_Path(config.LOGS_DIR).mkdir(parents=True, exist_ok=True)
+# Dedicated LLM logger — handler is attached lazily by setup_llm_logger(),
+# which is called from create_app().  Keeping this at module level means
+# llm_logger.info() calls work (silently, with no output) even before the
+# handler is attached, which is the correct behaviour during import and in
+# unit tests that never call create_app().
 llm_logger = logging.getLogger("llm_requests")
-llm_logger.setLevel(logging.INFO)
-llm_handler = logging.FileHandler(os.path.join(config.LOGS_DIR, "llm.log"))
-llm_handler.setFormatter(logging.Formatter("%(message)s"))
-llm_logger.addHandler(llm_handler)
 llm_logger.propagate = False
+
+
+def setup_llm_logger() -> None:
+    """Attach a FileHandler to the ``llm_requests`` logger, idempotently.
+
+    This function is safe to call multiple times (e.g. across repeated
+    ``create_app()`` calls in tests): it checks for an existing
+    ``FileHandler`` targeting ``logs/llm.log`` before adding a new one, so
+    the handler is attached at most once per process.
+
+    The log directory is created here rather than at import time so that
+    filesystem side-effects are deferred until the app is actually
+    initialised.
+    """
+    import os as _os
+    from pathlib import Path as _Path
+
+    log_path = _os.path.join(config.LOGS_DIR, "llm.log")
+    _Path(config.LOGS_DIR).mkdir(parents=True, exist_ok=True)
+
+    # Idempotency guard: skip if a FileHandler for this exact path already exists.
+    norm_log_path = _os.path.normcase(_os.path.abspath(log_path))
+    for handler in llm_logger.handlers:
+        if isinstance(handler, logging.FileHandler) and _os.path.normcase(handler.baseFilename) == norm_log_path:
+            return
+
+    llm_logger.setLevel(logging.INFO)
+    _handler = logging.FileHandler(log_path)
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    llm_logger.addHandler(_handler)
 
 # Thread-local LLM token usage accumulator
 _llm_usage = threading.local()
