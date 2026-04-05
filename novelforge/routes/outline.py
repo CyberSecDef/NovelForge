@@ -37,7 +37,7 @@ def _input_hash(*args: object) -> str:
 def _apply_rename(text: str, old_name: str, new_name: str) -> str:
     """Replace *old_name* with *new_name* using whole-word boundary matching.
 
-    Uses ``\\b`` anchors so that a short name such as ``"Al"`` is never
+    Uses ``\b`` anchors so that a short name such as ``"Al"`` is never
     substituted inside ``"Alan"`` or any other word that merely contains the
     name as a substring.  Possessive forms (e.g. ``"Alice's"``) are handled
     correctly: the apostrophe-s suffix is captured and re-emitted after the

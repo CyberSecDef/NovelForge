@@ -359,7 +359,7 @@ class TestApproveOutlineRenamePropagationEdgeCases:
         assert "alcohol" in ch["summary"]
 
     def test_possessive_form_renamed_correctly(self, client, mock_llm):
-        """Renaming 'Alice' to 'Bob' must turn \"Alice's\" into \"Bob's\"."""
+        """Renaming 'Alice' to 'Bob' must turn "Alice's" into "Bob's"."""
         _seed_session(
             client,
             overrides={
