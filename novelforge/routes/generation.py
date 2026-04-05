@@ -49,6 +49,7 @@ from novelforge.agents.chapter import (
     run_continuity_gatekeeper, run_chapter_rhythm_classifier,
     run_character_state_updater, run_per_chapter_compression_check,
     _run_all_chapter_agents, ChapterContext,
+    PASS_FAILURE_KEY,
 )
 from novelforge.session.persistence import (
     get_session_id, save_session_state, persist_completed_chapters,
@@ -228,6 +229,7 @@ def _run_chapter_generation_internal(
     characters_text = _format_characters(character_list)
     character_state_log = list(character_state_log) if character_state_log else []
     compression_guidance: str = ""
+    degraded_passes: list[dict] = []
 
     # Format voice seed for prompt injection
     from novelforge.voice import format_voice_prompt
@@ -290,6 +292,7 @@ def _run_chapter_generation_internal(
                 chapter_fate_context=chapter_fate_context,
                 chapter_arc_context=chapter_arc_context,
                 character_state_log="\n\n".join(character_state_log),
+                degraded_passes=degraded_passes,
             )
 
             _set_step(f"Chapter {chapter_num}: classifying rhythm")
@@ -298,6 +301,7 @@ def _run_chapter_generation_internal(
                 chapter_summary=chapter_outline_summary,
                 previous_summaries=previous_summaries,
                 title=title, chapter_architecture_context=chapter_architecture_context,
+                degraded_passes=degraded_passes,
             )
             chapter_rhythm_shape = str(rhythm_result.get("recommended_shape_for_this_chapter", "")).strip()
             chapter_rhythm_reason = str(rhythm_result.get("recommendation_reason", "")).strip()
@@ -363,6 +367,7 @@ def _run_chapter_generation_internal(
                 characters_text=characters_text,
                 previous_summaries=previous_summaries,
                 ctx=ch_ctx, step_callback=_set_step, deadline=chapter_deadline,
+                degraded_passes=degraded_passes,
             )
             summaries.append(summary)
 
@@ -370,6 +375,7 @@ def _run_chapter_generation_internal(
             state_update = run_character_state_updater(
                 chapter_text=text, chapter_summary=summary,
                 characters_text=characters_text, chapter_num=chapter_num, title=title,
+                degraded_passes=degraded_passes,
             )
             if state_update.strip():
                 character_state_log.append(f"--- After Chapter {chapter_num} ---\n{state_update}")
@@ -378,6 +384,7 @@ def _run_chapter_generation_internal(
             compression_guidance = run_per_chapter_compression_check(
                 chapter_num=chapter_num, chapter_summary=summary,
                 previous_summaries=previous_summaries, title=title,
+                degraded_passes=degraded_passes,
             )
 
             chapter_elapsed = round(time.monotonic() - chapter_start_time, 1)
@@ -402,6 +409,7 @@ def _run_chapter_generation_internal(
                 "step": f"Chapter {chapter_num}: complete",
                 "chapters_done": list(chapters_done),
                 "character_state_log": list(character_state_log),
+                "degraded_passes": list(degraded_passes),
             })
 
             session_id = snap.get("session_id")

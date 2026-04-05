@@ -18,6 +18,56 @@ logger = logging.getLogger(__name__)
 # Maximum number of content-sanitization retries per LLM call
 _CONTENT_RETRY_LIMIT = 2
 
+# ---------------------------------------------------------------------------
+# Shared pass-failure helpers
+# ---------------------------------------------------------------------------
+
+#: Key injected into dict-returning runner helpers when the pass fails.
+#: Value is a human-readable `"ExcType: message"` string.
+PASS_FAILURE_KEY = "_pass_failed"
+
+#: Value used when a pass is classified as optional (graceful degradation).
+PASS_OPTIONAL = "optional"
+
+#: Value used when a pass is classified as required (pipeline-critical).
+PASS_REQUIRED = "required"
+
+
+def _log_pass_failure(
+    exc: Exception,
+    *,
+    pass_name: str,
+    chapter_num: int | None = None,
+    chapter_title: str | None = None,
+    optional: bool = True,
+) -> str:
+    """Log a structured warning for a failed chapter-agent pass and return a
+    failure summary string suitable for injecting into fallback return values.
+
+    Parameters
+    ----------
+    exc:           The exception that caused the failure.
+    pass_name:     Human-readable name of the agent pass (e.g. "continuity gatekeeper").
+    chapter_num:   Chapter number being processed, when available.
+    chapter_title: Chapter or novel title for context, when available.
+    optional:      Whether the pass is optional (True) or required (False).
+    """
+    pass_kind = PASS_OPTIONAL if optional else PASS_REQUIRED
+    chapter_ctx = ""
+    if chapter_num is not None:
+        chapter_ctx = f" chapter={chapter_num}"
+        if chapter_title:
+            chapter_ctx += f" title={chapter_title!r}"
+    logger.warning(
+        "Chapter-agent pass FAILED — pass=%r%s kind=%s error=%s: %s",
+        pass_name,
+        chapter_ctx,
+        pass_kind,
+        type(exc).__name__,
+        exc,
+    )
+    return f"{type(exc).__name__}: {exc}"
+
 
 def _sanitize_for_content_policy(
     text: str, chapter_num: int, title: str, rejection_reason: str,
@@ -399,7 +449,8 @@ def build_scene_variety_compression_auditor_prompt(chapter_text: str, chapter_su
                          chapter_summary=chapter_summary, chapter_text=chapter_text)
 
 
-def run_scene_variety_compression_auditor(chapter_text: str, chapter_summary: str, chapter_num: int, title: str) -> str:
+def run_scene_variety_compression_auditor(chapter_text: str, chapter_summary: str, chapter_num: int, title: str,
+                                           degraded_passes: list[dict] | None = None) -> str:
     try:
         return call_llm(
             build_scene_variety_compression_auditor_prompt(
@@ -408,7 +459,17 @@ def run_scene_variety_compression_auditor(chapter_text: str, chapter_summary: st
             ),
             action=f"Chapter {chapter_num}: scene variety & compression audit",
         )
-    except Exception:
+    except Exception as exc:
+        failure_summary = _log_pass_failure(
+            exc, pass_name="scene variety & compression auditor",
+            chapter_num=chapter_num, chapter_title=title, optional=True,
+        )
+        if degraded_passes is not None:
+            degraded_passes.append({
+                "pass_name": "scene variety & compression auditor",
+                "chapter_num": chapter_num,
+                "failure_summary": failure_summary,
+            })
         return ""
 
 
@@ -552,7 +613,8 @@ def build_per_chapter_compression_check_prompt(chapter_num: int, chapter_summary
     )
 
 
-def run_per_chapter_compression_check(chapter_num: int, chapter_summary: str, previous_summaries: str, title: str) -> str:
+def run_per_chapter_compression_check(chapter_num: int, chapter_summary: str, previous_summaries: str, title: str,
+                                       degraded_passes: list[dict] | None = None) -> str:
     if chapter_num <= 1 or not previous_summaries.strip():
         return ""
     try:
@@ -563,7 +625,17 @@ def run_per_chapter_compression_check(chapter_num: int, chapter_summary: str, pr
             ),
             action=f"Running Per-Chapter Compression Check for Chapter {chapter_num}"
         )
-    except Exception:
+    except Exception as exc:
+        failure_summary = _log_pass_failure(
+            exc, pass_name="per-chapter compression check",
+            chapter_num=chapter_num, chapter_title=title, optional=True,
+        )
+        if degraded_passes is not None:
+            degraded_passes.append({
+                "pass_name": "per-chapter compression check",
+                "chapter_num": chapter_num,
+                "failure_summary": failure_summary,
+            })
         return ""
 
 
@@ -575,7 +647,8 @@ def build_character_state_updater_prompt(chapter_text: str, chapter_summary: str
     )
 
 
-def run_character_state_updater(chapter_text: str, chapter_summary: str, characters_text: str, chapter_num: int, title: str) -> str:
+def run_character_state_updater(chapter_text: str, chapter_summary: str, characters_text: str, chapter_num: int, title: str,
+                                 degraded_passes: list[dict] | None = None) -> str:
     try:
         return call_llm(
             build_character_state_updater_prompt(
@@ -584,7 +657,17 @@ def run_character_state_updater(chapter_text: str, chapter_summary: str, charact
             ),
             action=f"Running Character State Updater for Chapter {chapter_num}"
         )
-    except Exception:
+    except Exception as exc:
+        failure_summary = _log_pass_failure(
+            exc, pass_name="character state updater",
+            chapter_num=chapter_num, chapter_title=title, optional=True,
+        )
+        if degraded_passes is not None:
+            degraded_passes.append({
+                "pass_name": "character state updater",
+                "chapter_num": chapter_num,
+                "failure_summary": failure_summary,
+            })
         return ""
 
 
@@ -613,6 +696,7 @@ def run_continuity_gatekeeper(
     chapter_num: int, chapter_title: str, chapter_summary: str, previous_summaries: str,
     chapter_timeline_context: str = "", chapter_fate_context: str = "",
     chapter_arc_context: str = "", character_state_log: str = "",
+    degraded_passes: list[dict] | None = None,
 ) -> str:
     try:
         return call_llm(
@@ -626,7 +710,17 @@ def run_continuity_gatekeeper(
             ),
             action=f"Running Continuity Gatekeeper for Chapter {chapter_num}",
         )
-    except Exception:
+    except Exception as exc:
+        failure_summary = _log_pass_failure(
+            exc, pass_name="continuity gatekeeper",
+            chapter_num=chapter_num, chapter_title=chapter_title, optional=True,
+        )
+        if degraded_passes is not None:
+            degraded_passes.append({
+                "pass_name": "continuity gatekeeper",
+                "chapter_num": chapter_num,
+                "failure_summary": failure_summary,
+            })
         return ""
 
 
@@ -645,6 +739,7 @@ def build_chapter_rhythm_classifier_prompt(
 def run_chapter_rhythm_classifier(
     chapter_num: int, chapter_title: str, chapter_summary: str, previous_summaries: str, title: str,
     chapter_architecture_context: str = "",
+    degraded_passes: list[dict] | None = None,
 ) -> dict:
     try:
         raw = call_llm(
@@ -657,8 +752,18 @@ def run_chapter_rhythm_classifier(
             json_mode=True,
         )
         return parse_llm_json(raw)
-    except Exception:
-        return {}
+    except Exception as exc:
+        failure_summary = _log_pass_failure(
+            exc, pass_name="chapter rhythm classifier",
+            chapter_num=chapter_num, chapter_title=title, optional=True,
+        )
+        if degraded_passes is not None:
+            degraded_passes.append({
+                "pass_name": "chapter rhythm classifier",
+                "chapter_num": chapter_num,
+                "failure_summary": failure_summary,
+            })
+        return {PASS_FAILURE_KEY: failure_summary}
 
 
 # ---------------------------------------------------------------------------
@@ -953,6 +1058,7 @@ def _run_all_chapter_agents(
     ctx: ChapterContext | None = None,
     step_callback: Callable[[str], None] | None = None,
     deadline: float = 0,
+    degraded_passes: list[dict] | None = None,
 ) -> tuple[str, str]:
     """
     Run all chapter refinement agents (post-draft) and return:
@@ -963,6 +1069,9 @@ def _run_all_chapter_agents(
     If *deadline* is non-zero (a ``time.monotonic()`` timestamp), each step
     checks the clock before calling the LLM and raises ``ChapterTimeoutError``
     if the deadline has passed.
+
+    Optional pass failures are logged and, when *degraded_passes* is provided,
+    appended to that list so the caller can surface them in progress metadata.
     """
     if ctx is None:
         ctx = ChapterContext()
@@ -993,6 +1102,7 @@ def _run_all_chapter_agents(
     scene_audit_directives = run_scene_variety_compression_auditor(
         chapter_text=text, chapter_summary=chapter_outline_summary,
         chapter_num=chapter_num, title=title,
+        degraded_passes=degraded_passes,
     )
 
     _check_deadline()
