@@ -20,7 +20,7 @@ Don’t use the names: Vale, Mercer, Hart, Voss, Quinn, Wren, Cross, Thorne
 
 - Show me a list of files in this folder
 
-- Read the file "repairing_the_stars.md" and add to the context of this thread.  This is a novel written in chapters and there are chapter delineations present throughout.
+- Read the file "<NOVEL_PATH_MD>" and add to the context of this thread.  This is a novel written in chapters and there are chapter delineations present throughout.
 
 - All the chapter Summary sections are notes for use by the editors and will not be making it into the final product.  There is no need to update them at any point as they will be removed from the final product.  do you understand?
 

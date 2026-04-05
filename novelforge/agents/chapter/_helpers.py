@@ -1,6 +1,7 @@
 """Shared constants, pass-failure helpers, content-policy retry, and vocabulary scanning."""
 
 import logging
+import re
 from collections.abc import Callable
 
 from novelforge.llm.client import call_llm, ContentRejectionError
@@ -201,6 +202,18 @@ _OVERUSED_PATTERNS = [
 ]
 
 
+def _compile_word_pattern(words: list[str]) -> re.Pattern[str]:
+    """Compile a regex that matches any of *words* at word boundaries."""
+    alternation = "|".join(re.escape(w) for w in words)
+    return re.compile(rf"\b(?:{alternation})\b", re.IGNORECASE)
+
+
+# Pre-compiled patterns for the vocabulary scanner (built once at import time)
+_FORBIDDEN_RE = _compile_word_pattern(_FORBIDDEN_WORDS)
+_SOFT_LIMITED_RE = _compile_word_pattern(_SOFT_LIMITED_WORDS)
+_OVERUSED_PATTERN_RE = _compile_word_pattern(_OVERUSED_PATTERNS)
+
+
 def _format_anti_repetition_rules() -> str:
     """Format the soft-limited words and overused patterns for prompt injection."""
     lines = []
@@ -219,27 +232,35 @@ _SOFT_LIMIT_PER_CHAPTER = 1    # soft-limited: at most once per chapter
 _PATTERN_THRESHOLD = 0          # overused patterns: never
 
 
+def _count_word_matches(pattern: re.Pattern[str], text: str) -> dict[str, int]:
+    """Return a ``{matched_word_lower: count}`` dict for all hits of *pattern* in *text*."""
+    counts: dict[str, int] = {}
+    for m in pattern.finditer(text):
+        key = m.group().lower()
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def scan_vocabulary_overuse(chapter_text: str) -> list[str]:
     """
     Scan a chapter for overused vocabulary from the watchlists.
 
     Returns a list of human-readable warnings for each violation found.
-    Pure Python — no LLM call. Fast enough to run after every chapter.
+    Pure Python — no LLM call.  Uses pre-compiled word-boundary regexes
+    so that ``"audit"`` does **not** match inside ``"auditor"`` or
+    ``"ledger"`` inside ``"sledgehammer"``.
     """
-    text_lower = chapter_text.lower()
     warnings: list[str] = []
 
     # Check hard-banned words
-    for word in _FORBIDDEN_WORDS:
-        count = text_lower.count(word.lower())
+    for word, count in _count_word_matches(_FORBIDDEN_RE, chapter_text).items():
         if count > _HARD_BAN_THRESHOLD:
             warnings.append(
                 f'BANNED WORD "{word}" appears {count}x — must be removed entirely'
             )
 
     # Check soft-limited words
-    for word in _SOFT_LIMITED_WORDS:
-        count = text_lower.count(word.lower())
+    for word, count in _count_word_matches(_SOFT_LIMITED_RE, chapter_text).items():
         if count > _SOFT_LIMIT_PER_CHAPTER:
             warnings.append(
                 f'OVERUSED WORD "{word}" appears {count}x in this chapter '
@@ -248,8 +269,7 @@ def scan_vocabulary_overuse(chapter_text: str) -> list[str]:
             )
 
     # Check overused patterns
-    for pattern in _OVERUSED_PATTERNS:
-        count = text_lower.count(pattern.lower())
+    for pattern, count in _count_word_matches(_OVERUSED_PATTERN_RE, chapter_text).items():
         if count > _PATTERN_THRESHOLD:
             warnings.append(
                 f'OVERUSED PATTERN "{pattern}" appears {count}x — '
