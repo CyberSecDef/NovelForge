@@ -2,6 +2,8 @@
 
 import json
 import logging
+import os
+import tempfile
 import threading
 import time
 import uuid
@@ -57,6 +59,10 @@ from novelforge.session.persistence import (
 logger = logging.getLogger(__name__)
 
 generation_bp = Blueprint("generation", __name__)
+
+# Minimum seconds between time-based progress snapshot persists.
+# Chapter completion and terminal states always trigger an unconditional write.
+_PROGRESS_PERSIST_INTERVAL: float = 30.0
 
 # Derived report fields that are invalidated when a chapter is revised.
 # Any of these keys present in progress state may be stale after a revision and
@@ -258,22 +264,61 @@ def _run_chapter_generation_internal(
     reset_llm_usage()
     set_correlation_token(token)
 
+    _save_file = Path(config.NOVELS_DIR) / f"{token}_progress.json"
+    _last_persist: list[float] = [0.0]  # mutable ref for closure
+
+    def _persist_progress(*, force: bool = False) -> None:
+        """Persist a progress snapshot to disk atomically.
+
+        Uses a write-to-temp-then-rename pattern (identical to the session
+        persistence helper) so that a crash mid-write never leaves a partial
+        file.  Writes are skipped when the elapsed time since the last
+        successful write is less than *_PROGRESS_PERSIST_INTERVAL* seconds,
+        unless *force* is ``True``.  Chapter completion and terminal states
+        (success/error) always pass ``force=True``.
+        """
+        now = time.monotonic()
+        if not force and (now - _last_persist[0]) < _PROGRESS_PERSIST_INTERVAL:
+            return
+        try:
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(_save_file.parent),
+                prefix=f".{_save_file.stem}_",
+                suffix=".tmp",
+            )
+            try:
+                os.chmod(tmp_path, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump(
+                        {
+                            "token": token,
+                            "snapshot": snap,
+                            "chapters_done": chapters_done,
+                            "summaries": summaries,
+                            "character_state_log": character_state_log,
+                            "progress": progress_manager.get(token),
+                        },
+                        fh,
+                        indent=2,
+                    )
+                os.replace(tmp_path, str(_save_file))
+                _last_persist[0] = time.monotonic()
+            except BaseException:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+        except Exception as e:
+            logger.error(
+                "Failed to persist progress snapshot for token %s: %s",
+                token, e,
+                exc_info=True,
+            )
+
     def _set_step(step_label: str) -> None:
         progress_manager.update(token, {"step": step_label})
-        try:
-            save_file = Path(config.NOVELS_DIR) / f"{token}_progress.json"
-            progress_data = progress_manager.get(token)
-            save_data = {
-                "token": token,
-                "snapshot": snap,
-                "chapters_done": chapters_done,
-                "summaries": summaries,
-                "character_state_log": character_state_log,
-                "progress": progress_data,
-            }
-            save_file.write_text(json.dumps(save_data, indent=2), encoding="utf-8")
-        except Exception as e:
-            logger.error(f"Failed to auto-save progress: {e}")
+        _persist_progress()  # throttled; force=True callers use _persist_progress directly
 
     try:
         for idx, ch in enumerate(chapter_list[start_idx:], start=start_idx):
@@ -424,6 +469,7 @@ def _run_chapter_generation_internal(
                 "character_state_log": list(character_state_log),
                 "degraded_passes": list(degraded_passes),
             })
+            _persist_progress(force=True)  # always persist on chapter completion
 
             session_id = snap.get("session_id")
             if session_id:
@@ -633,6 +679,7 @@ def _run_chapter_generation_internal(
         progress_manager.update(token, {"character_relationship_map": relationship_map})
 
         _set_step("Complete")
+        _persist_progress(force=True)  # always persist on successful completion
 
         session_id = snap.get("session_id")
         if session_id:
@@ -659,6 +706,7 @@ def _run_chapter_generation_internal(
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: content policy rejection")
+        _persist_progress(force=True)  # always persist terminal error state
 
     except ChapterTimeoutError as exc:
         logger.error("Chapter timeout during generation for token %s: %s", token, exc)
@@ -671,6 +719,7 @@ def _run_chapter_generation_internal(
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
         _set_step(f"Error: {exc}")
+        _persist_progress(force=True)  # always persist terminal error state
 
     except CircuitBreakerError as exc:
         logger.error("Circuit breaker tripped during generation for token %s: %s", token, exc)
@@ -686,6 +735,7 @@ def _run_chapter_generation_internal(
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: LLM API circuit breaker tripped")
+        _persist_progress(force=True)  # always persist terminal error state
 
     except AllProvidersExhaustedError as exc:
         logger.error("All LLM providers exhausted for token %s: %s", token, exc)
@@ -702,6 +752,7 @@ def _run_chapter_generation_internal(
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
         _set_step("Error: all LLM providers exhausted")
+        _persist_progress(force=True)  # always persist terminal error state
 
     except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
         logger.error("Chapter generation failed for token %s: %s", token, exc)
@@ -713,6 +764,7 @@ def _run_chapter_generation_internal(
         if session_id and chapters_done:
             persist_completed_chapters(session_id, chapters_done, token)
         _set_step(f"Error: {str(exc)}")
+        _persist_progress(force=True)  # always persist terminal error state
 
     finally:
         clear_correlation_token()
