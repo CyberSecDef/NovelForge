@@ -545,7 +545,7 @@ delay = config.LLM_RETRY_DELAY * attempt * (0.5 + random.random())
 
 ---
 
-### 13. Overly Broad Exception Handling in Generation Worker — OPEN
+### 13. ~~Overly Broad Exception Handling in Generation Worker~~ DONE
 
 **Files:** `novelforge/routes/generation/chapters.py` line 503
 

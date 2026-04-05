@@ -501,11 +501,43 @@ def _run_chapter_generation_internal(
         _set_step("Error: all LLM providers exhausted")
         _persist_progress(force=True)
 
-    except (RuntimeError, requests.exceptions.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
-        logger.error("Chapter generation failed for token %s: %s", token, exc)
+    except (RuntimeError, requests.exceptions.RequestException) as exc:
+        logger.error("LLM communication error for token %s: %s", token, exc)
         progress_manager.update(token, {
             "status": "error",
             "error": friendly_llm_error(exc),
+            "error_code": "llm_error",
+        })
+        session_id = snap.get("session_id")
+        if session_id and chapters_done:
+            persist_completed_chapters(session_id, chapters_done, token)
+        _set_step(f"Error: {str(exc)}")
+        _persist_progress(force=True)
+
+    except json.JSONDecodeError as exc:
+        logger.error("LLM returned unparseable response for token %s: %s", token, exc)
+        progress_manager.update(token, {
+            "status": "error",
+            "error": "The AI service returned a response that could not be parsed. "
+                     "Your progress is saved — please try again.",
+            "error_code": "json_parse_error",
+        })
+        session_id = snap.get("session_id")
+        if session_id and chapters_done:
+            persist_completed_chapters(session_id, chapters_done, token)
+        _set_step("Error: unparseable LLM response")
+        _persist_progress(force=True)
+
+    except (KeyError, ValueError) as exc:
+        logger.error(
+            "Internal error during chapter generation for token %s: %s",
+            token, exc, exc_info=True,
+        )
+        progress_manager.update(token, {
+            "status": "error",
+            "error": "An internal error occurred during generation. "
+                     "Your progress is saved — please try again.",
+            "error_code": "internal_error",
         })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
