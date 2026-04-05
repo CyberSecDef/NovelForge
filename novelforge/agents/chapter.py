@@ -23,7 +23,7 @@ _CONTENT_RETRY_LIMIT = 2
 # ---------------------------------------------------------------------------
 
 #: Key injected into dict-returning runner helpers when the pass fails.
-#: Value is a human-readable ``"ExcType: message"`` string.
+#: Value is a human-readable `"ExcType: message"` string.
 PASS_FAILURE_KEY = "_pass_failed"
 
 #: Value used when a pass is classified as optional (graceful degradation).
@@ -49,7 +49,7 @@ def _log_pass_failure(
     exc:           The exception that caused the failure.
     pass_name:     Human-readable name of the agent pass (e.g. "continuity gatekeeper").
     chapter_num:   Chapter number being processed, when available.
-    chapter_title: Chapter title being processed, when available.
+    chapter_title: Chapter or novel title for context, when available.
     optional:      Whether the pass is optional (True) or required (False).
     """
     pass_kind = PASS_OPTIONAL if optional else PASS_REQUIRED

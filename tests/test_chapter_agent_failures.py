@@ -42,6 +42,13 @@ _CHAPTER_KWARGS_STR = dict(
 )
 
 
+def _raise_runtime(msg: str):
+    """Return a stub callable that raises RuntimeError(msg)."""
+    def _stub(*args, **kwargs):
+        raise RuntimeError(msg)
+    return _stub
+
+
 # ---------------------------------------------------------------------------
 # Optional-pass failures — structured logging
 # ---------------------------------------------------------------------------
@@ -69,7 +76,7 @@ class TestOptionalPassStructuredLogging:
 
     def test_continuity_gatekeeper_logs_on_failure(self, monkeypatch, caplog):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("lm boom")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("lm boom"))
         with caplog.at_level(logging.WARNING, logger="novelforge.agents.chapter"):
             run_continuity_gatekeeper(**_CHAPTER_KWARGS_STR)
         self._assert_warning_logged(
@@ -78,7 +85,7 @@ class TestOptionalPassStructuredLogging:
 
     def test_scene_variety_auditor_logs_on_failure(self, monkeypatch, caplog):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("audit boom")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("audit boom"))
         with caplog.at_level(logging.WARNING, logger="novelforge.agents.chapter"):
             run_scene_variety_compression_auditor(
                 chapter_text="text", chapter_summary="summary",
@@ -90,7 +97,7 @@ class TestOptionalPassStructuredLogging:
 
     def test_character_state_updater_logs_on_failure(self, monkeypatch, caplog):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("state boom")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("state boom"))
         with caplog.at_level(logging.WARNING, logger="novelforge.agents.chapter"):
             run_character_state_updater(
                 chapter_text="text", chapter_summary="summary",
@@ -102,7 +109,7 @@ class TestOptionalPassStructuredLogging:
 
     def test_compression_check_logs_on_failure(self, monkeypatch, caplog):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("comp boom")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("comp boom"))
         with caplog.at_level(logging.WARNING, logger="novelforge.agents.chapter"):
             run_per_chapter_compression_check(
                 chapter_num=3, chapter_summary="summary",
@@ -114,7 +121,7 @@ class TestOptionalPassStructuredLogging:
 
     def test_rhythm_classifier_logs_on_failure(self, monkeypatch, caplog):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("rhythm boom")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("rhythm boom"))
         with caplog.at_level(logging.WARNING, logger="novelforge.agents.chapter"):
             run_chapter_rhythm_classifier(**_CHAPTER_KWARGS_STR, title="My Novel")
         self._assert_warning_logged(
@@ -132,13 +139,13 @@ class TestOptionalPassFallbackValues:
 
     def test_continuity_gatekeeper_returns_empty_string(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("x"))
         result = run_continuity_gatekeeper(**_CHAPTER_KWARGS_STR)
         assert result == ""
 
     def test_scene_variety_auditor_returns_empty_string(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("x"))
         result = run_scene_variety_compression_auditor(
             chapter_text="t", chapter_summary="s", chapter_num=3, title="Novel",
         )
@@ -146,7 +153,7 @@ class TestOptionalPassFallbackValues:
 
     def test_character_state_updater_returns_empty_string(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("x"))
         result = run_character_state_updater(
             chapter_text="t", chapter_summary="s",
             characters_text="c", chapter_num=3, title="Novel",
@@ -155,7 +162,7 @@ class TestOptionalPassFallbackValues:
 
     def test_compression_check_returns_empty_string(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("x"))
         result = run_per_chapter_compression_check(
             chapter_num=3, chapter_summary="s",
             previous_summaries="Chapter 1: x.", title="Novel",
@@ -165,7 +172,7 @@ class TestOptionalPassFallbackValues:
     def test_rhythm_classifier_returns_dict_with_pass_failure_key(self, monkeypatch):
         """Dict-returning helpers must embed PASS_FAILURE_KEY in their fallback."""
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("boom"))
         result = run_chapter_rhythm_classifier(**_CHAPTER_KWARGS_STR, title="Novel")
         assert isinstance(result, dict)
         assert PASS_FAILURE_KEY in result
@@ -175,7 +182,7 @@ class TestOptionalPassFallbackValues:
     def test_rhythm_classifier_fallback_is_otherwise_empty(self, monkeypatch):
         """The fallback dict must not carry false business data (only PASS_FAILURE_KEY)."""
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("x"))
         result = run_chapter_rhythm_classifier(**_CHAPTER_KWARGS_STR, title="Novel")
         assert set(result.keys()) == {PASS_FAILURE_KEY}
 
@@ -190,7 +197,7 @@ class TestDegradedPassesCollector:
 
     def test_continuity_gatekeeper_populates_degraded_passes(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("fail"))
         degraded: list[dict] = []
         run_continuity_gatekeeper(**_CHAPTER_KWARGS_STR, degraded_passes=degraded)
         assert len(degraded) == 1
@@ -201,7 +208,7 @@ class TestDegradedPassesCollector:
 
     def test_rhythm_classifier_populates_degraded_passes(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("fail"))
         degraded: list[dict] = []
         run_chapter_rhythm_classifier(**_CHAPTER_KWARGS_STR, title="Novel", degraded_passes=degraded)
         assert len(degraded) == 1
@@ -211,7 +218,7 @@ class TestDegradedPassesCollector:
 
     def test_character_state_updater_populates_degraded_passes(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("fail"))
         degraded: list[dict] = []
         run_character_state_updater(
             chapter_text="t", chapter_summary="s",
@@ -223,7 +230,7 @@ class TestDegradedPassesCollector:
 
     def test_compression_check_populates_degraded_passes(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("fail"))
         degraded: list[dict] = []
         run_per_chapter_compression_check(
             chapter_num=3, chapter_summary="s",
@@ -235,7 +242,7 @@ class TestDegradedPassesCollector:
 
     def test_scene_variety_auditor_populates_degraded_passes(self, monkeypatch):
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("fail")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("fail"))
         degraded: list[dict] = []
         run_scene_variety_compression_auditor(
             chapter_text="t", chapter_summary="s", chapter_num=3, title="Novel",
@@ -247,7 +254,7 @@ class TestDegradedPassesCollector:
     def test_no_degraded_passes_when_none_provided(self, monkeypatch):
         """Passing degraded_passes=None must not raise; it simply skips collection."""
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("x"))
         result = run_continuity_gatekeeper(**_CHAPTER_KWARGS_STR, degraded_passes=None)
         assert result == ""
 
@@ -263,7 +270,7 @@ class TestDegradedPassesCollector:
     def test_multiple_failures_accumulate_in_collector(self, monkeypatch):
         """Each failing pass appends its own record; the list grows cumulatively."""
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("x"))
         degraded: list[dict] = []
         run_continuity_gatekeeper(**_CHAPTER_KWARGS_STR, degraded_passes=degraded)
         run_character_state_updater(
@@ -292,7 +299,7 @@ class TestRequiredPassPropagation:
     def test_pipeline_propagates_llm_error_on_required_step(self, monkeypatch):
         """An LLM failure inside _run_all_chapter_agents must propagate to the caller."""
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("hard fail")))
+        monkeypatch.setattr(chap, "call_llm", _raise_runtime("hard fail"))
         with pytest.raises(RuntimeError, match="hard fail"):
             _run_all_chapter_agents(
                 text="Chapter text.",
@@ -309,7 +316,11 @@ class TestRequiredPassPropagation:
         """A ChapterTimeoutError must propagate out of _run_all_chapter_agents."""
         from novelforge.llm.client import ChapterTimeoutError
         import novelforge.agents.chapter as chap
-        monkeypatch.setattr(chap, "call_llm", lambda *a, **kw: (_ for _ in ()).throw(ChapterTimeoutError("timed out")))
+
+        def _raise_timeout(*args, **kwargs):
+            raise ChapterTimeoutError("timed out")
+
+        monkeypatch.setattr(chap, "call_llm", _raise_timeout)
         with pytest.raises(ChapterTimeoutError):
             _run_all_chapter_agents(
                 text="Chapter text.",
@@ -331,21 +342,15 @@ class TestRequiredPassPropagation:
         """
         import novelforge.agents.chapter as chap
 
-        call_count = [0]
-
         def _selective_llm(messages, *, action="", **kwargs):
             # Fail the optional auditor; let all required passes return dummy text
             if "scene variety" in action.lower():
                 raise RuntimeError("auditor boom")
-            call_count[0] += 1
             return "dummy chapter output"
 
         monkeypatch.setattr(chap, "call_llm", _selective_llm)
 
         degraded: list[dict] = []
-        # This will propagate on required steps that return "dummy chapter output"
-        # but the auditor should record its failure into degraded_passes.
-        # Because required steps will succeed, the overall pipeline will complete.
         text_out, summary_out = _run_all_chapter_agents(
             text="Chapter text.",
             chapter_num=1,
@@ -363,3 +368,4 @@ class TestRequiredPassPropagation:
         auditor_failures = [e for e in degraded if e["pass_name"] == "scene variety & compression auditor"]
         assert len(auditor_failures) == 1
         assert "auditor boom" in auditor_failures[0]["failure_summary"]
+
