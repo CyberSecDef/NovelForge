@@ -9,7 +9,7 @@ recommended fixes.
 
 ## Critical / High Priority
 
-### 1. Vocabulary Scanner Uses Substring Matching Instead of Word Boundaries
+### 1. ~~Vocabulary Scanner Uses Substring Matching Instead of Word Boundaries~~ DONE
 
 **Files:** `novelforge/agents/chapter/_helpers.py` lines 222-259
 
@@ -63,7 +63,7 @@ This also improves performance from O(n * m) substring scans to a single regex p
 
 ---
 
-### 2. Missing HTTP Security Headers
+### 2. ~~Missing HTTP Security Headers~~ DONE
 
 **Files:** `novelforge/__init__.py` (add after line 146, in the `@app.after_request` section)
 
@@ -112,7 +112,7 @@ attribute or a separate endpoint.
 
 ---
 
-### 3. Mermaid.js Loaded from CDN Without Subresource Integrity (SRI)
+### 3. ~~Mermaid.js Loaded from CDN Without Subresource Integrity (SRI)~~ DONE
 
 **Files:** `templates/index.html` line 554
 
@@ -149,7 +149,7 @@ curl -s https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js | \
 
 ---
 
-### 4. No Timeout on Chapter Revision Pipeline
+### 4. ~~No Timeout on Chapter Revision Pipeline~~ DONE
 
 **Files:** `novelforge/routes/generation/revision.py` lines 155-166
 
@@ -194,7 +194,7 @@ an appropriate HTTP error response (504 Gateway Timeout).
 
 ---
 
-### 5. CLAUDE.md Documentation Out of Date
+### 5. CLAUDE.md Documentation Out of Date — OPEN
 
 **Files:** `CLAUDE.md` lines 30-46 (Package Structure section)
 
@@ -251,7 +251,7 @@ Update the Package Structure section to reflect the current layout. Also update:
 
 ## Medium Priority
 
-### 6. Shallow Copy of `chapters_done` in Revision Endpoint
+### 6. Shallow Copy of `chapters_done` in Revision Endpoint — OPEN
 
 **Files:** `novelforge/routes/generation/revision.py` line 65
 
@@ -289,7 +289,7 @@ dict copy. Consider adding a deep copy option to `ProgressManager.get()`.
 
 ---
 
-### 7. Session Lock Registry Grows Indefinitely (Memory Leak)
+### 7. Session Lock Registry Grows Indefinitely (Memory Leak) — OPEN
 
 **Files:** `novelforge/session/persistence.py` lines 52-65
 
@@ -327,7 +327,7 @@ Option C: Periodically prune locks for session IDs whose JSON files no longer ex
 
 ---
 
-### 8. Race Condition in Duplicate Generation Guard
+### 8. Race Condition in Duplicate Generation Guard — OPEN
 
 **Files:** `novelforge/routes/generation/chapters.py` lines 68-76
 
@@ -372,7 +372,7 @@ status inside `progress_manager` with the lock held.
 
 ---
 
-### 9. Empty First-Person Perspective Name Edge Case
+### 9. Empty First-Person Perspective Name Edge Case — OPEN
 
 **Files:** `novelforge/routes/outline.py` lines 230-234,
 `novelforge/agents/chapter/context.py` lines 40-50
@@ -430,7 +430,7 @@ if cur_persp.startswith("first_person:"):
 
 ---
 
-### 10. Silent Chapter Outline Lookup Failure in Revision
+### 10. Silent Chapter Outline Lookup Failure in Revision — OPEN
 
 **Files:** `novelforge/routes/generation/revision.py` lines 92-99
 
@@ -476,7 +476,7 @@ if not chapter_outline_summary:
 
 ---
 
-### 11. Inconsistent Audit Fallback Structures
+### 11. Inconsistent Audit Fallback Structures — OPEN
 
 **Files:** `novelforge/routes/generation/audits.py` (multiple locations)
 
@@ -511,7 +511,7 @@ at the type level.
 
 ---
 
-### 12. `_call_single_provider()` Is 186 Lines with Deep Nesting
+### 12. `_call_single_provider()` Is 186 Lines with Deep Nesting — OPEN
 
 **Files:** `novelforge/llm/client.py` lines 300-486
 
@@ -545,7 +545,7 @@ delay = config.LLM_RETRY_DELAY * attempt * (0.5 + random.random())
 
 ---
 
-### 13. Overly Broad Exception Handling in Generation Worker
+### 13. Overly Broad Exception Handling in Generation Worker — OPEN
 
 **Files:** `novelforge/routes/generation/chapters.py` line 503
 
@@ -585,7 +585,7 @@ except (KeyError, ValueError) as exc:
 
 ## Low Priority / Quality
 
-### 14. Genre Lists Duplicated in Three Places
+### 14. Genre Lists Duplicated in Three Places — OPEN
 
 **Files:**
 - `novelforge/validation.py` lines 10-32 (`ALLOWED_GENRES` set)
@@ -610,7 +610,7 @@ pool and voice seed mappings.
 
 ---
 
-### 15. No Cleanup of Export Files, Progress Files, or Old Sessions
+### 15. No Cleanup of Export Files, Progress Files, or Old Sessions — OPEN
 
 **Files:**
 - `novelforge/routes/export.py` lines 118-124 (export .md files)
@@ -643,7 +643,7 @@ needed for crash recovery).
 
 ---
 
-### 16. Prompts YAML Cache Not Thread-Safe
+### 16. Prompts YAML Cache Not Thread-Safe — OPEN
 
 **Files:** `novelforge/llm/prompts.py` lines 56-68
 
@@ -691,7 +691,7 @@ def _load_prompts() -> dict:
 
 ---
 
-### 17. CSRF SSL Strict Mode Disabled in All Environments
+### 17. CSRF SSL Strict Mode Disabled in All Environments — OPEN
 
 **Files:** `novelforge/__init__.py` line 91
 
@@ -720,7 +720,7 @@ app.config["WTF_CSRF_SSL_STRICT_MODE"] = os.environ.get("CSRF_SSL_STRICT", "true
 
 ---
 
-### 18. Dependency Versions Have No Upper Bounds
+### 18. Dependency Versions Have No Upper Bounds — OPEN
 
 **Files:** `requirements.txt`
 
@@ -756,7 +756,7 @@ Or use a lock file (`pip freeze > requirements.lock`) for reproducible deploymen
 
 ---
 
-### 19. Image Download URL Not Validated
+### 19. Image Download URL Not Validated — OPEN
 
 **Files:** `novelforge/llm/image.py` line 103
 
@@ -794,7 +794,7 @@ content = img_response.iter_content(chunk_size=8192)
 
 ---
 
-### 20. Progress Manager `get()` Returns Shallow Copy
+### 20. Progress Manager `get()` Returns Shallow Copy — OPEN
 
 **Files:** `novelforge/progress.py` lines 110-113
 
@@ -824,3 +824,21 @@ Option B: Document that the returned dict must not be mutated, and add a
 
 Option C: Return a frozen/immutable view (e.g., `types.MappingProxyType`) so
 mutations raise at the call site.
+
+
+### 21. Prompt Updates — OPEN
+
+Each of the following prompts should be added to the per chapter workflows
+    
+    Each POV character should think in a distinct internal language shaped by their background and expertise. Currently all characters share the same literary-metaphorical register.
+        This should step should take place after the first prose refinement step in the chapter processing.
+        For this item, first generate a list of each character who has dialog in the chapter.
+        Then have the dialog rewritten to match their character, history, point in the novel, etc.  For instance, a 16 year old character should sound like a 16 year old character.  etc.
+        The dialog is also too clean, too functional, too information-delivery. The characters shouldn't always have complete thoughts, speak in well-formed sentences.  They should sometimes interrupt each other or themselves.  Make sre the dialog flows in this manner.
+        Make sure the prose maintains a 'breathes' -- denser in reflective moments, sparser in action, occasionally raw or clumsy when characters are overwhelmed.
+
+    The novel is relentlessly serious. Every scene is morally weighted. Every observation is significant. Real humans deflect, joke badly, notice irrelevant things, and occasionally do something that doesn't serve the plot.  create a plan to inject these odities throughout the novel.  no more than 2 'oddities' per chapter.
+
+    The manuscript is metaphor heavy.  make sure the text doesn't go overboard with metaphors.  create a plan to remove uneeded ones.
+    
+    Please do a light copy-edit pass targeting prose repetitions.  Also remove unneeded dashes, em-dashes and hyphens.

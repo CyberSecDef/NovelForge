@@ -133,8 +133,9 @@ def create_app(*, testing: bool = False) -> Flask:
     register_blueprints(app)
 
     @app.after_request
-    def set_csrf_cookie(response: Response) -> Response:
-        """Set CSRF token in a cookie so JS can read it after page refresh."""
+    def set_security_headers(response: Response) -> Response:
+        """Set CSRF cookie and standard security headers on every response."""
+        # --- CSRF token cookie (JS-readable for SPA AJAX calls) ---
         csrf_token = generate_csrf()
         response.set_cookie(
             "csrf_token",
@@ -143,6 +144,26 @@ def create_app(*, testing: bool = False) -> Flask:
             samesite="Lax",
             httponly=False,
         )
+
+        # --- Security headers ---
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()"
+        )
+        # Content-Security-Policy: allowlist the CDN sources used in index.html.
+        # 'unsafe-inline' is required for the session-data <script> block and
+        # the mermaid.initialize() call, plus inline style="" attributes.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://code.jquery.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "img-src 'self' data:; "
+            "connect-src 'self'"
+        )
+
         return response
 
     @app.route("/")

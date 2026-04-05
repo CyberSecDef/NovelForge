@@ -2,13 +2,14 @@
 
 import json
 import logging
+import time
 
 from flask import Response, jsonify, request
 
 from novelforge import limiter
 from novelforge.llm.client import (
     call_llm, parse_llm_json, friendly_llm_error,
-    ContentRejectionError,
+    ChapterTimeoutError, ContentRejectionError, PER_CHAPTER_TIMEOUT,
 )
 from novelforge.progress import progress_manager
 from novelforge.agents.planning import (
@@ -163,6 +164,7 @@ def revise_chapter() -> Response | tuple[Response, int]:
             chapter_outline_summary=chapter_outline_summary,
             characters_text=characters_text, previous_summaries=previous_summaries,
             ctx=ch_ctx, step_callback=None,
+            deadline=time.monotonic() + PER_CHAPTER_TIMEOUT,
         )
 
         chapters_done[target_idx]["content"] = revised_text
@@ -200,6 +202,13 @@ def revise_chapter() -> Response | tuple[Response, int]:
 
         return jsonify(response_payload)
 
+    except ChapterTimeoutError as exc:
+        logger.error("Chapter revision timed out for token %s: %s", token, exc)
+        return jsonify({
+            "error": f"Chapter revision exceeded the {PER_CHAPTER_TIMEOUT // 60}-minute "
+                     "time limit. The chapter may be too complex for a single revision "
+                     "pass. Try breaking your instructions into smaller changes."
+        }), 504
     except ContentRejectionError as exc:
         logger.error("Content rejection during revision for token %s: %s", token, exc)
         return jsonify({
