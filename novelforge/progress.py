@@ -37,17 +37,19 @@ class ProgressState(TypedDict, total=False):
     # populated whenever an optional chapter-agent pass fails but execution continues.
     degraded_passes: list[dict[str, Any]]
 
-    # Post-generation quality-audit reports
-    consistency: dict[str, Any]
-    global_continuity_audit: dict[str, Any]
-    narrative_compression_report: dict[str, Any]
-    character_resolution_report: dict[str, Any]
-    thematic_payoff_report: dict[str, Any]
-    climax_integrity_report: dict[str, Any]
-    loose_thread_report: dict[str, Any]
-    reader_immersion_report: dict[str, Any]
-    pacing_heatmap: dict[str, Any]
-    character_relationship_map: dict[str, Any]
+    # Post-generation quality-audit reports.
+    # These may be set to None to signal that the report is stale and must be
+    # regenerated (e.g. after a chapter revision invalidates old analysis).
+    consistency: dict[str, Any] | None
+    global_continuity_audit: dict[str, Any] | None
+    narrative_compression_report: dict[str, Any] | None
+    character_resolution_report: dict[str, Any] | None
+    thematic_payoff_report: dict[str, Any] | None
+    climax_integrity_report: dict[str, Any] | None
+    loose_thread_report: dict[str, Any] | None
+    reader_immersion_report: dict[str, Any] | None
+    pacing_heatmap: dict[str, Any] | None
+    character_relationship_map: dict[str, Any] | None
 
     # Illustration results
     illustrations: list[dict[str, Any]]

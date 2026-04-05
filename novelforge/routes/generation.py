@@ -58,6 +58,21 @@ logger = logging.getLogger(__name__)
 
 generation_bp = Blueprint("generation", __name__)
 
+# Derived report fields that are invalidated when a chapter is revised.
+# Any of these keys present in progress state may be stale after a revision and
+# will be set to None so that consumers know they need to be regenerated.
+_DERIVED_REPORT_FIELDS: tuple[str, ...] = (
+    "global_continuity_audit",
+    "narrative_compression_report",
+    "character_resolution_report",
+    "thematic_payoff_report",
+    "climax_integrity_report",
+    "loose_thread_report",
+    "reader_immersion_report",
+    "pacing_heatmap",
+    "character_relationship_map",
+)
+
 
 @generation_bp.route("/generate_chapters", methods=["POST"])
 @limiter.limit("1 per 10 minutes")
@@ -853,6 +868,18 @@ def revise_chapter() -> Response | tuple[Response, int]:
             "chapters_done": chapters_done,
             "consistency": consistency,
         })
+
+        # Invalidate derived reports that are now stale relative to the revised
+        # chapter text.  Consumers should treat None values as "not yet computed"
+        # and re-request generation if they need fresh analysis.
+        progress_manager.update(token, {field: None for field in _DERIVED_REPORT_FIELDS})
+
+        # Persist the revised state using the same durable persistence path as
+        # the main generation pipeline so that revisions survive a restart.
+        session_id = snap.get("session_id")
+        if session_id:
+            persist_completed_chapters(session_id, chapters_done, token)
+
         response_payload = progress_manager.get(token)
 
         return jsonify(response_payload)
