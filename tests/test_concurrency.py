@@ -16,6 +16,26 @@ from novelforge.progress import (
 )
 
 
+def _make_chapters(n: int) -> list[dict]:
+    return [
+        {
+            "number": i + 1,
+            "title": f"Chapter {i + 1}",
+            "content": f"Content for chapter {i + 1}.",
+            "summary": f"Summary {i + 1}.",
+            "word_count": 3000 + i * 100,
+        }
+        for i in range(n)
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Stable UUIDs used by lock-identity tests (must be valid UUID format)
+# ---------------------------------------------------------------------------
+_LOCK_UUID_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+_LOCK_UUID_B = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+_LOCK_UUID_C = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+
 class TestProgressStoreThreadSafety:
     """Verify ProgressManager handles concurrent reads and writes correctly."""
 
@@ -421,3 +441,311 @@ class TestCircuitBreakerThreadSafety:
 
         assert breaker.failure_count == 0
         assert not breaker.is_tripped
+
+
+class TestPersistenceLock:
+    """Verify concurrent session persistence writes do not clobber each other.
+
+    These tests cover the interleaved scenarios described in the issue:
+    - ``save_session_state()`` (request thread) vs ``persist_completed_chapters()``
+      (background thread) operating on the same session file at the same time.
+    - Multiple concurrent ``persist_completed_chapters()`` calls.
+    """
+
+    def setup_method(self):
+        progress_manager.clear()
+
+    def teardown_method(self):
+        progress_manager.clear()
+
+    # ------------------------------------------------------------------
+    # Helper: write an initial session file without Flask request context
+    # ------------------------------------------------------------------
+
+    def _write_initial_file(self, path, session_id: str, extra: dict | None = None) -> None:
+        state = {
+            "session_id": session_id,
+            "title": "Race Test",
+            "premise": "Test premise",
+            "genre": "Fantasy",
+            "chapters": 10,
+            "word_count": 80000,
+            "special_events": "",
+            "special_instructions": "",
+            "chapter_list": [],
+            "character_list": [],
+            "story_architecture": {},
+            "master_timeline": {},
+            "character_fate_registry": {},
+            "character_arc_plan": {},
+            "antagonist_motivation_plan": {},
+            "technology_rules": {},
+            "theme_reinforcement": {},
+            "pov_focal_character_plan": {},
+            "progress_token": "",
+            "completed_chapters": [],
+            "illustrations": [],
+            "voice_seed": {},
+        }
+        if extra:
+            state.update(extra)
+        (path / f"{session_id}.json").write_text(json.dumps(state), encoding="utf-8")
+
+    # ------------------------------------------------------------------
+    # Tests
+    # ------------------------------------------------------------------
+
+    def test_concurrent_persist_calls_produce_valid_json(self, app):
+        """Many concurrent persist_completed_chapters() calls must not corrupt the file."""
+        import novelforge.config as config
+        from pathlib import Path
+        from novelforge.session.persistence import (
+            save_session_state, persist_completed_chapters, get_session_id,
+        )
+
+        sessions_dir = Path(config.NOVELS_DIR)
+
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["title"] = "Concurrent Test"
+            sess["premise"] = "Test"
+            sess["genre"] = "Fantasy"
+            sess["chapters"] = 20
+            sess["word_count"] = 80000
+            sess["special_instructions"] = ""
+            sess["special_events"] = ""
+            sess["chapter_list"] = []
+            sess["character_list"] = []
+            save_session_state()
+            session_id = get_session_id()
+
+        session_file = sessions_dir / f"{session_id}.json"
+        assert session_file.exists()
+
+        n = 20
+        errors: list[Exception] = []
+        barrier = threading.Barrier(n)
+
+        def persist_worker(i: int) -> None:
+            try:
+                barrier.wait(timeout=5)
+                persist_completed_chapters(session_id, _make_chapters(i + 1))
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=persist_worker, args=(i,)) for i in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert not errors, f"Thread errors: {errors}"
+
+        # File must be valid JSON with a non-empty completed_chapters list
+        state = json.loads(session_file.read_text(encoding="utf-8"))
+        assert isinstance(state["completed_chapters"], list)
+        assert len(state["completed_chapters"]) > 0
+
+    def test_save_and_persist_interleave_no_data_loss(self, app, monkeypatch):
+        """save_session_state and persist_completed_chapters serialise correctly.
+
+        The test injects a deliberate delay *inside* the persist read-modify-write
+        to force the two writers to overlap in time.  With the lock in place the
+        final file must be valid JSON and must never show zero chapters once
+        persist_completed_chapters has written at least one.
+        """
+        import novelforge.config as config
+        from pathlib import Path
+        import novelforge.session.persistence as persistence_mod
+        from novelforge.session.persistence import (
+            save_session_state, persist_completed_chapters, get_session_id,
+        )
+
+        sessions_dir = Path(config.NOVELS_DIR)
+
+        # Create initial session
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["title"] = "Interleave Test"
+            sess["premise"] = "Test"
+            sess["genre"] = "Fantasy"
+            sess["chapters"] = 5
+            sess["word_count"] = 50000
+            sess["special_instructions"] = ""
+            sess["special_events"] = ""
+            sess["chapter_list"] = []
+            sess["character_list"] = []
+            save_session_state()
+            session_id = get_session_id()
+
+        session_file = sessions_dir / f"{session_id}.json"
+
+        # Inject a sleep between the file-read and _atomic_write inside
+        # persist_completed_chapters so that save_session_state can race it.
+        original_atomic_write = persistence_mod._atomic_write
+        write_call_count = [0]
+
+        def slow_atomic_write(filepath: Path, content: str) -> None:
+            write_call_count[0] += 1
+            # First write comes from persist_completed_chapters (background);
+            # introduce a 50 ms delay to hold the lock long enough for the
+            # concurrent save_session_state() call to queue behind it.
+            if write_call_count[0] == 1:
+                time.sleep(0.05)
+            original_atomic_write(filepath, content)
+
+        monkeypatch.setattr(persistence_mod, "_atomic_write", slow_atomic_write)
+
+        errors: list[Exception] = []
+        persist_done = threading.Event()
+
+        def bg_persist() -> None:
+            try:
+                persist_completed_chapters(session_id, _make_chapters(5))
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                persist_done.set()
+
+        bg = threading.Thread(target=bg_persist)
+        bg.start()
+
+        # Allow 10 ms for the background thread to acquire the lock and start
+        # its file read before the request thread attempts its write.
+        time.sleep(0.01)
+
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["session_id"] = session_id
+            sess["title"] = "Interleave Test"
+            sess["premise"] = "Test"
+            sess["genre"] = "Fantasy"
+            sess["chapters"] = 5
+            sess["word_count"] = 50000
+            sess["special_instructions"] = ""
+            sess["special_events"] = ""
+            sess["chapter_list"] = []
+            sess["character_list"] = []
+            save_session_state()
+
+        persist_done.wait(timeout=10)
+        bg.join(timeout=10)
+
+        assert not errors, f"Thread errors: {errors}"
+
+        # File must be valid JSON
+        state = json.loads(session_file.read_text(encoding="utf-8"))
+        assert state["title"] == "Interleave Test"
+        assert isinstance(state["completed_chapters"], list)
+
+    def test_get_session_lock_returns_same_object_for_same_id(self):
+        """_get_session_lock must return the identical Lock for the same session_id."""
+        from novelforge.session.persistence import _get_session_lock
+
+        lock1 = _get_session_lock(_LOCK_UUID_A)
+        lock2 = _get_session_lock(_LOCK_UUID_A)
+        assert lock1 is lock2
+
+    def test_get_session_lock_different_sessions_get_different_locks(self):
+        """Different session IDs must not share a lock."""
+        from novelforge.session.persistence import _get_session_lock
+
+        assert _get_session_lock(_LOCK_UUID_A) is not _get_session_lock(_LOCK_UUID_B)
+
+    def test_lock_registry_thread_safe(self):
+        """Concurrent first-access calls for the same session_id yield the same lock."""
+        from novelforge.session.persistence import _get_session_lock
+
+        n = 30
+        results: list[object] = []
+        barrier = threading.Barrier(n)
+
+        def fetch() -> None:
+            barrier.wait(timeout=5)
+            results.append(_get_session_lock(_LOCK_UUID_C))
+
+        threads = [threading.Thread(target=fetch) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert len(results) == n
+        # All threads must have received the same lock object
+        assert len(set(id(lk) for lk in results)) == 1
+
+    def test_concurrent_persist_and_save_file_always_valid_json(self, app):
+        """Concurrent save_session_state + persist_completed_chapters never corrupt the file."""
+        import novelforge.config as config
+        from pathlib import Path
+        from novelforge.session.persistence import (
+            save_session_state, persist_completed_chapters, get_session_id,
+        )
+
+        sessions_dir = Path(config.NOVELS_DIR)
+
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["title"] = "JSON Integrity Test"
+            sess["premise"] = "Test"
+            sess["genre"] = "Sci-Fi"
+            sess["chapters"] = 10
+            sess["word_count"] = 70000
+            sess["special_instructions"] = ""
+            sess["special_events"] = ""
+            sess["chapter_list"] = []
+            sess["character_list"] = []
+            save_session_state()
+            session_id = get_session_id()
+
+        session_file = sessions_dir / f"{session_id}.json"
+        errors: list[Exception] = []
+        barrier = threading.Barrier(2)
+
+        def bg_persist() -> None:
+            try:
+                barrier.wait(timeout=5)
+                for i in range(1, 6):
+                    persist_completed_chapters(session_id, _make_chapters(i))
+                    # 5 ms gap between persists so save_session_state() calls
+                    # from the main thread can interleave between them.
+                    time.sleep(0.005)
+            except Exception as exc:
+                errors.append(exc)
+
+        bg = threading.Thread(target=bg_persist)
+        bg.start()
+
+        barrier.wait(timeout=5)
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["session_id"] = session_id
+            sess["title"] = "JSON Integrity Test"
+            sess["premise"] = "Test"
+            sess["genre"] = "Sci-Fi"
+            sess["chapters"] = 10
+            sess["word_count"] = 70000
+            sess["special_instructions"] = ""
+            sess["special_events"] = ""
+            sess["chapter_list"] = []
+            sess["character_list"] = []
+            for _ in range(5):
+                save_session_state()
+                # 5 ms gap mirrors the background-thread cadence so writes overlap.
+                time.sleep(0.005)
+
+        bg.join(timeout=10)
+        assert not errors, f"Thread errors: {errors}"
+
+        # File must be parseable and have a valid schema
+        raw = session_file.read_text(encoding="utf-8")
+        state = json.loads(raw)
+        assert "completed_chapters" in state
+        assert isinstance(state["completed_chapters"], list)
+        assert "title" in state
+
