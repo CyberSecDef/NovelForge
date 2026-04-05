@@ -205,7 +205,13 @@ class TestIllustrationsUsesSnapshot:
     def test_illustration_prompt_uses_snapshot_not_session(
         self, client, mock_llm, monkeypatch
     ):
-        """The LLM is called with snapshot data even when the session differs."""
+        """The LLM is called with snapshot data even when the session differs.
+
+        The route now returns immediately with an illustration_token; the
+        background worker is run synchronously via a thread mock so assertions
+        can be made right away.
+        """
+        import threading
         import novelforge.config as config
         import novelforge.routes.export as export_module
 
@@ -233,6 +239,17 @@ class TestIllustrationsUsesSnapshot:
             lambda prompt, filename_prefix="": f"{filename_prefix}.png",
         )
 
+        # Run background thread synchronously so assertions work immediately.
+        class SyncThread:
+            def __init__(self, target=None, args=(), daemon=True, **kw):
+                self._target = target
+                self._args = args
+            def start(self):
+                if self._target:
+                    self._target(*self._args)
+
+        monkeypatch.setattr(export_module.threading, "Thread", SyncThread)
+
         token = "snap-illust-meta"
         _done_token(
             token,
@@ -253,6 +270,8 @@ class TestIllustrationsUsesSnapshot:
             content_type="application/json",
         )
         assert r.status_code == 200
+        # The route returns a job token, not illustrations directly.
+        assert "illustration_token" in r.get_json()
 
         # The prompt builder must have received snapshot values.
         assert captured.get("title") == "Snapshot Illustration Novel"
@@ -262,3 +281,4 @@ class TestIllustrationsUsesSnapshot:
         # Must NOT have received the stale session values.
         assert captured.get("title") != "WRONG TITLE"
         assert captured.get("genre") != "WRONG GENRE"
+

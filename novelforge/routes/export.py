@@ -1,19 +1,24 @@
 """Export, download, and illustration routes."""
 
-import json
 import logging
+import threading
 import time
+import uuid
 from pathlib import Path
+from typing import Any
 
-from flask import Blueprint, Response, abort, jsonify, request, send_file, session
+from flask import Blueprint, Response, abort, jsonify, request, send_file
 
 from novelforge import limiter
-from novelforge.progress import progress_manager
+from novelforge.progress import (
+    progress_manager,
+    set_correlation_token,
+    clear_correlation_token,
+)
 import novelforge.config as config
 from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.llm.image import call_image_api
 from novelforge.agents.chapter import build_illustration_prompt_generator_prompt
-from novelforge.session.persistence import save_session_state
 
 logger = logging.getLogger(__name__)
 
@@ -534,7 +539,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
 @export_bp.route("/generate_illustrations", methods=["POST"])
 @limiter.limit("2 per 10 minutes")
 def generate_illustrations() -> Response | tuple[Response, int]:
-    """Generate cover and chapter scene illustrations for the completed novel."""
+    """Start background illustration generation; returns a job token for polling."""
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
 
@@ -547,73 +552,188 @@ def generate_illustrations() -> Response | tuple[Response, int]:
         return jsonify({"error": "IMAGE_API_KEY not configured. Set it in your .env file."}), 400
 
     snapshot = progress_data.get("snapshot") or {}
-    title = snapshot.get("title", "Novel")
-    genre = snapshot.get("genre", "")
-    premise = snapshot.get("premise", "")
-    character_list = snapshot.get("character_list", [])
     chapters_done = progress_data.get("chapters_done", [])
-    all_summaries = [str(ch.get("summary", "")) for ch in chapters_done]
 
+    illust_token = str(uuid.uuid4())
+    progress_manager.create(illust_token, {
+        "status": "running",
+        "current": 0,
+        "total": 0,
+        "step": "Starting\u2026",
+        "chapters_done": [],
+        "error": None,
+        "illustrations": [],
+    })
+
+    # Record the illustration job token on the novel entry so callers can
+    # retrieve it from either side.
     try:
-        llm_prompt = build_illustration_prompt_generator_prompt(
-            title=title, genre=genre, premise=premise,
-            character_list=character_list, all_summaries=all_summaries,
-        )
-        raw = None
+        progress_manager.update(token, {"illustration_token": illust_token})
+    except KeyError:
+        pass
+
+    thread = threading.Thread(
+        target=_run_illustration_generation,
+        args=(token, illust_token, snapshot, chapters_done),
+        daemon=True,
+    )
+    thread.start()
+
+    return jsonify({"illustration_token": illust_token})
+
+
+def _run_illustration_generation(
+    novel_token: str,
+    illust_token: str,
+    snapshot: dict[str, Any],
+    chapters_done: list[dict[str, Any]],
+) -> None:
+    """Background worker: generate illustration prompts then images.
+
+    Progress is tracked under *illust_token* and can be polled via the
+    standard ``/progress/<token>`` endpoints.  Per-image outcomes are stored
+    in the ``illustrations`` list so partial failures are visible.
+    """
+    set_correlation_token(illust_token)
+    try:
+        title = snapshot.get("title", "Novel")
+        genre = snapshot.get("genre", "")
+        premise = snapshot.get("premise", "")
+        character_list = snapshot.get("character_list", [])
+        all_summaries = [str(ch.get("summary", "")) for ch in chapters_done]
+
+        # --- Step 1: generate illustration prompts via LLM (with retry) ---
+        progress_manager.update(illust_token, {"step": "Generating illustration prompts\u2026"})
+
+        raw: str | None = None
         for llm_attempt in range(1, 4):
             try:
+                llm_prompt = build_illustration_prompt_generator_prompt(
+                    title=title, genre=genre, premise=premise,
+                    character_list=character_list, all_summaries=all_summaries,
+                )
                 raw = call_llm(llm_prompt, action="Generating illustration prompts", json_mode=True)
                 break
             except RuntimeError:
                 if llm_attempt == 3:
                     raise
                 wait = 30 * llm_attempt
-                logger.warning("Illustration LLM prompt failed (attempt %d/3) – retrying in %ds", llm_attempt, wait)
+                logger.warning(
+                    "Illustration LLM prompt failed (attempt %d/3) \u2013 retrying in %ds",
+                    llm_attempt, wait,
+                )
+                progress_manager.update(illust_token, {
+                    "step": f"Retrying prompt generation (attempt {llm_attempt}/3)\u2026",
+                })
                 time.sleep(wait)
 
-        assert raw is not None  # guaranteed by retry loop raising on final failure
+        assert raw is not None  # guaranteed: final attempt raises if it fails
         prompt_data = parse_llm_json(raw)
-        illustrations = prompt_data.get("illustrations", [])
+        illustrations_spec = prompt_data.get("illustrations", [])
 
-        if not isinstance(illustrations, list) or not illustrations:
-            return jsonify({"error": "LLM did not return valid illustration prompts."}), 502
+        if not isinstance(illustrations_spec, list) or not illustrations_spec:
+            progress_manager.update(illust_token, {
+                "status": "error",
+                "error": "LLM did not return valid illustration prompts.",
+                "step": "Failed: no valid prompts",
+            })
+            return
 
-        results = []
-        for idx, illust in enumerate(illustrations[:2]):
-            if not isinstance(illust, dict):
-                continue
+        # --- Step 2: generate each image ---
+        candidate_specs: list[dict[str, Any]] = [
+            s for s in illustrations_spec[:2] if isinstance(s, dict)
+        ]
+        total = len(candidate_specs)
+        progress_manager.update(illust_token, {
+            "total": total,
+            "step": f"Generating {total} image(s)\u2026",
+        })
+
+        results: list[dict[str, Any]] = []
+        for idx, illust in enumerate(candidate_specs):
             art_prompt = str(illust.get("art_prompt", "")).strip()
-            if not art_prompt:
-                continue
-
             illust_type = str(illust.get("type", "chapter_scene"))
             chapter = illust.get("chapter")
             scene_desc = str(illust.get("scene_description", "")).strip()
 
-            prefix = "cover" if illust_type == "cover" else f"ch{chapter or idx}"
-            filename = call_image_api(art_prompt, filename_prefix=prefix)
+            entry: dict[str, Any] = {
+                "type": illust_type,
+                "chapter": chapter,
+                "scene_description": scene_desc,
+                "art_prompt": art_prompt,
+                "status": "pending",
+                "image_url": None,
+                "error": None,
+            }
 
-            if filename:
-                results.append({
-                    "type": illust_type,
-                    "chapter": chapter,
-                    "scene_description": scene_desc,
-                    "art_prompt": art_prompt,
-                    "image_url": f"/illustrations/{filename}",
+            if not art_prompt:
+                entry["status"] = "image_failed"
+                entry["error"] = "Empty art prompt"
+                results.append(entry)
+                progress_manager.update(illust_token, {
+                    "current": idx + 1,
+                    "step": f"Image {idx + 1}/{total}: skipped (empty prompt)",
+                    "illustrations": list(results),
                 })
+                continue
 
-        if not results:
-            return jsonify({"error": "Image generation failed for all prompts."}), 502
+            prefix = "cover" if illust_type == "cover" else f"ch{chapter or idx}"
+            progress_manager.update(illust_token, {
+                "step": f"Image {idx + 1}/{total}: calling image API\u2026",
+            })
+            try:
+                filename = call_image_api(art_prompt, filename_prefix=prefix)
+                if filename:
+                    entry["status"] = "success"
+                    entry["image_url"] = f"/illustrations/{filename}"
+                else:
+                    entry["status"] = "image_failed"
+                    entry["error"] = "Image API returned no file"
+            except Exception as exc:  # noqa: BLE001
+                entry["status"] = "image_failed"
+                entry["error"] = f"{type(exc).__name__}: {exc}"
 
-        progress_manager.update(token, {"illustrations": results})
-        session["illustrations"] = results
-        save_session_state()
+            results.append(entry)
+            progress_manager.update(illust_token, {
+                "current": idx + 1,
+                "step": f"Image {idx + 1}/{total}: complete",
+                "illustrations": list(results),
+            })
 
-        return jsonify({"illustrations": results})
+        # --- Step 3: finalise ---
+        successful = [r for r in results if r.get("status") == "success"]
+
+        if not successful:
+            progress_manager.update(illust_token, {
+                "status": "error",
+                "error": "Image generation failed for all prompts.",
+                "step": "Failed",
+                "illustrations": results,
+            })
+            return
+
+        progress_manager.update(illust_token, {
+            "status": "done",
+            "step": "Complete",
+            "illustrations": results,
+        })
+
+        # Mirror successful illustrations back onto the novel progress entry
+        # so existing callers that read from the novel token still work.
+        try:
+            progress_manager.update(novel_token, {"illustrations": successful})
+        except KeyError:
+            pass
 
     except RuntimeError as exc:
         logger.error("Illustration generation failed: %s", exc)
-        return jsonify({"error": friendly_llm_error(exc)}), 502
+        progress_manager.update(illust_token, {
+            "status": "error",
+            "error": friendly_llm_error(exc),
+            "step": "Failed",
+        })
+    finally:
+        clear_correlation_token()
 
 
 @export_bp.route("/illustrations/<path:filename>")
