@@ -289,7 +289,7 @@ dict copy. Consider adding a deep copy option to `ProgressManager.get()`.
 
 ---
 
-### 7. Session Lock Registry Grows Indefinitely (Memory Leak) — OPEN
+### 7. ~~Session Lock Registry Grows Indefinitely (Memory Leak)~~ DONE
 
 **Files:** `novelforge/session/persistence.py` lines 52-65
 

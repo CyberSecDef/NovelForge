@@ -14,6 +14,7 @@ from novelforge.session.persistence import (
     get_session_file_path,
     list_session_summaries,
     load_session_by_id,
+    release_session_lock,
     restore_session_from_state,
 )
 
@@ -61,6 +62,8 @@ def load_session() -> Response | tuple[Response, int]:
 @sessions_bp.route("/delete_session", methods=["POST"])
 def delete_session() -> Response:
     """Delete the currently active session's JSON file and clear session data."""
+    session_id = session.get("session_id", "")
+
     try:
         session_file = get_session_file_path()
         if session_file.exists():
@@ -75,6 +78,11 @@ def delete_session() -> Response:
         logger.debug("Removed progress entry for token %s (session deleted)", token)
 
     session.clear()
+
+    # Clean up the per-session persistence lock so it doesn't leak memory
+    if session_id:
+        release_session_lock(session_id)
+
     return jsonify({"status": "success", "message": "Session deleted"})
 
 

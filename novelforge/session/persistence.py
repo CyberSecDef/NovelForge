@@ -65,6 +65,16 @@ def _get_session_lock(session_id: str) -> threading.Lock:
         return _session_locks[session_id]
 
 
+def release_session_lock(session_id: str) -> None:
+    """Remove the per-session lock for *session_id* from the registry.
+
+    Call this when a session is permanently deleted so the lock object can
+    be garbage collected.  Safe to call if the lock does not exist.
+    """
+    with _session_locks_lock:
+        _session_locks.pop(session_id, None)
+
+
 # ---------------------------------------------------------------------------
 # Session ID validation and safe path resolution
 # ---------------------------------------------------------------------------
