@@ -226,7 +226,8 @@ NovelForge/
 ├── app.py                  # Thin entry point: from novelforge import create_app
 ├── config.py               # Backward-compat shim (imports from novelforge.config)
 ├── prompts.yml             # LLM prompt templates (YAML)
-├── requirements.txt        # Python dependencies
+├── requirements.txt        # Runtime Python dependencies
+├── requirements-dev.txt    # Development-only dependencies (pytest, mypy, type stubs)
 ├── .env.example            # Template for environment variable configuration
 ├── CLAUDE.md               # Guidance for Claude Code AI assistant
 ├── novelforge/             # Main application package
@@ -300,8 +301,16 @@ NovelForge/
 
 3. **Install dependencies**
 
+   For running the app:
+
    ```bash
    pip install -r requirements.txt
+   ```
+
+   For local development (includes pytest, mypy, and type stubs):
+
+   ```bash
+   pip install -r requirements-dev.txt
    ```
 
 4. **Copy and fill in the environment configuration**
