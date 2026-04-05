@@ -82,7 +82,7 @@ def generate_outline() -> Response | tuple[Response, int]:
         )
         try:
             outline_data = parse_llm_json(outline_raw)
-            chapter_list = outline_data.get("chapters", [])
+            chapter_list = outline_data.get("chapters", []) if isinstance(outline_data, dict) else []
         except json.JSONDecodeError:
             chapter_list = [
                 {"number": i + 1, "title": f"Chapter {i+1}", "summary": ""}
@@ -103,7 +103,7 @@ def generate_outline() -> Response | tuple[Response, int]:
         )
         try:
             characters_data = parse_llm_json(characters_raw)
-            character_list = characters_data.get("characters", [])
+            character_list = characters_data.get("characters", []) if isinstance(characters_data, dict) else []
         except json.JSONDecodeError:
             character_list = []
 

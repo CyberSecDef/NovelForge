@@ -751,7 +751,10 @@ def run_chapter_rhythm_classifier(
             action=f"Classifying chapter rhythm for Chapter {chapter_num}",
             json_mode=True,
         )
-        return parse_llm_json(raw)
+        result = parse_llm_json(raw)
+        if not isinstance(result, dict):
+            raise ValueError("LLM returned a JSON array instead of an object")
+        return result
     except Exception as exc:
         failure_summary = _log_pass_failure(
             exc, pass_name="chapter rhythm classifier",

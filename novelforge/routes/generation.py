@@ -437,8 +437,11 @@ def _run_chapter_generation_internal(
             action="Global continuity audit", json_mode=True,
         )
         try:
-            global_audit = parse_llm_json(audit_raw)
-        except json.JSONDecodeError:
+            _global_audit = parse_llm_json(audit_raw)
+            if not isinstance(_global_audit, dict):
+                raise ValueError("Expected a JSON object from LLM, got an array")
+            global_audit = _global_audit
+        except (json.JSONDecodeError, ValueError):
             global_audit = {
                 "contradictions": [], "character_state_errors": [],
                 "timeline_errors": [], "location_errors": [],
@@ -481,8 +484,11 @@ def _run_chapter_generation_internal(
             action="Character resolution validation", json_mode=True,
         )
         try:
-            resolution_report = parse_llm_json(resolution_raw)
-        except json.JSONDecodeError:
+            _resolution_report = parse_llm_json(resolution_raw)
+            if not isinstance(_resolution_report, dict):
+                raise ValueError("Expected a JSON object from LLM, got an array")
+            resolution_report = _resolution_report
+        except (json.JSONDecodeError, ValueError):
             resolution_report = {
                 "character_resolutions": [], "unresolved_characters": [],
                 "resolution_integrity": "unknown", "overall_assessment": "",
@@ -500,8 +506,11 @@ def _run_chapter_generation_internal(
             action="Thematic payoff analysis", json_mode=True,
         )
         try:
-            thematic_report = parse_llm_json(thematic_raw)
-        except json.JSONDecodeError:
+            _thematic_report = parse_llm_json(thematic_raw)
+            if not isinstance(_thematic_report, dict):
+                raise ValueError("Expected a JSON object from LLM, got an array")
+            thematic_report = _thematic_report
+        except (json.JSONDecodeError, ValueError):
             thematic_report = {
                 "theme_payoffs": [], "abandoned_themes": [],
                 "weak_payoffs": [], "thematic_integrity": "unknown",
