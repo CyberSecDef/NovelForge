@@ -213,7 +213,7 @@ def get_session_file_path() -> Path:
     return Path(config.NOVELS_DIR) / f"{session_id}.json"
 
 
-def save_session_state() -> None:
+def save_session_state() -> bool:
     """
     Save current session state and generation progress to disk.
     Called after each significant step to enable crash recovery.
@@ -221,65 +221,77 @@ def save_session_state() -> None:
     The write is serialised against :func:`persist_completed_chapters` via a
     per-session lock so that concurrent background updates cannot be silently
     overwritten by a request-thread save (or vice versa).
+
+    Returns ``True`` on success, ``False`` if the file could not be written
+    due to an OS-level error (e.g. permission denied, disk full).  Programming
+    errors such as missing Flask context or non-serialisable session data
+    propagate immediately so callers cannot silently ignore them.
     """
+    session_id = get_session_id()
+    session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+
+    # Gather all session data
+    state = {
+        "session_id": session_id,
+        "premise": session.get("premise", ""),
+        "genre": session.get("genre", ""),
+        "chapters": session.get("chapters", 0),
+        "word_count": session.get("word_count", 0),
+        "special_events": session.get("special_events", ""),
+        "special_instructions": session.get("special_instructions", ""),
+        "title": session.get("title", ""),
+        "chapter_list": session.get("chapter_list", []),
+        "character_list": session.get("character_list", []),
+        "story_architecture": session.get("story_architecture", {}),
+        "master_timeline": session.get("master_timeline", {}),
+        "character_fate_registry": session.get("character_fate_registry", {}),
+        "character_arc_plan": session.get("character_arc_plan", {}),
+        "antagonist_motivation_plan": session.get("antagonist_motivation_plan", {}),
+        "technology_rules": session.get("technology_rules", {}),
+        "theme_reinforcement": session.get("theme_reinforcement", {}),
+        "pov_focal_character_plan": session.get("pov_focal_character_plan", {}),
+        "progress_token": session.get("progress_token", ""),
+        "completed_chapters": session.get("completed_chapters", []),
+        "illustrations": session.get("illustrations", []),
+        "voice_seed": session.get("voice_seed", {}),
+    }
+
+    # Add progress store data if available
+    token = session.get("progress_token")
+    if token:
+        progress = progress_manager.get(token)
+        if progress is not None:
+            state["progress_data"] = progress
+            # Keep completed_chapters in sync with progress data
+            done = progress.get("chapters_done", [])
+            if done:
+                state["completed_chapters"] = list(done)
+
+    # Validate before writing
+    state = validate_session_state(state)
+
     try:
-        session_id = get_session_id()
-        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
-
-        # Gather all session data
-        state = {
-            "session_id": session_id,
-            "premise": session.get("premise", ""),
-            "genre": session.get("genre", ""),
-            "chapters": session.get("chapters", 0),
-            "word_count": session.get("word_count", 0),
-            "special_events": session.get("special_events", ""),
-            "special_instructions": session.get("special_instructions", ""),
-            "title": session.get("title", ""),
-            "chapter_list": session.get("chapter_list", []),
-            "character_list": session.get("character_list", []),
-            "story_architecture": session.get("story_architecture", {}),
-            "master_timeline": session.get("master_timeline", {}),
-            "character_fate_registry": session.get("character_fate_registry", {}),
-            "character_arc_plan": session.get("character_arc_plan", {}),
-            "antagonist_motivation_plan": session.get("antagonist_motivation_plan", {}),
-            "technology_rules": session.get("technology_rules", {}),
-            "theme_reinforcement": session.get("theme_reinforcement", {}),
-            "pov_focal_character_plan": session.get("pov_focal_character_plan", {}),
-            "progress_token": session.get("progress_token", ""),
-            "completed_chapters": session.get("completed_chapters", []),
-            "illustrations": session.get("illustrations", []),
-            "voice_seed": session.get("voice_seed", {}),
-        }
-
-        # Add progress store data if available
-        token = session.get("progress_token")
-        if token:
-            progress = progress_manager.get(token)
-            if progress is not None:
-                state["progress_data"] = progress
-                # Keep completed_chapters in sync with progress data
-                done = progress.get("chapters_done", [])
-                if done:
-                    state["completed_chapters"] = list(done)
-
-        # Validate before writing
-        state = validate_session_state(state)
-
         # Serialise writes to this session file against concurrent background
         # updates so that a last-writer-wins overwrite cannot silently drop
         # completed chapters or progress data.
         with _get_session_lock(session_id):
             _atomic_write(session_file, json.dumps(state, indent=2))
-        logger.info(f"Saved session state to {session_file}")
-    except Exception as e:
-        logger.error(f"Failed to save session state: {e}")
+        logger.info("Saved session state to %s", session_file)
+        return True
+    except OSError as e:
+        logger.error(
+            "Failed to save session state for %s: %s",
+            session_id, e, exc_info=True,
+        )
+        return False
 
 
 def load_session_state() -> dict | None:
     """
     Load session state from disk if it exists.
-    Returns the state dict or None if no saved state exists.
+    Returns the state dict or None if no saved state exists or if the file
+    cannot be read or parsed.  Only :exc:`OSError` and
+    :exc:`json.JSONDecodeError` are caught; programming errors propagate.
     """
     try:
         session_file = get_session_file_path()
@@ -288,10 +300,13 @@ def load_session_state() -> dict | None:
 
         state = json.loads(session_file.read_text(encoding="utf-8"))
         state = validate_session_state(state)
-        logger.info(f"Loaded session state from {session_file}")
+        logger.info("Loaded session state from %s", session_file)
         return state
-    except Exception as e:
-        logger.error(f"Failed to load session state: {e}")
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error(
+            "Failed to load session state: %s",
+            e, exc_info=True,
+        )
         return None
 
 
@@ -445,7 +460,7 @@ def persist_completed_chapters(
     session_id: str,
     chapters_done: list[dict],
     progress_token: str = "",
-) -> None:
+) -> bool:
     """
     Persist completed chapters and progress data to the session JSON file.
 
@@ -453,6 +468,11 @@ def persist_completed_chapters(
     If *progress_token* is provided, the current in-memory progress snapshot
     is written into the ``progress_data`` field so that audit reports,
     status, and chapter data stay in sync on disk.
+
+    Returns ``True`` on success, ``False`` if the session file does not exist
+    or cannot be read/written.  :exc:`ValueError` from an invalid
+    *session_id* propagates immediately (programming error).
+    :exc:`OSError` and :exc:`json.JSONDecodeError` are caught and logged.
     """
     try:
         session_file = resolve_session_path(session_id)
@@ -461,7 +481,7 @@ def persist_completed_chapters(
         # older snapshot read by this background thread (or vice versa).
         with _get_session_lock(session_id):
             if not session_file.exists():
-                return
+                return False
             state = json.loads(session_file.read_text(encoding="utf-8"))
             state["completed_chapters"] = list(chapters_done)
 
@@ -471,18 +491,31 @@ def persist_completed_chapters(
                     state["progress_data"] = progress
 
             _atomic_write(session_file, json.dumps(state, indent=2))
-    except Exception as e:
-        logger.error(f"Failed to persist completed chapters: {e}")
+        return True
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error(
+            "Failed to persist completed chapters for %s: %s",
+            session_id, e, exc_info=True,
+        )
+        return False
 
 
-def clear_session_state() -> None:
+def clear_session_state() -> bool:
     """
     Clear the current session's saved state file.
+
+    Returns ``True`` on success (including when the file did not exist),
+    ``False`` if the file could not be removed due to an OS-level error.
     """
     try:
         session_file = get_session_file_path()
         if session_file.exists():
             session_file.unlink()
-            logger.info(f"Cleared session state file {session_file}")
-    except Exception as e:
-        logger.error(f"Failed to clear session state: {e}")
+            logger.info("Cleared session state file %s", session_file)
+        return True
+    except OSError as e:
+        logger.error(
+            "Failed to clear session state: %s",
+            e, exc_info=True,
+        )
+        return False

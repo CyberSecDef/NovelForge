@@ -1138,3 +1138,206 @@ class TestLoadSessionRouteValidation:
             content_type="application/json",
         )
         assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Failure-path tests for load/save/update operations
+# ---------------------------------------------------------------------------
+
+class TestPersistenceFailurePaths:
+    """Tests for narrowed exception handling and bool return values."""
+
+    # ------------------------------------------------------------------
+    # save_session_state
+    # ------------------------------------------------------------------
+
+    def test_save_returns_true_on_success(self, app):
+        """save_session_state() returns True when the write succeeds."""
+        from novelforge.session.persistence import save_session_state
+
+        with app.test_request_context():
+            import flask
+            flask.session["title"] = "Success Novel"
+            flask.session["genre"] = "Fantasy"
+            flask.session["chapters"] = 3
+            flask.session["word_count"] = 10000
+            result = save_session_state()
+
+        assert result is True
+
+    def test_save_returns_false_on_write_error(self, app, mocker):
+        """save_session_state() returns False when the disk write raises OSError."""
+        from novelforge.session import persistence as pm
+
+        mocker.patch.object(pm, "_atomic_write", side_effect=OSError("disk full"))
+
+        with app.test_request_context():
+            import flask
+            flask.session["title"] = "Write Error Novel"
+            flask.session["genre"] = "Fantasy"
+            flask.session["chapters"] = 3
+            flask.session["word_count"] = 10000
+            result = pm.save_session_state()
+
+        assert result is False
+
+    def test_save_propagates_non_oserror(self, app, mocker):
+        """save_session_state() lets non-OSError exceptions propagate (programming errors)."""
+        from novelforge.session import persistence as pm
+
+        mocker.patch.object(pm, "_atomic_write", side_effect=RuntimeError("unexpected"))
+
+        with app.test_request_context():
+            import flask
+            flask.session["title"] = "Propagate Test"
+            flask.session["genre"] = "Fantasy"
+            flask.session["chapters"] = 3
+            flask.session["word_count"] = 10000
+            with pytest.raises(RuntimeError, match="unexpected"):
+                pm.save_session_state()
+
+    # ------------------------------------------------------------------
+    # load_session_state
+    # ------------------------------------------------------------------
+
+    def test_load_returns_none_for_corrupt_json(self, app, tmp_path):
+        """load_session_state() returns None when the file contains malformed JSON."""
+        import novelforge.config as _config
+        from novelforge.session.persistence import load_session_state
+
+        with app.test_request_context():
+            import flask
+            sid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+            flask.session["session_id"] = sid
+
+            session_file = Path(_config.NOVELS_DIR) / f"{sid}.json"
+            session_file.write_text("{ this is not valid JSON !!!", encoding="utf-8")
+
+            result = load_session_state()
+
+        assert result is None
+
+    def test_load_returns_none_for_unreadable_file(self, app, mocker):
+        """load_session_state() returns None when read_text raises OSError."""
+        from novelforge.session import persistence as pm
+
+        mocker.patch.object(pm.Path, "exists", return_value=True)
+        mocker.patch.object(pm.Path, "read_text", side_effect=OSError("permission denied"))
+
+        with app.test_request_context():
+            import flask
+            flask.session["session_id"] = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+            result = pm.load_session_state()
+
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # persist_completed_chapters
+    # ------------------------------------------------------------------
+
+    def test_persist_returns_true_on_success(self, app):
+        """persist_completed_chapters() returns True when the write succeeds."""
+        from novelforge.session.persistence import (
+            save_session_state, persist_completed_chapters, get_session_id,
+        )
+
+        with app.test_request_context():
+            import flask
+            flask.session["title"] = "Persist True"
+            flask.session["genre"] = "Sci-Fi"
+            flask.session["chapters"] = 2
+            flask.session["word_count"] = 5000
+            save_session_state()
+            session_id = get_session_id()
+
+        result = persist_completed_chapters(session_id, _make_chapters(1))
+        assert result is True
+
+    def test_persist_returns_false_for_missing_file(self):
+        """persist_completed_chapters() returns False when the session file is absent."""
+        from novelforge.session.persistence import persist_completed_chapters
+
+        result = persist_completed_chapters(
+            "00000000-0000-0000-0000-000000000001", _make_chapters(1)
+        )
+        assert result is False
+
+    def test_persist_returns_false_for_corrupt_existing_file(self, app):
+        """persist_completed_chapters() returns False when the existing file is corrupt JSON."""
+        import novelforge.config as _config
+        from novelforge.session.persistence import (
+            save_session_state, persist_completed_chapters, get_session_id,
+        )
+
+        with app.test_request_context():
+            import flask
+            flask.session["title"] = "Corrupt Persist"
+            flask.session["genre"] = "Fantasy"
+            flask.session["chapters"] = 3
+            flask.session["word_count"] = 5000
+            save_session_state()
+            session_id = get_session_id()
+
+        # Overwrite the file with corrupt JSON
+        session_file = Path(_config.NOVELS_DIR) / f"{session_id}.json"
+        session_file.write_text("{ corrupt JSON !!!", encoding="utf-8")
+
+        result = persist_completed_chapters(session_id, _make_chapters(2))
+        assert result is False
+
+    def test_persist_propagates_invalid_session_id(self):
+        """persist_completed_chapters() propagates ValueError for invalid session IDs."""
+        from novelforge.session.persistence import persist_completed_chapters
+
+        with pytest.raises(ValueError):
+            persist_completed_chapters("not-a-valid-uuid", _make_chapters(1))
+
+    # ------------------------------------------------------------------
+    # clear_session_state
+    # ------------------------------------------------------------------
+
+    def test_clear_returns_true_on_success(self, app):
+        """clear_session_state() returns True when the file is removed."""
+        from novelforge.session.persistence import (
+            save_session_state, clear_session_state,
+        )
+
+        with app.test_request_context():
+            import flask
+            flask.session["title"] = "Clear True"
+            flask.session["genre"] = "Fantasy"
+            flask.session["chapters"] = 1
+            flask.session["word_count"] = 1000
+            save_session_state()
+            result = clear_session_state()
+
+        assert result is True
+
+    def test_clear_returns_true_when_file_absent(self, app):
+        """clear_session_state() returns True even when there is nothing to delete."""
+        from novelforge.session.persistence import clear_session_state
+
+        with app.test_request_context():
+            import flask
+            flask.session["session_id"] = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+            result = clear_session_state()
+
+        assert result is True
+
+    def test_clear_returns_false_on_permission_error(self, app, mocker):
+        """clear_session_state() returns False when unlink raises OSError."""
+        from novelforge.session import persistence as pm
+        from novelforge.session.persistence import save_session_state
+
+        with app.test_request_context():
+            import flask
+            flask.session["title"] = "Cannot Clear"
+            flask.session["genre"] = "Fantasy"
+            flask.session["chapters"] = 1
+            flask.session["word_count"] = 1000
+            save_session_state()
+
+            mocker.patch.object(pm.Path, "unlink", side_effect=OSError("permission denied"))
+            result = pm.clear_session_state()
+
+        assert result is False
