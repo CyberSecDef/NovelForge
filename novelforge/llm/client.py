@@ -4,6 +4,7 @@ import html
 import json
 import logging
 import os
+import random
 import threading
 import time
 from typing import Any, cast
@@ -297,6 +298,160 @@ def _sanitize_messages(messages: list[dict]) -> list[dict]:
     return out
 
 
+def _retry_delay(attempt: int) -> float:
+    """Compute retry delay with jitter to prevent thundering herd."""
+    base = RETRY_DELAY * attempt
+    return base * (0.5 + random.random())  # jitter: 50%-150% of base
+
+
+def _build_request(
+    provider: config.ProviderConfig,
+    messages: list[dict],
+    *,
+    action: str,
+    json_mode: bool,
+) -> tuple[dict, dict]:
+    """Build request headers and payload, log the outbound request.
+
+    Returns ``(headers, payload)`` ready for ``requests.post()``.
+    """
+    ascii_messages = _sanitize_messages(messages)
+
+    headers = {
+        "Authorization": f"Bearer {provider.api_key}",
+        "Content-Type": "application/json",
+    }
+    payload: dict = {
+        "model": provider.model,
+        "messages": ascii_messages,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+
+    request_log = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "type": "request",
+        "action": action,
+        "provider": provider.label,
+        "url": provider.url,
+        "headers": {
+            "Authorization": f"Bearer {provider.api_key[:8]}..." if provider.api_key else "None",
+            "Content-Type": "application/json",
+        },
+        "payload": payload,
+    }
+    llm_logger.info(json.dumps(request_log, indent=2))
+
+    return headers, payload
+
+
+def _handle_success(
+    provider: config.ProviderConfig,
+    resp: requests.Response,
+    data: dict,
+    *,
+    action: str,
+    attempt: int,
+    prompt_msg_count: int,
+    prompt_total_chars: int,
+) -> str:
+    """Process a successful LLM response: log, accumulate tokens, check content filter.
+
+    Returns the extracted response content string.
+    Raises ``ContentRejectionError`` if the output was blocked by a content filter.
+    """
+    response_log = {
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "type": "response",
+        "provider": provider.label,
+        "status_code": resp.status_code,
+        "headers": dict(resp.headers),
+        "response": data,
+    }
+    llm_logger.info(json.dumps(response_log, indent=2))
+
+    # Accumulate token usage if available
+    usage = data.get("usage")
+    if usage:
+        if not hasattr(_llm_usage, "prompt_tokens"):
+            _llm_usage.prompt_tokens = 0
+            _llm_usage.completion_tokens = 0
+            _llm_usage.call_count = 0
+        _llm_usage.prompt_tokens += int(usage.get("prompt_tokens", 0))
+        _llm_usage.completion_tokens += int(usage.get("completion_tokens", 0))
+        _llm_usage.call_count += 1
+
+    # Check for output-level content filtering (HTTP 200 but generation blocked)
+    choices = data.get("choices", [])
+    if choices:
+        finish_reason = choices[0].get("finish_reason", "")
+        if finish_reason == "content_filter":
+            body_preview = json.dumps(data, indent=2)[:2000]
+            _log_llm_error(
+                action=action, attempt=attempt, status_code=resp.status_code,
+                response_headers=dict(resp.headers), response_body=body_preview,
+                error_type="content_filter_output",
+                error_message="LLM output blocked by content filter (finish_reason=content_filter)",
+                url=provider.url, model=provider.model,
+                prompt_messages_count=prompt_msg_count,
+                prompt_total_chars=prompt_total_chars,
+            )
+            raise ContentRejectionError(
+                f"LLM output blocked by content filter on {provider.label} "
+                f"(finish_reason=content_filter). Response: {body_preview}",
+                status_code=resp.status_code, response_body=body_preview,
+            )
+
+    return _to_ascii(data["choices"][0]["message"]["content"])
+
+
+def _classify_request_error(
+    exc: requests.exceptions.RequestException,
+    provider: config.ProviderConfig,
+    *,
+    action: str,
+    attempt: int,
+    prompt_msg_count: int,
+    prompt_total_chars: int,
+) -> RuntimeError | ContentRejectionError:
+    """Classify a RequestException and return the appropriate typed error to raise.
+
+    Logs the error details.  The caller is responsible for recording circuit
+    breaker failures.
+    """
+    exc_resp = getattr(exc, "response", None)
+    status = getattr(exc_resp, "status_code", None)
+    resp_headers = dict(exc_resp.headers) if exc_resp is not None and hasattr(exc_resp, "headers") else None
+    resp_body = _safe_response_body(exc_resp) if exc_resp is not None else None
+
+    _log_llm_error(
+        action=action, attempt=attempt, status_code=status,
+        response_headers=resp_headers, response_body=resp_body,
+        error_type=type(exc).__name__, error_message=str(exc),
+        url=provider.url, model=provider.model,
+        prompt_messages_count=prompt_msg_count,
+        prompt_total_chars=prompt_total_chars,
+        exception_chain=_format_exception_chain(exc),
+    )
+
+    if _is_content_rejection(status, resp_body):
+        return ContentRejectionError(
+            f"LLM request rejected by content policy on {provider.label} "
+            f"(HTTP {status}). Response: {resp_body}",
+            status_code=status, response_body=resp_body,
+        )
+
+    if status in (401, 403):
+        err = f"LLM_AUTH_FAILURE: API key rejected on {provider.label}. Check your LLM_API_KEY setting."
+    elif status == 400:
+        err = f"LLM_BAD_REQUEST: {provider.label} rejected the request. The prompt may be too long or contain unsupported content."
+    elif status == 404:
+        err = f"LLM_ENDPOINT_NOT_FOUND: Endpoint not found on {provider.label}. Check your LLM_API_URL setting."
+    else:
+        err = f"LLM_REQUEST_FAILED: {provider.label}: {exc}"
+    return RuntimeError(err)
+
+
 def _call_single_provider(
     provider: config.ProviderConfig,
     provider_idx: int,
@@ -315,35 +470,9 @@ def _call_single_provider(
     breaker = _get_circuit_breaker(provider_idx)
     breaker.check()
 
-    # Transliterate all outbound message content to ASCII
-    ascii_messages = _sanitize_messages(messages)
-
-    headers = {
-        "Authorization": f"Bearer {provider.api_key}",
-        "Content-Type": "application/json",
-    }
-    payload: dict = {
-        "model": provider.model,
-        "messages": ascii_messages,
-    }
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
-
-    # Log the request (sanitize API key)
-    request_log = {
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "type": "request",
-        "action": action,
-        "provider": provider.label,
-        "url": provider.url,
-        "headers": {
-            "Authorization": f"Bearer {provider.api_key[:8]}..." if provider.api_key else "None",
-            "Content-Type": "application/json",
-        },
-        "payload": payload,
-    }
-    llm_logger.info(json.dumps(request_log, indent=2))
-
+    headers, payload = _build_request(
+        provider, messages, action=action, json_mode=json_mode,
+    )
     prompt_msg_count = len(messages)
     prompt_total_chars = sum(len(str(m.get("content", ""))) for m in messages)
 
@@ -355,10 +484,12 @@ def _call_single_provider(
                 json=payload,
                 timeout=config.LLM_TIMEOUT,
             )
+
+            # Retryable server errors
             if resp.status_code == 429 or resp.status_code >= 500:
-                wait = RETRY_DELAY * attempt
+                wait = _retry_delay(attempt)
                 logger.warning(
-                    "LLM API [%s] returned %s – retry %d/%d in %ds",
+                    "LLM API [%s] returned %s – retry %d/%d in %.1fs",
                     provider.label, resp.status_code, attempt, MAX_RETRIES, wait,
                 )
                 _log_llm_error(
@@ -371,55 +502,19 @@ def _call_single_provider(
                 )
                 time.sleep(wait)
                 continue
+
             resp.raise_for_status()
             data = resp.json()
 
-            # Log the response
-            response_log = {
-                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "type": "response",
-                "provider": provider.label,
-                "status_code": resp.status_code,
-                "headers": dict(resp.headers),
-                "response": data,
-            }
-            llm_logger.info(json.dumps(response_log, indent=2))
-
-            # Accumulate token usage if available
-            usage = data.get("usage")
-            if usage:
-                if not hasattr(_llm_usage, "prompt_tokens"):
-                    _llm_usage.prompt_tokens = 0
-                    _llm_usage.completion_tokens = 0
-                    _llm_usage.call_count = 0
-                _llm_usage.prompt_tokens += int(usage.get("prompt_tokens", 0))
-                _llm_usage.completion_tokens += int(usage.get("completion_tokens", 0))
-                _llm_usage.call_count += 1
-
-            # Check for output-level content filtering (HTTP 200 but generation blocked)
-            choices = data.get("choices", [])
-            if choices:
-                finish_reason = choices[0].get("finish_reason", "")
-                if finish_reason == "content_filter":
-                    body_preview = json.dumps(data, indent=2)[:2000]
-                    _log_llm_error(
-                        action=action, attempt=attempt, status_code=resp.status_code,
-                        response_headers=dict(resp.headers), response_body=body_preview,
-                        error_type="content_filter_output",
-                        error_message="LLM output blocked by content filter (finish_reason=content_filter)",
-                        url=provider.url, model=provider.model,
-                        prompt_messages_count=prompt_msg_count,
-                        prompt_total_chars=prompt_total_chars,
-                    )
-                    raise ContentRejectionError(
-                        f"LLM output blocked by content filter on {provider.label} "
-                        f"(finish_reason=content_filter). Response: {body_preview}",
-                        status_code=resp.status_code, response_body=body_preview,
-                    )
-
+            content = _handle_success(
+                provider, resp, data,
+                action=action, attempt=attempt,
+                prompt_msg_count=prompt_msg_count,
+                prompt_total_chars=prompt_total_chars,
+            )
             breaker.record_success()
-            # Transliterate response content to ASCII before returning
-            return _to_ascii(data["choices"][0]["message"]["content"])
+            return content
+
         except requests.exceptions.Timeout:
             logger.warning(
                 "LLM request timed out [%s] (attempt %d/%d)",
@@ -441,41 +536,17 @@ def _call_single_provider(
                 )
                 breaker.record_failure(err)
                 raise RuntimeError(err)
-            time.sleep(RETRY_DELAY * attempt)
+            time.sleep(_retry_delay(attempt))
+
         except requests.exceptions.RequestException as exc:
-            exc_resp = getattr(exc, "response", None)
-            status = getattr(exc_resp, "status_code", None)
-            resp_headers = dict(exc_resp.headers) if exc_resp is not None and hasattr(exc_resp, "headers") else None
-            resp_body = _safe_response_body(exc_resp) if exc_resp is not None else None
-
-            _log_llm_error(
-                action=action, attempt=attempt, status_code=status,
-                response_headers=resp_headers, response_body=resp_body,
-                error_type=type(exc).__name__, error_message=str(exc),
-                url=provider.url, model=provider.model,
-                prompt_messages_count=prompt_msg_count,
+            typed_error = _classify_request_error(
+                exc, provider,
+                action=action, attempt=attempt,
+                prompt_msg_count=prompt_msg_count,
                 prompt_total_chars=prompt_total_chars,
-                exception_chain=_format_exception_chain(exc),
             )
-
-            # Content rejection is NOT retryable via provider fallback — re-raise immediately
-            if _is_content_rejection(status, resp_body):
-                raise ContentRejectionError(
-                    f"LLM request rejected by content policy on {provider.label} "
-                    f"(HTTP {status}). Response: {resp_body}",
-                    status_code=status, response_body=resp_body,
-                ) from exc
-
-            if status in (401, 403):
-                err = f"LLM_AUTH_FAILURE: API key rejected on {provider.label}. Check your LLM_API_KEY setting."
-            elif status == 400:
-                err = f"LLM_BAD_REQUEST: {provider.label} rejected the request. The prompt may be too long or contain unsupported content."
-            elif status == 404:
-                err = f"LLM_ENDPOINT_NOT_FOUND: Endpoint not found on {provider.label}. Check your LLM_API_URL setting."
-            else:
-                err = f"LLM_REQUEST_FAILED: {provider.label}: {exc}"
-            breaker.record_failure(err)
-            raise RuntimeError(err) from exc
+            breaker.record_failure(str(typed_error))
+            raise typed_error from exc
 
     # All retries exhausted (rate-limited)
     err = (

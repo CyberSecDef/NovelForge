@@ -511,7 +511,7 @@ at the type level.
 
 ---
 
-### 12. `_call_single_provider()` Is 186 Lines with Deep Nesting — OPEN
+### 12. ~~`_call_single_provider()` Is 186 Lines with Deep Nesting~~ DONE
 
 **Files:** `novelforge/llm/client.py` lines 300-486
 
