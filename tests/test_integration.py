@@ -752,20 +752,20 @@ class TestLLMLog:
         assert "entries" in data
         assert isinstance(data["entries"], list)
 
-    def test_llm_log_blocked_in_production(self, client):
-        """Without debug mode, /llm_log should return 404."""
+    def test_llm_log_available(self, client):
+        """The /llm_log endpoint should be accessible regardless of debug mode."""
         r = client.get("/llm_log")
-        assert r.status_code == 404
+        assert r.status_code == 200
 
     def test_clear_log(self, debug_client):
         r = debug_client.post("/clear_log")
         assert r.status_code == 200
         assert r.get_json()["status"] == "ok"
 
-    def test_clear_log_blocked_in_production(self, client):
-        """Without debug mode, /clear_log should return 404."""
+    def test_clear_log_available(self, client):
+        """The /clear_log endpoint should be accessible regardless of debug mode."""
         r = client.post("/clear_log")
-        assert r.status_code == 404
+        assert r.status_code == 200
 
 
 class TestNovelforgeDebugEnvVar:
@@ -798,10 +798,10 @@ class TestNovelforgeDebugEnvVar:
                 f"Expected False for NOVELFORGE_DEBUG={value!r}"
             )
 
-    def test_debug_routes_unavailable_without_debug_mode(self, client):
-        """Debug routes return 404 when the app is not in debug mode."""
-        assert client.get("/llm_log").status_code == 404
-        assert client.post("/clear_log").status_code == 404
+    def test_log_routes_available_without_debug_mode(self, client):
+        """Log routes are accessible regardless of debug mode (local-only app)."""
+        assert client.get("/llm_log").status_code == 200
+        assert client.post("/clear_log").status_code == 200
 
 
 class TestCircuitBreaker:

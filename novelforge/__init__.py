@@ -161,7 +161,7 @@ def create_app(*, testing: bool = False) -> Flask:
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "font-src 'self' https://cdn.jsdelivr.net; "
             "img-src 'self' data:; "
-            "connect-src 'self'"
+            "connect-src 'self' https://cdn.jsdelivr.net"
         )
 
         return response
@@ -228,10 +228,7 @@ def create_app(*, testing: bool = False) -> Flask:
 
     @app.route("/llm_log")
     def get_llm_log() -> Response:
-        """Return recent LLM log entries for the chat display. Debug mode only."""
-        if not app.debug:
-            from flask import abort
-            abort(404)
+        """Return recent LLM log entries for the chat display."""
         log_path = Path(config.LOGS_DIR) / "llm.log"
 
         if not log_path.exists():
@@ -277,10 +274,7 @@ def create_app(*, testing: bool = False) -> Flask:
 
     @app.route("/clear_log", methods=["POST"])
     def clear_log() -> Response | tuple[Response, int]:
-        """Clear the LLM log file. Debug mode only."""
-        if not app.debug:
-            from flask import abort
-            abort(404)
+        """Clear the LLM log file."""
         log_path = Path(config.LOGS_DIR) / "llm.log"
         try:
             log_path.write_text("", encoding="utf-8")
