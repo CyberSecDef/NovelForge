@@ -437,7 +437,10 @@ def _run_chapter_generation_internal(
             action="Global continuity audit", json_mode=True,
         )
         try:
-            global_audit = parse_llm_json(audit_raw)
+            _global_audit = parse_llm_json(audit_raw)
+            if not isinstance(_global_audit, dict):
+                raise json.JSONDecodeError("Expected a JSON object from LLM", audit_raw, 0)
+            global_audit = _global_audit
         except json.JSONDecodeError:
             global_audit = {
                 "contradictions": [], "character_state_errors": [],
@@ -481,7 +484,10 @@ def _run_chapter_generation_internal(
             action="Character resolution validation", json_mode=True,
         )
         try:
-            resolution_report = parse_llm_json(resolution_raw)
+            _resolution_report = parse_llm_json(resolution_raw)
+            if not isinstance(_resolution_report, dict):
+                raise json.JSONDecodeError("Expected a JSON object from LLM", resolution_raw, 0)
+            resolution_report = _resolution_report
         except json.JSONDecodeError:
             resolution_report = {
                 "character_resolutions": [], "unresolved_characters": [],
@@ -500,7 +506,10 @@ def _run_chapter_generation_internal(
             action="Thematic payoff analysis", json_mode=True,
         )
         try:
-            thematic_report = parse_llm_json(thematic_raw)
+            _thematic_report = parse_llm_json(thematic_raw)
+            if not isinstance(_thematic_report, dict):
+                raise json.JSONDecodeError("Expected a JSON object from LLM", thematic_raw, 0)
+            thematic_report = _thematic_report
         except json.JSONDecodeError:
             thematic_report = {
                 "theme_payoffs": [], "abandoned_themes": [],

@@ -95,6 +95,10 @@ class BaseAgent(ABC):
             messages = self.build_prompt(**ctx)
             raw = call_llm(messages, action=self.prompt_action, json_mode=True)
             parsed = parse_llm_json(raw)
+            if not isinstance(parsed, dict):
+                raise ValueError(
+                    f"LLM returned a JSON array instead of an object for {self.name}"
+                )
             result = self.normalise(parsed, **ctx)
             result[PLANNING_SOURCE_KEY] = "llm"
             return result

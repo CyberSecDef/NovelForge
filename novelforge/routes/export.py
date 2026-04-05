@@ -629,7 +629,7 @@ def _run_illustration_generation(
 
         assert raw is not None  # guaranteed: final attempt raises if it fails
         prompt_data = parse_llm_json(raw)
-        illustrations_spec = prompt_data.get("illustrations", [])
+        illustrations_spec = prompt_data.get("illustrations", []) if isinstance(prompt_data, dict) else []
 
         if not isinstance(illustrations_spec, list) or not illustrations_spec:
             progress_manager.update(illust_token, {
