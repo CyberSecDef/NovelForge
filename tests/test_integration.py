@@ -321,6 +321,113 @@ class TestGenerateChapters:
         assert r.status_code == 404
 
 
+class TestGenerationStatusOrdering:
+    """status='done' must not be set until every post-manuscript pass has finished."""
+
+    _POST_MANUSCRIPT_STEPS = {
+        "Narrative compression analysis",
+        "Character resolution validation",
+        "Thematic payoff analysis",
+        "Climax integrity check",
+        "Loose thread resolution",
+        "Reader immersion testing",
+        "Pacing & tension heatmap",
+        "Mapping character relationships",
+    }
+
+    def _seed_snap(self):
+        return {
+            "title": "Test Novel",
+            "genre": "Fantasy",
+            "chapters": 1,
+            "word_count": 3000,
+            "special_instructions": "",
+            "premise": "A hero sets out on a quest",
+            "chapter_list": [{"number": 1, "title": "Ch1", "summary": "Setup"}],
+            "character_list": [],
+            "story_architecture": {},
+            "master_timeline": {},
+            "character_fate_registry": {},
+            "character_arc_plan": {},
+            "antagonist_motivation_plan": {},
+            "technology_rules": {},
+            "theme_reinforcement": {},
+            "pov_focal_character_plan": {},
+            "narrative_perspective": "third_person",
+            "voice_seed": {},
+        }
+
+    def test_done_only_set_after_all_post_manuscript_passes(self, mock_llm, monkeypatch, tmp_path):
+        """
+        status='done' must only be written to the progress store after
+        character_relationship_map (the last post-manuscript pass) has been
+        populated.  It must remain 'running' for every intermediate step.
+        """
+        import novelforge.config as config
+        import novelforge.routes.generation as gen_mod
+        from novelforge.routes.generation import _run_chapter_generation_internal
+        from novelforge.progress import progress_manager
+
+        monkeypatch.setattr(config, "NOVELS_DIR", str(tmp_path))
+
+        token = "test-status-ordering"
+        progress_manager.create(token, {
+            "status": "running", "current": 0, "total": 1,
+            "step": "Preparing…", "chapters_done": [], "error": None,
+        })
+
+        # Spy: record status when step is set to each post-manuscript step,
+        # and record whether character_relationship_map was already present when
+        # status='done' was first written.
+        statuses_at_post_pass = {}
+        done_set_while_map_present: list[bool] = []
+
+        original_update = type(progress_manager).update
+
+        def spy_update(self_pm, tok, patch):
+            original_update(self_pm, tok, patch)
+            if tok != token:
+                return
+            if "step" in patch and patch["step"] in TestGenerationStatusOrdering._POST_MANUSCRIPT_STEPS:
+                state = progress_manager.get(tok)
+                statuses_at_post_pass[patch["step"]] = state.get("status")
+            if patch.get("status") == "done":
+                state = progress_manager.get(tok)
+                done_set_while_map_present.append(
+                    state.get("character_relationship_map") is not None
+                )
+
+        monkeypatch.setattr(type(progress_manager), "update", spy_update)
+
+        _run_chapter_generation_internal(token, self._seed_snap(), [], [], 0)
+
+        # Pipeline must finish as 'done'
+        final = progress_manager.get(token)
+        assert final is not None
+        assert final["status"] == "done", (
+            f"Expected final status='done', got {final['status']!r}"
+        )
+
+        # status='done' must have been set exactly once, after the relationship map
+        assert len(done_set_while_map_present) == 1, (
+            f"Expected status='done' to be set exactly once, "
+            f"but it was set {len(done_set_while_map_present)} time(s)"
+        )
+        assert done_set_while_map_present[0] is True, (
+            "status='done' was set before character_relationship_map was populated"
+        )
+
+        # Every post-manuscript step must have seen status='running'
+        assert len(statuses_at_post_pass) == len(self._POST_MANUSCRIPT_STEPS), (
+            f"Not all post-manuscript steps were visited; "
+            f"missing: {self._POST_MANUSCRIPT_STEPS - set(statuses_at_post_pass)}"
+        )
+        for step_name, status in statuses_at_post_pass.items():
+            assert status == "running", (
+                f"Expected status='running' at start of '{step_name}', got {status!r}"
+            )
+
+
 class TestReviseChapter:
     """Chapter revision with mocked LLM."""
 
