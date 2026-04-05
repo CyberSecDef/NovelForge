@@ -37,6 +37,9 @@ def build_perspective_prompt(narrative_perspective: str) -> str:
         )
     if narrative_perspective.startswith("first_person:"):
         pov_name = narrative_perspective[len("first_person:"):].strip()
+        if not pov_name:
+            # Malformed perspective value — fall back to third person
+            return build_perspective_prompt("third_person")
         return (
             f"NARRATIVE PERSPECTIVE: Write this chapter in FIRST PERSON narration "
             f"from the perspective of {pov_name}. Use \"I/me/my\" pronouns for {pov_name}. "

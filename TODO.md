@@ -372,7 +372,7 @@ status inside `progress_manager` with the lock held.
 
 ---
 
-### 9. Empty First-Person Perspective Name Edge Case — OPEN
+### 9. ~~Empty First-Person Perspective Name Edge Case~~ DONE
 
 **Files:** `novelforge/routes/outline.py` lines 230-234,
 `novelforge/agents/chapter/context.py` lines 40-50

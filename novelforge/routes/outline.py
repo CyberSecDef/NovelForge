@@ -230,7 +230,10 @@ def approve_outline() -> Response | tuple[Response, int]:
         cur_persp = session.get("narrative_perspective", "third_person")
         if cur_persp.startswith("first_person:"):
             cur_pov_name = cur_persp[len("first_person:"):].strip()
-            if cur_pov_name in rename_map:
+            if not cur_pov_name:
+                # Malformed — reset to third person
+                working["narrative_perspective"] = "third_person"
+            elif cur_pov_name in rename_map:
                 working["narrative_perspective"] = f"first_person:{rename_map[cur_pov_name]}"
 
     # Validate narrative perspective and store in working copy
@@ -239,12 +242,15 @@ def approve_outline() -> Response | tuple[Response, int]:
         narrative_perspective = "third_person"
     if narrative_perspective.startswith("first_person:"):
         pov_char_name = narrative_perspective[len("first_person:"):].strip()
-        if len(pov_char_name) > 100:
-            return jsonify({"error": "Perspective character name too long."}), 400
-        # Verify the character exists in the list
-        char_names = [str(c.get("name", "")).strip() for c in new_characters]
-        if pov_char_name not in char_names:
+        if not pov_char_name:
             narrative_perspective = "third_person"
+        elif len(pov_char_name) > 100:
+            return jsonify({"error": "Perspective character name too long."}), 400
+        else:
+            # Verify the character exists in the list
+            char_names = [str(c.get("name", "")).strip() for c in new_characters]
+            if pov_char_name not in char_names:
+                narrative_perspective = "third_person"
 
     working["title"] = sanitise_str(title)
     working["chapter_list"] = sanitised_chapters
