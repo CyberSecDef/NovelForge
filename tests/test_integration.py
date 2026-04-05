@@ -614,7 +614,7 @@ class TestNovelforgeDebugEnvVar:
 class TestCircuitBreaker:
     """Verify circuit breaker integration with mock."""
 
-    def test_circuit_breaker_resets_on_generation(self, client, mock_llm):
+    def test_circuit_breaker_trip_and_manual_reset(self, client, mock_llm):
         from novelforge.llm.client import _llm_circuit_breaker
         # Trip the breaker manually
         _llm_circuit_breaker.record_failure("test1")
@@ -622,8 +622,58 @@ class TestCircuitBreaker:
         _llm_circuit_breaker.record_failure("test3")
         assert _llm_circuit_breaker.is_tripped
 
-        # Starting generation should reset it (via _run_chapter_generation_internal)
-        # We can't easily test the full background thread, but we can verify
-        # the breaker state after reset
+        # The breaker must be reset explicitly (e.g. by the test fixture) —
+        # generation workers must NOT reset it globally.
         _llm_circuit_breaker.reset()
         assert not _llm_circuit_breaker.is_tripped
+
+    def test_circuit_breaker_not_reset_by_generation_start(self, client, mock_llm):
+        """Generation workers must not reset the process-level circuit breaker.
+
+        Resetting a shared breaker from a background thread would clear state
+        that other concurrent requests may rely on.  The breaker should remain
+        tripped after generation starts.
+        """
+        import novelforge.routes.generation as gen_mod
+        from novelforge.llm.client import _llm_circuit_breaker
+
+        # Trip the primary provider breaker manually
+        _llm_circuit_breaker.record_failure("trip1")
+        _llm_circuit_breaker.record_failure("trip2")
+        _llm_circuit_breaker.record_failure("trip3")
+        assert _llm_circuit_breaker.is_tripped
+
+        # Patch Thread so the background worker never actually runs
+        monkeypatch_thread = type(
+            "FakeThread", (), {"start": lambda s: None, "daemon": True}
+        )()
+        original_thread = gen_mod.threading.Thread
+        gen_mod.threading.Thread = lambda *a, **kw: monkeypatch_thread
+
+        try:
+            with client.session_transaction() as sess:
+                sess["premise"] = "A test"
+                sess["genre"] = "Fantasy"
+                sess["chapters"] = 2
+                sess["word_count"] = 5000
+                sess["title"] = "Test"
+                sess["chapter_list"] = [
+                    {"number": 1, "title": "Ch1", "summary": "S1"},
+                    {"number": 2, "title": "Ch2", "summary": "S2"},
+                ]
+                sess["character_list"] = []
+                sess["special_instructions"] = ""
+                sess["story_architecture"] = {}
+                sess["master_timeline"] = {}
+                sess["character_fate_registry"] = {}
+                sess["character_arc_plan"] = {}
+                sess["antagonist_motivation_plan"] = {}
+                sess["technology_rules"] = {}
+                sess["theme_reinforcement"] = {}
+                sess["pov_focal_character_plan"] = {}
+            client.post("/generate_chapters", data="{}", content_type="application/json")
+        finally:
+            gen_mod.threading.Thread = original_thread
+
+        # Breaker must still be tripped — generation start must not reset it
+        assert _llm_circuit_breaker.is_tripped
