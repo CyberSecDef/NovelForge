@@ -1,5 +1,6 @@
 """Chapter revision endpoint."""
 
+import copy
 import json
 import logging
 import time
@@ -63,7 +64,7 @@ def revise_chapter() -> Response | tuple[Response, int]:
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
 
-    chapters_done = list(progress_data.get("chapters_done", []))
+    chapters_done = copy.deepcopy(progress_data.get("chapters_done", []))
     if not chapters_done:
         return jsonify({"error": "No generated chapters found."}), 400
 

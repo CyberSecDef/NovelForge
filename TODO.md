@@ -194,7 +194,7 @@ an appropriate HTTP error response (504 Gateway Timeout).
 
 ---
 
-### 5. CLAUDE.md Documentation Out of Date — OPEN
+### 5. ~~CLAUDE.md Documentation Out of Date~~ DONE
 
 **Files:** `CLAUDE.md` lines 30-46 (Package Structure section)
 
@@ -251,7 +251,7 @@ Update the Package Structure section to reflect the current layout. Also update:
 
 ## Medium Priority
 
-### 6. Shallow Copy of `chapters_done` in Revision Endpoint — OPEN
+### 6. ~~Shallow Copy of `chapters_done` in Revision Endpoint~~ DONE
 
 **Files:** `novelforge/routes/generation/revision.py` line 65
 

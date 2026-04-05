@@ -107,10 +107,30 @@ class ProgressManager:
             self._store[token] = dict(initial_state)  # type: ignore[assignment]
 
     def get(self, token: str) -> ProgressState | None:
-        """Return a shallow copy of the progress state, or *None* if unknown."""
+        """Return a shallow copy of the progress state, or *None* if unknown.
+
+        .. warning::
+
+           Nested structures (lists, dicts) are shared references.  Callers
+           that need to **mutate** nested data (e.g. updating a chapter inside
+           ``chapters_done``) must use :meth:`get_deep_copy` instead, or the
+           internal store will be corrupted.
+        """
         with self._lock:
             data = self._store.get(token)
             return dict(data) if data is not None else None  # type: ignore[return-value]
+
+    def get_deep_copy(self, token: str) -> ProgressState | None:
+        """Return a deep copy of the progress state, or *None* if unknown.
+
+        Use this when the caller needs to mutate nested structures (e.g.
+        modifying chapter content during revision) without affecting the
+        internal store.
+        """
+        import copy
+        with self._lock:
+            data = self._store.get(token)
+            return copy.deepcopy(data) if data is not None else None  # type: ignore[return-value]
 
     def update(self, token: str, patch: dict[str, Any]) -> None:
         """Atomically apply *patch* fields to an existing entry.
