@@ -338,9 +338,11 @@ class TestRoutes:
                 return '{"issues": ["Issue after revision"], "overall_assessment": "Revised consistency"}'
             return "Updated chapter content"
 
-        monkeypatch.setattr("novelforge.llm.client.call_llm", fake_call_llm)
-        monkeypatch.setattr("novelforge.agents.chapter.call_llm", fake_call_llm)
-        monkeypatch.setattr("novelforge.routes.generation.call_llm", fake_call_llm)
+        for mod in ("novelforge.llm.client", "novelforge.agents.chapter",
+                     "novelforge.agents.chapter._helpers", "novelforge.agents.chapter.pipeline",
+                     "novelforge.routes.generation", "novelforge.routes.generation.chapters",
+                     "novelforge.routes.generation.revision", "novelforge.routes.generation.audits"):
+            monkeypatch.setattr(f"{mod}.call_llm", fake_call_llm)
 
         r = client.post(
             "/revise_chapter",
@@ -420,9 +422,11 @@ class TestRoutes:
                 return '{"issues": [], "overall_assessment": "ok"}'
             return "Revised chapter content"
 
-        monkeypatch.setattr("novelforge.llm.client.call_llm", fake_call_llm)
-        monkeypatch.setattr("novelforge.agents.chapter.call_llm", fake_call_llm)
-        monkeypatch.setattr("novelforge.routes.generation.call_llm", fake_call_llm)
+        for mod in ("novelforge.llm.client", "novelforge.agents.chapter",
+                     "novelforge.agents.chapter._helpers", "novelforge.agents.chapter.pipeline",
+                     "novelforge.routes.generation", "novelforge.routes.generation.chapters",
+                     "novelforge.routes.generation.revision", "novelforge.routes.generation.audits"):
+            monkeypatch.setattr(f"{mod}.call_llm", fake_call_llm)
 
         r = client.post(
             "/revise_chapter",
@@ -570,8 +574,8 @@ class TestPromptBuilders:
     def test_progress_token_includes_step(self, client, monkeypatch):
         """After /generate_chapters, the initial progress record should include 'step'."""
         # Prevent background thread from spawning — only test initial progress state
-        import novelforge.routes.generation as gen_mod
-        monkeypatch.setattr(gen_mod.threading, "Thread",
+        import novelforge.routes.generation.chapters as gen_chapters
+        monkeypatch.setattr(gen_chapters.threading, "Thread",
                             lambda *a, **kw: type("FakeThread", (), {"start": lambda s: None, "daemon": True})())
 
         with client.session_transaction() as sess:
@@ -936,11 +940,13 @@ class TestContinuityGatekeeper:
 
     def test_run_continuity_gatekeeper_returns_empty_on_failure(self, monkeypatch):
         import novelforge.agents.chapter as chapter_agents
+        import novelforge.agents.chapter.pipeline as chapter_pipeline
 
         def _boom(*args, **kwargs):
             raise RuntimeError("llm failed")
 
         monkeypatch.setattr(chapter_agents, "call_llm", _boom)
+        monkeypatch.setattr(chapter_pipeline, "call_llm", _boom)
 
         result = chapter_agents.run_continuity_gatekeeper(
             chapter_num=2,

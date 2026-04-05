@@ -18,6 +18,7 @@ import time
 import pytest
 
 import novelforge.config as config
+from novelforge.llm.client import ContentRejectionError
 from novelforge.progress import progress_manager
 from novelforge.routes.generation import _PROGRESS_PERSIST_INTERVAL
 
@@ -297,7 +298,7 @@ class TestForceWriteOnTerminalStates:
         _create_progress(token)
         snap = _seed_snap()
 
-        mocker.patch("novelforge.routes.generation.call_llm", side_effect=RuntimeError("boom"))
+        mocker.patch("novelforge.routes.generation.chapters.call_llm", side_effect=RuntimeError("boom"))
 
         written = self._collect_final_snapshot(monkeypatch, tmp_path, token)
         _run_chapter_generation_internal(token, snap, [], [], 0)
@@ -312,7 +313,6 @@ class TestForceWriteOnTerminalStates:
         """A forced persist occurs for ContentRejectionError."""
         monkeypatch.setattr(config, "NOVELS_DIR", str(tmp_path))
         from novelforge.routes.generation import _run_chapter_generation_internal
-        import novelforge.routes.generation as gen_mod
 
         token = "test-content-rejection"
         _create_progress(token)
@@ -326,8 +326,8 @@ class TestForceWriteOnTerminalStates:
         # namespace) so the raised instance matches what generation.py's except
         # clauses check, regardless of any module-reload in other tests.
         mocker.patch(
-            "novelforge.routes.generation.call_llm",
-            side_effect=gen_mod.ContentRejectionError("policy"),
+            "novelforge.routes.generation.chapters.call_llm",
+            side_effect=ContentRejectionError("policy"),
         )
 
         written = self._collect_final_snapshot(monkeypatch, tmp_path, token)
@@ -350,7 +350,7 @@ class TestForceWriteOnTerminalStates:
         snap = _seed_snap()
 
         mocker.patch(
-            "novelforge.routes.generation.call_llm",
+            "novelforge.routes.generation.chapters.call_llm",
             side_effect=CircuitBreakerError("cb"),
         )
 
@@ -374,7 +374,7 @@ class TestForceWriteOnTerminalStates:
         snap = _seed_snap()
 
         mocker.patch(
-            "novelforge.routes.generation.call_llm",
+            "novelforge.routes.generation.chapters.call_llm",
             side_effect=AllProvidersExhaustedError("all"),
         )
 

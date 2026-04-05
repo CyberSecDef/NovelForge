@@ -250,9 +250,14 @@ def mock_llm(mocker):
     for module in (
         "novelforge.agents.base",
         "novelforge.agents.chapter",
+        "novelforge.agents.chapter._helpers",
+        "novelforge.agents.chapter.pipeline",
         "novelforge.agents.planning",
         "novelforge.routes.outline",
         "novelforge.routes.generation",
+        "novelforge.routes.generation.chapters",
+        "novelforge.routes.generation.revision",
+        "novelforge.routes.generation.audits",
         "novelforge.routes.export",
     ):
         mocker.patch(f"{module}.call_llm", side_effect=_canned_llm_response)
