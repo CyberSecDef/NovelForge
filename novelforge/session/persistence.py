@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import tempfile
+import threading
 import uuid
 from pathlib import Path
 
@@ -40,6 +41,29 @@ def _atomic_write(filepath: Path, content: str) -> None:
         except OSError:
             pass
         raise
+
+# ---------------------------------------------------------------------------
+# Per-session persistence lock
+# ---------------------------------------------------------------------------
+
+# One lock per session ID.  Serialises concurrent read-modify-write cycles on
+# the same session file so that last-writer-wins overwrites cannot silently
+# drop chapters or progress data written by the other side.
+_session_locks: dict[str, threading.Lock] = {}
+_session_locks_lock = threading.Lock()  # protects _session_locks itself
+
+
+def _get_session_lock(session_id: str) -> threading.Lock:
+    """Return the per-session :class:`threading.Lock` for *session_id*.
+
+    Creates a new lock on first access.  The registry lock ensures that two
+    threads racing to create the same entry always receive the same object.
+    """
+    with _session_locks_lock:
+        if session_id not in _session_locks:
+            _session_locks[session_id] = threading.Lock()
+        return _session_locks[session_id]
+
 
 # ---------------------------------------------------------------------------
 # Session ID validation and safe path resolution
@@ -193,13 +217,18 @@ def save_session_state() -> None:
     """
     Save current session state and generation progress to disk.
     Called after each significant step to enable crash recovery.
+
+    The write is serialised against :func:`persist_completed_chapters` via a
+    per-session lock so that concurrent background updates cannot be silently
+    overwritten by a request-thread save (or vice versa).
     """
     try:
-        session_file = get_session_file_path()
+        session_id = get_session_id()
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
 
         # Gather all session data
         state = {
-            "session_id": get_session_id(),
+            "session_id": session_id,
             "premise": session.get("premise", ""),
             "genre": session.get("genre", ""),
             "chapters": session.get("chapters", 0),
@@ -237,8 +266,11 @@ def save_session_state() -> None:
         # Validate before writing
         state = validate_session_state(state)
 
-        # Write atomically (temp file + rename) to prevent corruption on crash
-        _atomic_write(session_file, json.dumps(state, indent=2))
+        # Serialise writes to this session file against concurrent background
+        # updates so that a last-writer-wins overwrite cannot silently drop
+        # completed chapters or progress data.
+        with _get_session_lock(session_id):
+            _atomic_write(session_file, json.dumps(state, indent=2))
         logger.info(f"Saved session state to {session_file}")
     except Exception as e:
         logger.error(f"Failed to save session state: {e}")
@@ -424,17 +456,21 @@ def persist_completed_chapters(
     """
     try:
         session_file = resolve_session_path(session_id)
-        if not session_file.exists():
-            return
-        state = json.loads(session_file.read_text(encoding="utf-8"))
-        state["completed_chapters"] = list(chapters_done)
+        # Serialise this read-modify-write against save_session_state() so that
+        # a concurrent request-thread write cannot be silently overwritten by an
+        # older snapshot read by this background thread (or vice versa).
+        with _get_session_lock(session_id):
+            if not session_file.exists():
+                return
+            state = json.loads(session_file.read_text(encoding="utf-8"))
+            state["completed_chapters"] = list(chapters_done)
 
-        if progress_token:
-            progress = progress_manager.get(progress_token)
-            if progress is not None:
-                state["progress_data"] = progress
+            if progress_token:
+                progress = progress_manager.get(progress_token)
+                if progress is not None:
+                    state["progress_data"] = progress
 
-        _atomic_write(session_file, json.dumps(state, indent=2))
+            _atomic_write(session_file, json.dumps(state, indent=2))
     except Exception as e:
         logger.error(f"Failed to persist completed chapters: {e}")
 
