@@ -327,7 +327,7 @@ Option C: Periodically prune locks for session IDs whose JSON files no longer ex
 
 ---
 
-### 8. Race Condition in Duplicate Generation Guard — OPEN
+### 8. ~~Race Condition in Duplicate Generation Guard~~ DONE
 
 **Files:** `novelforge/routes/generation/chapters.py` lines 68-76
 

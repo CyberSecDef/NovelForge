@@ -64,17 +64,6 @@ def generate_chapters() -> Response | tuple[Response, int]:
         if key not in session:
             return jsonify({"error": "Session data missing. Please start over."}), 400
 
-    # Guard against duplicate workers for the same session
-    existing_token = session.get("progress_token")
-    if existing_token:
-        existing = progress_manager.get(existing_token)
-        if existing and existing.get("status") == "running":
-            return jsonify({
-                "error": "A chapter generation is already in progress for this session. Please wait for it to complete.",
-                "error_code": "generation_in_progress",
-                "token": existing_token,
-            }), 409
-
     token = str(uuid.uuid4())
     snapshot = {
         "session_id": get_session_id(),
@@ -97,16 +86,28 @@ def generate_chapters() -> Response | tuple[Response, int]:
         "voice_seed": session.get("voice_seed", {}),
         "narrative_perspective": session.get("narrative_perspective", "third_person"),
     }
-    progress_manager.create(token, {
-        "status": "running",
-        "current": 0,
-        "total": session["chapters"],
-        "step": "Preparing\u2026",
-        "chapters_done": [],
-        "error": None,
-        "_live": True,
-        "snapshot": snapshot,
-    })
+
+    # Atomic check-and-create: rejects if an existing token is still running
+    duplicate_token = progress_manager.create_unless_running(
+        existing_token=session.get("progress_token"),
+        new_token=token,
+        initial_state={
+            "status": "running",
+            "current": 0,
+            "total": session["chapters"],
+            "step": "Preparing\u2026",
+            "chapters_done": [],
+            "error": None,
+            "_live": True,
+            "snapshot": snapshot,
+        },
+    )
+    if duplicate_token:
+        return jsonify({
+            "error": "A chapter generation is already in progress for this session. Please wait for it to complete.",
+            "error_code": "generation_in_progress",
+            "token": duplicate_token,
+        }), 409
 
     thread = threading.Thread(
         target=_run_chapter_generation,

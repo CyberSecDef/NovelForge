@@ -147,6 +147,35 @@ class ProgressManager:
                 raise KeyError(f"Unknown progress token: {token!r}")
             self._store[token].update(patch)  # type: ignore[typeddict-item]
 
+    def create_unless_running(
+        self,
+        existing_token: str | None,
+        new_token: str,
+        initial_state: dict[str, Any],
+    ) -> str | None:
+        """Atomically check for a running entry and create a new one if safe.
+
+        If *existing_token* refers to an entry with ``status == "running"``,
+        returns that token (indicating a duplicate) and does **not** create a
+        new entry.  Otherwise creates the new entry under *new_token* and
+        returns ``None`` (indicating success).
+
+        This eliminates the race window between checking for duplicates and
+        creating a new progress entry.
+        """
+        status = initial_state.get("status", "")
+        if status not in _VALID_STATUSES:
+            raise ValueError(
+                f"Invalid status {status!r}; must be one of {sorted(_VALID_STATUSES)}"
+            )
+        with self._lock:
+            if existing_token:
+                existing = self._store.get(existing_token)
+                if existing and existing.get("status") == "running":
+                    return existing_token  # duplicate — still running
+            self._store[new_token] = dict(initial_state)  # type: ignore[assignment]
+            return None  # created successfully
+
     def delete(self, token: str) -> None:
         """Remove a progress entry; no-op if *token* is not found."""
         with self._lock:
