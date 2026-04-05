@@ -140,7 +140,7 @@ class TestApproveOutlineTransactionalGroup1Failure:
 
         # Make plan_story_architecture raise after being called
         mocker.patch(
-            "novelforge.routes.outline.plan_story_architecture",
+            "novelforge.services.planning.plan_story_architecture",
             side_effect=RuntimeError("LLM unavailable"),
         )
 
@@ -176,7 +176,7 @@ class TestApproveOutlineTransactionalGroup1Failure:
         before = _read_session(client)
 
         mocker.patch(
-            "novelforge.routes.outline.plan_master_timeline",
+            "novelforge.services.planning.plan_master_timeline",
             side_effect=RuntimeError("Timeout"),
         )
 
@@ -204,7 +204,7 @@ class TestApproveOutlineTransactionalGroup2Failure:
         before = _read_session(client)
 
         mocker.patch(
-            "novelforge.routes.outline.plan_character_arc_plan",
+            "novelforge.services.planning.plan_character_arc_plan",
             side_effect=RuntimeError("Context window exceeded"),
         )
 
@@ -229,7 +229,7 @@ class TestApproveOutlineTransactionalGroup2Failure:
         before = _read_session(client)
 
         mocker.patch(
-            "novelforge.routes.outline.plan_antagonist_motivation_plan",
+            "novelforge.services.planning.plan_antagonist_motivation_plan",
             side_effect=RuntimeError("Rate limit"),
         )
 
@@ -256,7 +256,7 @@ class TestApproveOutlineTransactionalGroup3Failure:
         before = _read_session(client)
 
         mocker.patch(
-            "novelforge.routes.outline.plan_pov_focal_character",
+            "novelforge.services.planning.plan_pov_focal_character",
             side_effect=RuntimeError("Network error"),
         )
 
@@ -509,7 +509,7 @@ class TestApproveOutlineTransactionalRenamePropagation:
         before = _read_session(client)
 
         mocker.patch(
-            "novelforge.routes.outline.plan_story_architecture",
+            "novelforge.services.planning.plan_story_architecture",
             side_effect=RuntimeError("Failure"),
         )
 
