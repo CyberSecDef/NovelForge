@@ -6,6 +6,7 @@ import logging
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
@@ -99,10 +100,32 @@ def call_image_api(prompt: str, *, filename_prefix: str = "illustration") -> str
                 img_bytes = base64.b64decode(image_data["b64_json"])
                 save_path.write_bytes(img_bytes)
             elif "url" in image_data:
-                # Download from URL
-                img_resp = requests.get(image_data["url"], timeout=60)
+                # Validate URL scheme before downloading
+                image_url = image_data["url"]
+                parsed = urlparse(image_url)
+                if parsed.scheme not in ("https", "http"):
+                    logger.error(
+                        "Image API returned URL with disallowed scheme %r: %s",
+                        parsed.scheme, image_url,
+                    )
+                    return None
+
+                # Download with streaming and size limit (20 MB max)
+                _MAX_IMAGE_BYTES = 20 * 1024 * 1024
+                img_resp = requests.get(image_url, timeout=60, stream=True)
                 img_resp.raise_for_status()
-                save_path.write_bytes(img_resp.content)
+                chunks: list[bytes] = []
+                downloaded = 0
+                for chunk in img_resp.iter_content(chunk_size=8192):
+                    downloaded += len(chunk)
+                    if downloaded > _MAX_IMAGE_BYTES:
+                        logger.error(
+                            "Image download exceeded %d byte limit from %s",
+                            _MAX_IMAGE_BYTES, image_url,
+                        )
+                        return None
+                    chunks.append(chunk)
+                save_path.write_bytes(b"".join(chunks))
             else:
                 logger.error("Image API returned no url or b64_json: %s", data)
                 return None

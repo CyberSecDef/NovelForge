@@ -691,7 +691,7 @@ def _load_prompts() -> dict:
 
 ---
 
-### 17. CSRF SSL Strict Mode Disabled in All Environments — OPEN
+### 17. CSRF SSL Strict Mode Disabled in All Environments — SKIPPED (by design)
 
 **Files:** `novelforge/__init__.py` line 91
 
@@ -720,7 +720,7 @@ app.config["WTF_CSRF_SSL_STRICT_MODE"] = os.environ.get("CSRF_SSL_STRICT", "true
 
 ---
 
-### 18. Dependency Versions Have No Upper Bounds — OPEN
+### 18. ~~Dependency Versions Have No Upper Bounds~~ DONE
 
 **Files:** `requirements.txt`
 
@@ -756,7 +756,7 @@ Or use a lock file (`pip freeze > requirements.lock`) for reproducible deploymen
 
 ---
 
-### 19. Image Download URL Not Validated — OPEN
+### 19. ~~Image Download URL Not Validated~~ DONE
 
 **Files:** `novelforge/llm/image.py` line 103
 
