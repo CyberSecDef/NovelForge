@@ -93,9 +93,13 @@ def run_full_planning(
         antagonist_motivation_plan = fut_antag.result()
 
     # --- Group 3: depends on Group 2 (character_arc_plan) ---
+    # narrative_perspective is not yet chosen at the full-planning stage; the
+    # agent defaults to "third_person" and the perspective is finalised during
+    # the approve_outline phase (run_selective_planning).
     pov_focal_character_plan = plan_pov_focal_character(
         character_list=character_list,
         character_arc_plan=character_arc_plan,
+        narrative_perspective="third_person",
         **common,
     )
 

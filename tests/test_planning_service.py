@@ -194,7 +194,7 @@ class TestRunSelectivePlanningAllChanged:
 
     def test_all_agents_run_when_no_prev_hashes(self, mocker):
         mocks = _patch_all_agents(mocker)
-        results, new_hashes = run_selective_planning(
+        results, initial_hashes = run_selective_planning(
             **_BASE_KWARGS,
             narrative_perspective="third_person",
             prev_hashes={},
