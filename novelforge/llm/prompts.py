@@ -1,6 +1,7 @@
 """Prompt loading and rendering from prompts.yml."""
 
 import logging
+import threading
 from pathlib import Path
 
 import yaml
@@ -12,6 +13,7 @@ _jinja_env = Environment(undefined=StrictUndefined, autoescape=False)
 
 
 _prompts_cache: dict | None = None
+_prompts_lock = threading.Lock()
 
 
 _REQUIRED_FIELDS = ("name", "system", "user")
@@ -52,9 +54,17 @@ def _validate_prompts(entries: list) -> dict:
 
 
 def _load_prompts() -> dict:
-    """Load and cache prompts from prompts.yml, keyed by prompt name."""
+    """Load and cache prompts from prompts.yml, keyed by prompt name.
+
+    Uses double-checked locking so that concurrent threads never read
+    the YAML file twice.
+    """
     global _prompts_cache
-    if _prompts_cache is None:
+    if _prompts_cache is not None:
+        return _prompts_cache  # fast path — no lock overhead
+    with _prompts_lock:
+        if _prompts_cache is not None:
+            return _prompts_cache  # another thread populated it while we waited
         filepath = Path(__file__).resolve().parent.parent.parent / "prompts.yml"
         with open(filepath, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)

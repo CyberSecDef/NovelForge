@@ -610,7 +610,7 @@ pool and voice seed mappings.
 
 ---
 
-### 15. No Cleanup of Export Files, Progress Files, or Old Sessions — OPEN
+### 15. No Cleanup of Export Files, Progress Files, or Old Sessions — SKIPPED (by design)
 
 **Files:**
 - `novelforge/routes/export.py` lines 118-124 (export .md files)
@@ -643,7 +643,7 @@ needed for crash recovery).
 
 ---
 
-### 16. Prompts YAML Cache Not Thread-Safe — OPEN
+### 16. ~~Prompts YAML Cache Not Thread-Safe~~ DONE
 
 **Files:** `novelforge/llm/prompts.py` lines 56-68
 
