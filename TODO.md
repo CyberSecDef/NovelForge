@@ -794,7 +794,7 @@ content = img_response.iter_content(chunk_size=8192)
 
 ---
 
-### 20. Progress Manager `get()` Returns Shallow Copy — OPEN
+### 20. ~~Progress Manager `get()` Returns Shallow Copy~~ DONE
 
 **Files:** `novelforge/progress.py` lines 110-113
 
