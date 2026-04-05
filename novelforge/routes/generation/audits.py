@@ -2,6 +2,10 @@
 
 Each audit follows the same pattern: build prompt, call LLM with json_mode,
 parse response, fall back to a default dict on parse failure, update progress.
+
+Fallback structures are defined as module-level constants so that consumers
+(e.g. ``routes/export.py``) can rely on every key being present even when the
+LLM call fails or returns unparseable output.
 """
 
 import json
@@ -25,6 +29,118 @@ from novelforge.agents.chapter import (
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Fallback structures — one per audit, used when LLM parsing fails.
+# Keys must match what routes/export.py reads via .get().
+# ---------------------------------------------------------------------------
+
+CONSISTENCY_FALLBACK: dict = {
+    "issues": [],
+    "overall_assessment": "",
+}
+
+GLOBAL_CONTINUITY_AUDIT_FALLBACK: dict = {
+    "contradictions": [],
+    "character_state_errors": [],
+    "timeline_errors": [],
+    "location_errors": [],
+    "overall_integrity": "unknown",
+    "overall_assessment": "",
+}
+
+NARRATIVE_COMPRESSION_FALLBACK: dict = {
+    "redundant_sequences": [],
+    "emotional_beat_repetitions": [],
+    "compression_priority": "unknown",
+    "overall_assessment": "",
+}
+
+CHARACTER_RESOLUTION_FALLBACK: dict = {
+    "character_resolutions": [],
+    "unresolved_characters": [],
+    "resolution_integrity": "unknown",
+    "overall_assessment": "",
+}
+
+THEMATIC_PAYOFF_FALLBACK: dict = {
+    "theme_payoffs": [],
+    "abandoned_themes": [],
+    "weak_payoffs": [],
+    "thematic_integrity": "unknown",
+    "overall_assessment": "",
+}
+
+CLIMAX_INTEGRITY_FALLBACK: dict = {
+    "climax_decision_present": False,
+    "decision_is_active": False,
+    "moral_dimension_present": False,
+    "arc_resolved": False,
+    "protagonist_is_agent": False,
+    "climax_chapter": None,
+    "integrity_failures": [],
+    "climax_integrity": "unknown",
+    "overall_assessment": "",
+}
+
+LOOSE_THREAD_FALLBACK: dict = {
+    "unresolved_threads": [],
+    "dangling_setup_elements": [],
+    "intentionally_open_threads": [],
+    "thread_integrity": "unknown",
+    "overall_assessment": "",
+}
+
+READER_IMMERSION_FALLBACK: dict = {
+    "pacing_assessment": "unknown",
+    "tension_curve": "unknown",
+    "stakes_clarity": "unknown",
+    "engagement_score": 0,
+    "weak_chapters": [],
+    "immersion_breaks": [],
+    "reader_experience_highlights": [],
+    "overall_rating": "unknown",
+    "recommendations": [],
+}
+
+PACING_HEATMAP_FALLBACK: dict = {
+    "chapter_metrics": [],
+    "flat_sections": [],
+    "overall_pacing_assessment": "",
+}
+
+CHARACTER_RELATIONSHIP_FALLBACK: dict = {
+    "characters": [],
+    "relationships": [],
+}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _parse_audit_json(raw: str, fallback: dict) -> dict:
+    """Parse LLM JSON output, returning *fallback* on failure.
+
+    Ensures the result is always a dict (rejects JSON arrays) and merges
+    any missing keys from *fallback* so the caller can rely on every
+    expected key being present.
+    """
+    try:
+        parsed = parse_llm_json(raw)
+        if not isinstance(parsed, dict):
+            raise ValueError("Expected a JSON object from LLM, got an array")
+        # Merge fallback keys so consumers never hit a missing key
+        merged = dict(fallback)
+        merged.update(parsed)
+        return merged
+    except (json.JSONDecodeError, ValueError):
+        return dict(fallback)
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
 
 def run_post_manuscript_audits(
     *,
@@ -51,10 +167,7 @@ def run_post_manuscript_audits(
         build_consistency_pass_prompt(title, summaries, special_instructions),
         action="Final consistency pass", json_mode=True,
     )
-    try:
-        consistency = parse_llm_json(consistency_raw)
-    except json.JSONDecodeError:
-        consistency = {"issues": [], "overall_assessment": ""}
+    consistency = _parse_audit_json(consistency_raw, CONSISTENCY_FALLBACK)
 
     # --- Global Continuity Audit ---
     progress_manager.update(token, {"step": "Global continuity audit"})
@@ -67,17 +180,7 @@ def run_post_manuscript_audits(
         ),
         action="Global continuity audit", json_mode=True,
     )
-    try:
-        _global_audit = parse_llm_json(audit_raw)
-        if not isinstance(_global_audit, dict):
-            raise ValueError("Expected a JSON object from LLM, got an array")
-        global_audit = _global_audit
-    except (json.JSONDecodeError, ValueError):
-        global_audit = {
-            "contradictions": [], "character_state_errors": [],
-            "timeline_errors": [], "location_errors": [],
-            "overall_integrity": "unknown", "overall_assessment": "",
-        }
+    global_audit = _parse_audit_json(audit_raw, GLOBAL_CONTINUITY_AUDIT_FALLBACK)
 
     progress_manager.update(token, {
         "consistency": consistency,
@@ -92,13 +195,7 @@ def run_post_manuscript_audits(
         ),
         action="Narrative compression analysis", json_mode=True,
     )
-    try:
-        compression_report = parse_llm_json(compression_raw)
-    except json.JSONDecodeError:
-        compression_report = {
-            "redundant_sequences": [], "emotional_beat_repetitions": [],
-            "compression_priority": "unknown", "overall_assessment": "",
-        }
+    compression_report = _parse_audit_json(compression_raw, NARRATIVE_COMPRESSION_FALLBACK)
 
     progress_manager.update(token, {"narrative_compression_report": compression_report})
 
@@ -113,16 +210,7 @@ def run_post_manuscript_audits(
         ),
         action="Character resolution validation", json_mode=True,
     )
-    try:
-        _resolution_report = parse_llm_json(resolution_raw)
-        if not isinstance(_resolution_report, dict):
-            raise ValueError("Expected a JSON object from LLM, got an array")
-        resolution_report = _resolution_report
-    except (json.JSONDecodeError, ValueError):
-        resolution_report = {
-            "character_resolutions": [], "unresolved_characters": [],
-            "resolution_integrity": "unknown", "overall_assessment": "",
-        }
+    resolution_report = _parse_audit_json(resolution_raw, CHARACTER_RESOLUTION_FALLBACK)
 
     progress_manager.update(token, {"character_resolution_report": resolution_report})
 
@@ -135,17 +223,7 @@ def run_post_manuscript_audits(
         ),
         action="Thematic payoff analysis", json_mode=True,
     )
-    try:
-        _thematic_report = parse_llm_json(thematic_raw)
-        if not isinstance(_thematic_report, dict):
-            raise ValueError("Expected a JSON object from LLM, got an array")
-        thematic_report = _thematic_report
-    except (json.JSONDecodeError, ValueError):
-        thematic_report = {
-            "theme_payoffs": [], "abandoned_themes": [],
-            "weak_payoffs": [], "thematic_integrity": "unknown",
-            "overall_assessment": "",
-        }
+    thematic_report = _parse_audit_json(thematic_raw, THEMATIC_PAYOFF_FALLBACK)
 
     progress_manager.update(token, {"thematic_payoff_report": thematic_report})
 
@@ -158,16 +236,7 @@ def run_post_manuscript_audits(
         ),
         action="Climax integrity check", json_mode=True,
     )
-    try:
-        climax_report = parse_llm_json(climax_raw)
-    except json.JSONDecodeError:
-        climax_report = {
-            "climax_decision_present": False, "decision_is_active": False,
-            "moral_dimension_present": False, "arc_resolved": False,
-            "protagonist_is_agent": False, "climax_chapter": None,
-            "integrity_failures": [], "climax_integrity": "unknown",
-            "overall_assessment": "",
-        }
+    climax_report = _parse_audit_json(climax_raw, CLIMAX_INTEGRITY_FALLBACK)
 
     progress_manager.update(token, {"climax_integrity_report": climax_report})
 
@@ -181,14 +250,7 @@ def run_post_manuscript_audits(
         ),
         action="Loose thread resolution", json_mode=True,
     )
-    try:
-        threads_report = parse_llm_json(threads_raw)
-    except json.JSONDecodeError:
-        threads_report = {
-            "unresolved_threads": [], "dangling_setup_elements": [],
-            "intentionally_open_threads": [], "thread_integrity": "unknown",
-            "overall_assessment": "",
-        }
+    threads_report = _parse_audit_json(threads_raw, LOOSE_THREAD_FALLBACK)
 
     progress_manager.update(token, {"loose_thread_report": threads_report})
 
@@ -201,16 +263,7 @@ def run_post_manuscript_audits(
         ),
         action="Reader immersion testing", json_mode=True,
     )
-    try:
-        immersion_report = parse_llm_json(immersion_raw)
-    except json.JSONDecodeError:
-        immersion_report = {
-            "pacing_assessment": "unknown", "tension_curve": "unknown",
-            "stakes_clarity": "unknown", "engagement_score": 0,
-            "weak_chapters": [], "immersion_breaks": [],
-            "reader_experience_highlights": [], "overall_rating": "unknown",
-            "recommendations": [],
-        }
+    immersion_report = _parse_audit_json(immersion_raw, READER_IMMERSION_FALLBACK)
 
     progress_manager.update(token, {"reader_immersion_report": immersion_report})
 
@@ -222,13 +275,7 @@ def run_post_manuscript_audits(
         ),
         action="Pacing & tension heatmap", json_mode=True,
     )
-    try:
-        pacing_heatmap = parse_llm_json(heatmap_raw)
-    except json.JSONDecodeError:
-        pacing_heatmap = {
-            "chapter_metrics": [], "flat_sections": [],
-            "overall_pacing_assessment": "",
-        }
+    pacing_heatmap = _parse_audit_json(heatmap_raw, PACING_HEATMAP_FALLBACK)
 
     progress_manager.update(token, {"pacing_heatmap": pacing_heatmap})
 
@@ -241,10 +288,7 @@ def run_post_manuscript_audits(
         ),
         action="Character relationship mapping", json_mode=True,
     )
-    try:
-        relationship_map = parse_llm_json(relationship_raw)
-    except json.JSONDecodeError:
-        relationship_map = {"characters": [], "relationships": []}
+    relationship_map = _parse_audit_json(relationship_raw, CHARACTER_RELATIONSHIP_FALLBACK)
 
     progress_manager.update(token, {"character_relationship_map": relationship_map})
 

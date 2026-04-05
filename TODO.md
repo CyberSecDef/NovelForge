@@ -476,7 +476,7 @@ if not chapter_outline_summary:
 
 ---
 
-### 11. Inconsistent Audit Fallback Structures — OPEN
+### 11. ~~Inconsistent Audit Fallback Structures~~ DONE
 
 **Files:** `novelforge/routes/generation/audits.py` (multiple locations)
 
