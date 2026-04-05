@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import re
 from concurrent.futures import Future, ThreadPoolExecutor
 
 from flask import Blueprint, Response, jsonify, request, session
@@ -31,6 +32,19 @@ def _input_hash(*args: object) -> str:
     """Compute a stable hash of serialised inputs for cache comparison."""
     raw = json.dumps(args, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def _apply_rename(text: str, old_name: str, new_name: str) -> str:
+    """Replace *old_name* with *new_name* using whole-word boundary matching.
+
+    Uses ``\b`` anchors so that a short name such as ``"Al"`` is never
+    substituted inside ``"Alan"`` or any other word that merely contains the
+    name as a substring.  Possessive forms (e.g. ``"Alice's"``) are handled
+    correctly: the apostrophe-s suffix is captured and re-emitted after the
+    new name.
+    """
+    pattern = r"\b" + re.escape(old_name) + r"('s)?\b"
+    return re.sub(pattern, lambda m: new_name + (m.group(1) or ""), text)
 
 
 @outline_bp.route("/generate_outline", methods=["POST"])
@@ -268,12 +282,12 @@ def approve_outline() -> Response | tuple[Response, int]:
                 for field in ("title", "summary"):
                     val = ch.get(field)
                     if isinstance(val, str):
-                        ch[field] = val.replace(old_name, new_name)
+                        ch[field] = _apply_rename(val, old_name, new_name)
         for session_field in ("premise", "special_events", "special_instructions"):
             text = session.get(session_field, "")
             if isinstance(text, str) and text:
                 for old_name, new_name in rename_map.items():
-                    text = text.replace(old_name, new_name)
+                    text = _apply_rename(text, old_name, new_name)
                 working[session_field] = text
         # Update narrative perspective if the POV character was renamed
         cur_persp = session.get("narrative_perspective", "third_person")

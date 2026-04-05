@@ -279,8 +279,228 @@ class TestApproveOutlineTransactionalGroup3Failure:
 
 
 # ---------------------------------------------------------------------------
-# Transactionality: rename propagation is not applied on failure
+# Rename propagation edge cases
 # ---------------------------------------------------------------------------
+
+class TestApproveOutlineRenamePropagationEdgeCases:
+    """Verify that whole-word boundary matching is used during rename propagation."""
+
+    def _renamed_chars(self, new_name: str) -> list:
+        return [
+            {
+                "name": new_name,
+                "age": "30",
+                "role": "Hero",
+                "background": "A wanderer.",
+                "arc": "Learns to lead.",
+            }
+        ]
+
+    def test_short_name_not_replaced_inside_longer_word(self, client, mock_llm):
+        """Renaming 'Al' to 'Bob' must not alter 'Alan' or 'alcohol'."""
+        _seed_session(
+            client,
+            overrides={
+                "character_list": [
+                    {
+                        "name": "Al",
+                        "age": "30",
+                        "role": "Hero",
+                        "background": "Background.",
+                        "arc": "Arc.",
+                    }
+                ],
+                "premise": "Al met Alan at an alcohol-free bar.",
+                "chapter_list": [
+                    {
+                        "number": 1,
+                        "title": "Al and Alan",
+                        "summary": "Al spoke with Alan about alcohol.",
+                    }
+                ],
+            },
+        )
+
+        r = client.post(
+            "/approve_outline",
+            data=json.dumps(
+                _approve_payload(
+                    chapters=[
+                        {
+                            "number": 1,
+                            "title": "Al and Alan",
+                            "summary": "Al spoke with Alan about alcohol.",
+                        }
+                    ],
+                    characters=self._renamed_chars("Bob"),
+                )
+            ),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+
+        with client.session_transaction() as sess:
+            premise = sess["premise"]
+            ch = sess["chapter_list"][0]
+
+        # "Al" (standalone) should be replaced
+        assert "Bob" in premise
+        # "Alan" must not be corrupted
+        assert "Alan" in premise
+        assert "Bolan" not in premise
+        # "alcohol" must not be corrupted
+        assert "alcohol" in premise
+        assert "Bobohol" not in premise
+        # chapter fields
+        assert "Bob" in ch["title"]
+        assert "Alan" in ch["title"]
+        assert "Bob" in ch["summary"]
+        assert "Alan" in ch["summary"]
+        assert "alcohol" in ch["summary"]
+
+    def test_possessive_form_renamed_correctly(self, client, mock_llm):
+        """Renaming 'Alice' to 'Bob' must turn "Alice's" into "Bob's"."""
+        _seed_session(
+            client,
+            overrides={
+                "premise": "Alice's map was found.",
+                "chapter_list": [
+                    {
+                        "number": 1,
+                        "title": "Alice's Quest",
+                        "summary": "Alice's journey begins.",
+                    }
+                ],
+            },
+        )
+
+        r = client.post(
+            "/approve_outline",
+            data=json.dumps(
+                _approve_payload(
+                    chapters=[
+                        {
+                            "number": 1,
+                            "title": "Alice's Quest",
+                            "summary": "Alice's journey begins.",
+                        }
+                    ],
+                    characters=self._renamed_chars("Bob"),
+                )
+            ),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+
+        with client.session_transaction() as sess:
+            premise = sess["premise"]
+            ch = sess["chapter_list"][0]
+
+        assert "Bob's" in premise
+        assert "Alice" not in premise
+        assert "Bob's" in ch["title"]
+        assert "Alice" not in ch["title"]
+        assert "Bob's" in ch["summary"]
+        assert "Alice" not in ch["summary"]
+
+    def test_punctuation_adjacent_name_replaced(self, client, mock_llm):
+        """Names next to commas, exclamation marks, or periods must be replaced."""
+        _seed_session(
+            client,
+            overrides={
+                "premise": "Hello, Alice! Alice. Alice, how are you?",
+                "chapter_list": [
+                    {
+                        "number": 1,
+                        "title": "Chapter One",
+                        "summary": "Hello, Alice! Alice. Alice, how are you?",
+                    }
+                ],
+            },
+        )
+
+        r = client.post(
+            "/approve_outline",
+            data=json.dumps(
+                _approve_payload(
+                    chapters=[
+                        {
+                            "number": 1,
+                            "title": "Chapter One",
+                            "summary": "Hello, Alice! Alice. Alice, how are you?",
+                        }
+                    ],
+                    characters=self._renamed_chars("Bob"),
+                )
+            ),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+
+        with client.session_transaction() as sess:
+            premise = sess["premise"]
+            ch = sess["chapter_list"][0]
+
+        assert "Alice" not in premise
+        assert premise.count("Bob") == 3
+        assert "Alice" not in ch["summary"]
+        assert ch["summary"].count("Bob") == 3
+
+    def test_overlapping_names_no_double_replacement(self, client, mock_llm):
+        """Renaming 'Alice' to 'Alicia' must not then re-match inside 'Alicia'."""
+        _seed_session(
+            client,
+            overrides={
+                "premise": "Alice and Alicia are friends.",
+                "character_list": [
+                    {
+                        "name": "Alice",
+                        "age": "30",
+                        "role": "Hero",
+                        "background": "Background.",
+                        "arc": "Arc.",
+                    }
+                ],
+                "chapter_list": [
+                    {
+                        "number": 1,
+                        "title": "Chapter One",
+                        "summary": "Alice met Alicia.",
+                    }
+                ],
+            },
+        )
+
+        r = client.post(
+            "/approve_outline",
+            data=json.dumps(
+                _approve_payload(
+                    chapters=[
+                        {
+                            "number": 1,
+                            "title": "Chapter One",
+                            "summary": "Alice met Alicia.",
+                        }
+                    ],
+                    characters=self._renamed_chars("Alicia"),
+                )
+            ),
+            content_type="application/json",
+        )
+        assert r.status_code == 200
+
+        with client.session_transaction() as sess:
+            premise = sess["premise"]
+            ch = sess["chapter_list"][0]
+
+        # The original "Alice" should now be "Alicia"
+        assert "Alice" not in premise
+        # "Alicia" must appear exactly twice (the renamed one + the original)
+        assert premise.count("Alicia") == 2
+        # Same check for chapter summary
+        assert "Alice" not in ch["summary"]
+        assert ch["summary"].count("Alicia") == 2
+
 
 class TestApproveOutlineTransactionalRenamePropagation:
     def test_rename_not_persisted_on_agent_failure(self, client, mocker, mock_llm):
