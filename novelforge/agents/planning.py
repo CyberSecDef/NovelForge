@@ -35,6 +35,22 @@ def _coerce_positive_int(value: object, default: int) -> int:
         return default
 
 
+_PLACEHOLDER_CHAPTER: dict[str, object] = {"number": 1, "title": "Chapter 1", "summary": ""}
+
+
+def _safe_chapter_list(chapter_list: object) -> list[dict]:
+    """Return a guaranteed non-empty list of dicts from *chapter_list*.
+
+    Filters out any entry that is not a ``dict`` and, if the result would be
+    empty, substitutes a single placeholder entry so that downstream code can
+    always index ``[0]`` or iterate safely.
+    """
+    if not isinstance(chapter_list, list):
+        return [dict(_PLACEHOLDER_CHAPTER)]
+    filtered = [ch for ch in chapter_list if isinstance(ch, dict)]
+    return filtered if filtered else [dict(_PLACEHOLDER_CHAPTER)]
+
+
 # ---------------------------------------------------------------------------
 # Story Architecture Agent
 # ---------------------------------------------------------------------------
@@ -163,7 +179,7 @@ class StoryArchitectureAgent(BaseAgent):
             return acts[-1]
 
         chapter_plan = []
-        for idx, chapter in enumerate(chapter_list or [{"number": 1, "title": "Chapter 1", "summary": ""}], start=1):
+        for idx, chapter in enumerate(_safe_chapter_list(chapter_list), start=1):
             chapter_num = _coerce_positive_int(chapter.get("number", idx), idx)
             act = _act_for_chapter(chapter_num)
 
@@ -264,12 +280,13 @@ class StoryArchitectureAgent(BaseAgent):
             if isinstance(item, dict)
         }
         fallback_map = {item["number"]: item for item in fallback["chapter_plan"]}
+        fallback_first = fallback["chapter_plan"][0]
 
         merged_plan = []
-        safe_chapter_list = chapter_list or [{"number": 1, "title": "Chapter 1", "summary": ""}]
+        safe_chapter_list = _safe_chapter_list(chapter_list)
         for idx, chapter in enumerate(safe_chapter_list, start=1):
             chapter_num = _coerce_positive_int(chapter.get("number", idx), idx)
-            fallback_item = fallback_map.get(chapter_num, fallback["chapter_plan"][0])
+            fallback_item = fallback_map.get(chapter_num, fallback_first)
             planner_item = raw_map.get(chapter_num, {})
 
             merged_plan.append(
@@ -407,7 +424,7 @@ class MasterTimelineAgent(BaseAgent):
     @staticmethod
     def _build_fallback_impl(chapter_list: list[dict], character_list: list[dict]) -> dict:
         """Deterministic fallback timeline when planner output is unavailable."""
-        safe_chapters = chapter_list or [{"number": 1, "title": "Chapter 1", "summary": ""}]
+        safe_chapters = _safe_chapter_list(chapter_list)
         safe_characters = character_list or []
 
         ledger = []
@@ -918,7 +935,8 @@ class CharacterArcPlanAgent(BaseAgent):
     def _build_fallback_impl(character_list: list[dict], chapter_list: list[dict]) -> dict:
         """Deterministic fallback character arc plan."""
         from novelforge.chapter_position import ChapterPosition
-        total_chapters = max(1, len(chapter_list))
+        safe_chapter_list = _safe_chapter_list(chapter_list)
+        total_chapters = max(1, len(safe_chapter_list))
         midpoint_chapter = ChapterPosition.midpoint_chapter(total_chapters)
         crisis_chapter = ChapterPosition.climax_chapter(total_chapters)
         final_chapter = ChapterPosition.resolution_chapter(total_chapters)
@@ -968,7 +986,7 @@ class CharacterArcPlanAgent(BaseAgent):
             )
 
         chapter_constraints = []
-        for idx, chapter in enumerate(chapter_list or [{"number": 1}], start=1):
+        for idx, chapter in enumerate(safe_chapter_list, start=1):
             chapter_num = _coerce_positive_int(chapter.get("number", idx), idx)
             chapter_constraints.append(
                 {
@@ -1174,7 +1192,8 @@ class AntagonistMotivationAgent(BaseAgent):
 
     @staticmethod
     def _build_fallback_impl(character_list: list[dict], chapter_list: list[dict]) -> dict:
-        total_chapters = max(1, len(chapter_list))
+        safe_chapter_list = _safe_chapter_list(chapter_list)
+        total_chapters = max(1, len(safe_chapter_list))
 
         antagonists = []
         for character in character_list or []:
@@ -1222,7 +1241,7 @@ class AntagonistMotivationAgent(BaseAgent):
             )
 
         chapter_constraints = []
-        for idx, chapter in enumerate(chapter_list or [{"number": 1}], start=1):
+        for idx, chapter in enumerate(safe_chapter_list, start=1):
             chapter_num = _coerce_positive_int(chapter.get("number"), idx)
             chapter_constraints.append(
                 {
@@ -1409,7 +1428,8 @@ class TechnologyRulesAgent(BaseAgent):
 
     @staticmethod
     def _build_fallback_impl(chapter_list: list[dict]) -> dict:
-        total_chapters = max(1, len(chapter_list))
+        safe_chapter_list = _safe_chapter_list(chapter_list)
+        total_chapters = max(1, len(safe_chapter_list))
         systems = [
             {
                 "name": "Primary Surveillance Grid",
@@ -1425,7 +1445,7 @@ class TechnologyRulesAgent(BaseAgent):
             }
         ]
         chapter_constraints = []
-        for idx, chapter in enumerate(chapter_list or [{"number": 1}], start=1):
+        for idx, chapter in enumerate(safe_chapter_list, start=1):
             chapter_num = _coerce_positive_int(chapter.get("number"), idx)
             chapter_constraints.append({
                 "chapter": chapter_num,
@@ -1581,6 +1601,7 @@ class ThemeReinforcementAgent(BaseAgent):
 
     @staticmethod
     def _build_fallback_impl(chapter_list: list[dict]) -> dict:
+        safe_chapter_list = _safe_chapter_list(chapter_list)
         fallback_themes = [
             {
                 "name": "Identity Under Pressure",
@@ -1589,7 +1610,7 @@ class ThemeReinforcementAgent(BaseAgent):
                 "pillar_moments": ["Inciting incident", "Midpoint crisis", "Final moral choice"],
                 "chapter_appearances": [
                     {"chapter": c.get("number", i + 1), "role": "background", "guidance": "Show character making a small compromise."}
-                    for i, c in enumerate(chapter_list)
+                    for i, c in enumerate(safe_chapter_list)
                 ],
             },
             {
@@ -1599,7 +1620,7 @@ class ThemeReinforcementAgent(BaseAgent):
                 "pillar_moments": ["First compromise", "Point of no return", "Reckoning"],
                 "chapter_appearances": [
                     {"chapter": c.get("number", i + 1), "role": "background", "guidance": "Show institutional pressure shaping a decision."}
-                    for i, c in enumerate(chapter_list)
+                    for i, c in enumerate(safe_chapter_list)
                 ],
             },
         ]
@@ -1609,7 +1630,7 @@ class ThemeReinforcementAgent(BaseAgent):
                 "themes_present": ["Identity Under Pressure"],
                 "thematic_guidance": "Reinforce the protagonist's internal conflict quietly.",
             }
-            for i, c in enumerate(chapter_list)
+            for i, c in enumerate(safe_chapter_list)
         ]
         return {
             "themes": fallback_themes,
@@ -1802,7 +1823,7 @@ class PovFocalCharacterAgent(BaseAgent):
 
     @staticmethod
     def _build_fallback_impl(character_list: list[dict], chapter_list: list[dict]) -> dict:
-        safe_characters = [c for c in (character_list or []) if str(c.get("name", "")).strip()]
+        safe_characters = [c for c in (character_list or []) if isinstance(c, dict) and str(c.get("name", "")).strip()]
         if not safe_characters:
             safe_characters = [{"name": "Protagonist", "role": "protagonist"}]
 
@@ -1814,9 +1835,10 @@ class PovFocalCharacterAgent(BaseAgent):
         if not protagonist_names:
             protagonist_names = [str(safe_characters[0].get("name", "Protagonist")).strip()]
 
-        total_chapters = max(1, len(chapter_list or []))
+        safe_chapter_list = _safe_chapter_list(chapter_list)
+        total_chapters = max(1, len(safe_chapter_list))
         chapter_pov_plan = []
-        for idx, ch in enumerate(chapter_list or [{"number": 1, "title": "Chapter 1"}]):
+        for idx, ch in enumerate(safe_chapter_list):
             chapter_num = _coerce_positive_int(ch.get("number", idx + 1), idx + 1)
             pov_char = safe_characters[idx % len(safe_characters)]
             pov_name = str(pov_char.get("name", "")).strip()
