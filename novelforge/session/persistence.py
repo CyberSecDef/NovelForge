@@ -250,6 +250,7 @@ def save_session_state() -> bool:
         "technology_rules": session.get("technology_rules", {}),
         "theme_reinforcement": session.get("theme_reinforcement", {}),
         "pov_focal_character_plan": session.get("pov_focal_character_plan", {}),
+        "narrative_perspective": session.get("narrative_perspective", "third_person"),
         "progress_token": session.get("progress_token", ""),
         "completed_chapters": session.get("completed_chapters", []),
         "illustrations": session.get("illustrations", []),
@@ -374,6 +375,7 @@ def restore_session_from_state(state: dict) -> None:
     session["technology_rules"] = state.get("technology_rules", {})
     session["theme_reinforcement"] = state.get("theme_reinforcement", {})
     session["pov_focal_character_plan"] = state.get("pov_focal_character_plan", {})
+    session["narrative_perspective"] = state.get("narrative_perspective", "third_person")
     session["progress_token"] = state.get("progress_token", "")
     session["completed_chapters"] = state.get("completed_chapters", [])
     session["illustrations"] = state.get("illustrations", [])

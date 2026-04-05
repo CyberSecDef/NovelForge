@@ -1341,3 +1341,122 @@ class TestPersistenceFailurePaths:
             result = pm.clear_session_state()
 
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# narrative_perspective regression tests
+# ---------------------------------------------------------------------------
+
+class TestNarrativePerspectivePersistence:
+    """Regression: narrative_perspective must survive save → load → restore cycles."""
+
+    def test_save_includes_narrative_perspective(self, app):
+        """save_session_state() must write narrative_perspective to the JSON file."""
+        from novelforge.session.persistence import save_session_state, get_session_id
+
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["title"] = "Perspective Novel"
+            sess["genre"] = "Fantasy"
+            sess["chapters"] = 3
+            sess["word_count"] = 10000
+            sess["narrative_perspective"] = "first_person"
+
+            save_session_state()
+            session_id = get_session_id()
+
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+        state = json.loads(session_file.read_text())
+        assert state["narrative_perspective"] == "first_person"
+        session_file.unlink(missing_ok=True)
+
+    def test_save_uses_default_when_perspective_absent(self, app):
+        """save_session_state() falls back to 'third_person' when the key is not set."""
+        from novelforge.session.persistence import save_session_state, get_session_id
+
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["title"] = "Default Perspective Novel"
+            sess["genre"] = "Sci-Fi"
+            sess["chapters"] = 2
+            sess["word_count"] = 5000
+            # narrative_perspective deliberately NOT set
+
+            save_session_state()
+            session_id = get_session_id()
+
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+        state = json.loads(session_file.read_text())
+        assert state["narrative_perspective"] == "third_person"
+        session_file.unlink(missing_ok=True)
+
+    def test_restore_sets_narrative_perspective(self, app):
+        """restore_session_from_state() must write narrative_perspective into the Flask session."""
+        from novelforge.session.persistence import restore_session_from_state
+
+        state = {
+            "title": "Restored Perspective Novel",
+            "premise": "Test",
+            "genre": "Mystery",
+            "chapters": 5,
+            "word_count": 5000,
+            "narrative_perspective": "second_person",
+        }
+
+        with app.test_request_context():
+            import flask
+            restore_session_from_state(state)
+            assert flask.session["narrative_perspective"] == "second_person"
+
+    def test_restore_uses_default_when_perspective_absent(self, app):
+        """restore_session_from_state() falls back to 'third_person' for missing field."""
+        from novelforge.session.persistence import restore_session_from_state
+
+        state = {
+            "title": "No Perspective Novel",
+            "premise": "Test",
+            "genre": "Thriller",
+            "chapters": 3,
+            "word_count": 3000,
+            # narrative_perspective deliberately absent
+        }
+
+        with app.test_request_context():
+            import flask
+            restore_session_from_state(state)
+            assert flask.session["narrative_perspective"] == "third_person"
+
+    def test_full_save_load_restore_cycle_preserves_perspective(self, app):
+        """narrative_perspective survives the complete save → load → restore round-trip."""
+        from novelforge.session.persistence import (
+            save_session_state, load_session_state, restore_session_from_state, get_session_id,
+        )
+
+        # Phase 1: save with a non-default perspective
+        with app.test_request_context():
+            import flask
+            sess = flask.session
+            sess["title"] = "Cycle Perspective Novel"
+            sess["genre"] = "Horror"
+            sess["chapters"] = 4
+            sess["word_count"] = 8000
+            sess["narrative_perspective"] = "first_person"
+
+            save_session_state()
+            session_id = get_session_id()
+
+        # Phase 2: load from disk
+        session_file = Path(config.NOVELS_DIR) / f"{session_id}.json"
+        assert session_file.exists()
+        state = json.loads(session_file.read_text())
+        assert state["narrative_perspective"] == "first_person"
+
+        # Phase 3: restore into a fresh session context
+        with app.test_request_context():
+            import flask
+            restore_session_from_state(state)
+            assert flask.session["narrative_perspective"] == "first_person"
+
+        session_file.unlink(missing_ok=True)
