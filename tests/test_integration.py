@@ -441,7 +441,7 @@ class TestReviseChapter:
         session_file.write_text(json.dumps({
             "session_id": session_id,
             "title": "Test",
-            "chapters_done": [],
+            "completed_chapters": [],
         }))
 
         r = self._post_revise(client, token)
