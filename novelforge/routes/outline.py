@@ -13,6 +13,7 @@ from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.voice import select_voice_seed, format_voice_prompt
 from novelforge.agents.chapter import (
     build_title_prompt, build_outline_prompt, build_characters_prompt,
+    collect_existing_character_names,
 )
 from novelforge.agents.planning import (
     plan_story_architecture, plan_master_timeline, plan_character_fate_registry,
@@ -95,7 +96,8 @@ def generate_outline() -> Response | tuple[Response, int]:
 
         # 3. Generate characters (needed by Group 1 timeline agent)
         characters_raw = call_llm(
-            build_characters_prompt(str(premise), genre, outline_text),
+            build_characters_prompt(str(premise), genre, outline_text,
+                                    names_to_avoid=collect_existing_character_names()),
             action="Generating Characters",
             json_mode=True,
         )

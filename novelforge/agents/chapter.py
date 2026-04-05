@@ -291,8 +291,15 @@ def build_outline_prompt(
     )
 
 
-def _collect_existing_names() -> str:
-    """Scan existing session files to collect character names from prior novels."""
+def collect_existing_character_names() -> str:
+    """
+    Scan existing session files to collect character names from prior novels.
+
+    This is a filesystem helper intended to be called by the caller *before*
+    invoking :func:`build_characters_prompt`.  Keeping it separate from the
+    prompt builder ensures that prompt-builder functions remain pure
+    (data-in / prompt-out) and are not coupled to on-disk state.
+    """
     import novelforge.config as config
     from pathlib import Path
     names: set[str] = set()
@@ -314,8 +321,22 @@ def _collect_existing_names() -> str:
     return ", ".join(sorted(names)) if names else ""
 
 
-def build_characters_prompt(premise: str, genre: str, outline_text: str) -> list[dict[str, str]]:
-    names_to_avoid = _collect_existing_names()
+def build_characters_prompt(
+    premise: str, genre: str, outline_text: str, names_to_avoid: str = "",
+) -> list[dict[str, str]]:
+    """Build the character-generation prompt.
+
+    Parameters
+    ----------
+    premise:        Novel premise text.
+    genre:          Novel genre string.
+    outline_text:   Chapter outline produced by the outline agent.
+    names_to_avoid: Comma-separated character names from prior novels that
+                    should not be reused.  Obtain this value by calling
+                    :func:`collect_existing_character_names` in the caller
+                    and passing the result here; do **not** rely on this
+                    function to perform filesystem I/O itself.
+    """
     name_pool = format_name_pool_for_prompt(genre)
     return render_prompt(
         "characters", premise=premise, genre=genre,
