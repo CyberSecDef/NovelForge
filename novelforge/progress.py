@@ -33,6 +33,10 @@ class ProgressState(TypedDict, total=False):
     # Per-chapter accumulation
     character_state_log: list[str]
 
+    # Degraded-pass tracking: list of {pass_name, chapter_num, failure_summary} dicts
+    # populated whenever an optional chapter-agent pass fails but execution continues.
+    degraded_passes: list[dict[str, Any]]
+
     # Post-generation quality-audit reports
     consistency: dict[str, Any]
     global_continuity_audit: dict[str, Any]
