@@ -597,13 +597,18 @@ def friendly_llm_error(exc: Exception) -> str:
     return "Something went wrong with the AI service. Your progress is saved — please try again."
 
 
-def parse_llm_json(response: str) -> dict:
+def parse_llm_json(response: str) -> dict[str, Any] | list[Any]:
     """
     Parse JSON from LLM response, handling common irregularities:
     - Markdown code fences (```json, ```)
     - Extra whitespace
     - BOM characters
-    - Text before/after the JSON object
+    - Text before/after the JSON object or array
+
+    Returns a ``dict`` when the top-level JSON value is an object, or a
+    ``list`` when it is an array.  Callers that only expect one of these
+    forms should check ``isinstance(result, dict)`` /
+    ``isinstance(result, list)`` as appropriate.
 
     Raises json.JSONDecodeError if parsing fails after all strategies.
     """
@@ -632,7 +637,7 @@ def parse_llm_json(response: str) -> dict:
 
     # First attempt: try parsing cleaned response directly
     try:
-        result: dict[Any, Any] = json.loads(response)
+        result: dict[str, Any] | list[Any] = json.loads(response)
         logger.debug("parse_llm_json: parsed via strategy=%s", strategy)
         return result
     except json.JSONDecodeError:
@@ -647,7 +652,7 @@ def parse_llm_json(response: str) -> dict:
             "parse_llm_json: no JSON structure found in response (strategy=%s): %s",
             strategy, raw_preview,
         )
-        return json.loads(response)  # type: ignore[no-any-return]  # Will raise JSONDecodeError
+        return cast(dict[str, Any] | list[Any], json.loads(response))  # Will raise JSONDecodeError
 
     if start_brace == -1:
         start = start_bracket
