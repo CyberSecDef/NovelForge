@@ -430,7 +430,7 @@ if cur_persp.startswith("first_person:"):
 
 ---
 
-### 10. Silent Chapter Outline Lookup Failure in Revision — OPEN
+### 10. ~~Silent Chapter Outline Lookup Failure in Revision~~ DONE
 
 **Files:** `novelforge/routes/generation/revision.py` lines 92-99
 

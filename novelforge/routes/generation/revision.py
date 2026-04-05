@@ -100,6 +100,16 @@ def revise_chapter() -> Response | tuple[Response, int]:
         except (TypeError, ValueError):
             continue
 
+    if not chapter_outline_summary:
+        # Outline summary not found in snapshot — fall back to the chapter's
+        # existing generated summary so the revision prompt has some context.
+        logger.warning(
+            "Chapter %d outline summary not found in snapshot chapter_list "
+            "(token=%s); falling back to generated summary",
+            chapter_number, token,
+        )
+        chapter_outline_summary = chapters_done[target_idx].get("summary", "")
+
     target_chapter = chapters_done[target_idx]
     previous_summaries = "\n\n".join(
         f"Chapter {c.get('number', i+1)}: {c.get('summary', '')}"
