@@ -1,10 +1,8 @@
 """Outline generation and approval routes."""
 
-import hashlib
 import json
 import logging
 import re
-from concurrent.futures import Future, ThreadPoolExecutor
 
 from flask import Blueprint, Response, jsonify, request, session
 
@@ -16,22 +14,12 @@ from novelforge.agents.chapter import (
     build_title_prompt, build_outline_prompt, build_characters_prompt,
     collect_existing_character_names,
 )
-from novelforge.agents.planning import (
-    plan_story_architecture, plan_master_timeline, plan_character_fate_registry,
-    plan_character_arc_plan, plan_antagonist_motivation_plan,
-    plan_technology_rules, plan_theme_reinforcement, plan_pov_focal_character,
-)
+from novelforge.services.planning import run_full_planning, run_selective_planning
 from novelforge.session.persistence import save_session_state
 
 logger = logging.getLogger(__name__)
 
 outline_bp = Blueprint("outline", __name__)
-
-
-def _input_hash(*args: object) -> str:
-    """Compute a stable hash of serialised inputs for cache comparison."""
-    raw = json.dumps(args, sort_keys=True, default=str)
-    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def _apply_rename(text: str, old_name: str, new_name: str) -> str:
@@ -121,65 +109,21 @@ def generate_outline() -> Response | tuple[Response, int]:
         except json.JSONDecodeError:
             character_list = []
 
-        # Common kwargs shared by all planning agents
-        common = dict(
-            title=title, premise=str(premise), genre=genre,
-            chapter_list=chapter_list, special_instructions=special_instructions,
-        )
-
-        # --- Group 1: independent agents (run in parallel) ---
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            fut_arch = pool.submit(plan_story_architecture, **common)
-            fut_timeline = pool.submit(
-                plan_master_timeline, character_list=character_list, **common,
-            )
-            fut_tech = pool.submit(plan_technology_rules, **common)
-            fut_theme = pool.submit(plan_theme_reinforcement, **common)
-
-            story_architecture = fut_arch.result()
-            master_timeline = fut_timeline.result()
-            technology_rules = fut_tech.result()
-            theme_reinforcement = fut_theme.result()
-
-        # --- Group 2: depend on Group 1 outputs (run in parallel) ---
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            fut_fate = pool.submit(
-                plan_character_fate_registry,
-                character_list=character_list,
-                master_timeline=master_timeline, **common,
-            )
-            fut_arc = pool.submit(
-                plan_character_arc_plan,
-                character_list=character_list, **common,
-            )
-            fut_antag = pool.submit(
-                plan_antagonist_motivation_plan,
-                character_list=character_list,
-                master_timeline=master_timeline, **common,
-            )
-
-            character_fate_registry = fut_fate.result()
-            character_arc_plan = fut_arc.result()
-            antagonist_motivation_plan = fut_antag.result()
-
-        # --- Group 3: depends on Group 2 (character_arc_plan) ---
-        pov_focal_character_plan = plan_pov_focal_character(
+        # Run all planning agents via the shared orchestration service
+        planning = run_full_planning(
+            title=title,
+            premise=str(premise),
+            genre=genre,
+            chapter_list=chapter_list,
             character_list=character_list,
-            character_arc_plan=character_arc_plan, **common,
+            special_instructions=special_instructions,
         )
 
         # Store outline data in session
         session["title"] = title
         session["chapter_list"] = chapter_list
         session["character_list"] = character_list
-        session["story_architecture"] = story_architecture
-        session["master_timeline"] = master_timeline
-        session["character_fate_registry"] = character_fate_registry
-        session["character_arc_plan"] = character_arc_plan
-        session["antagonist_motivation_plan"] = antagonist_motivation_plan
-        session["technology_rules"] = technology_rules
-        session["theme_reinforcement"] = theme_reinforcement
-        session["pov_focal_character_plan"] = pov_focal_character_plan
+        session.update(planning)
 
         # Auto-save session state after outline generation for crash recovery
         save_session_state()
@@ -188,14 +132,7 @@ def generate_outline() -> Response | tuple[Response, int]:
             "title": title,
             "chapters": chapter_list,
             "characters": character_list,
-            "story_architecture": story_architecture,
-            "master_timeline": master_timeline,
-            "character_fate_registry": character_fate_registry,
-            "character_arc_plan": character_arc_plan,
-            "antagonist_motivation_plan": antagonist_motivation_plan,
-            "technology_rules": technology_rules,
-            "theme_reinforcement": theme_reinforcement,
-            "pov_focal_character_plan": pov_focal_character_plan,
+            **planning,
         })
 
     except RuntimeError as exc:
@@ -318,120 +255,37 @@ def approve_outline() -> Response | tuple[Response, int]:
     def _from_working(key: str, default: object = "") -> object:
         return working.get(key, session.get(key, default))
 
-    # Common kwargs shared by all planning agents (use working-copy values so
-    # rename propagation is reflected even before session is committed)
+    # Resolve planning inputs from the working copy (post-rename values)
     _title = str(_from_working("title"))
     _premise = str(_from_working("premise"))
     _genre = str(_from_working("genre", ""))
     _chapters = list(_from_working("chapter_list", []))  # type: ignore[call-overload]
     _characters = list(_from_working("character_list", []))  # type: ignore[call-overload]
     _instructions = str(_from_working("special_instructions"))
-    common = dict(
-        title=_title, premise=_premise, genre=_genre,
-        chapter_list=_chapters, special_instructions=_instructions,
-    )
 
-    # Compute per-agent input hashes and compare with cached values
-    prev_hashes = session.get("_agent_input_hashes", {})
-
-    # Base hash: inputs shared by chapter-only agents
-    base_inputs = (_title, _premise, _genre, _chapters, _instructions)
-    # Extended hash: adds character list
-    char_inputs = (*base_inputs, _characters)
-
-    new_hashes = {
-        "story_architecture":       _input_hash(*base_inputs),
-        "technology_rules":         _input_hash(*base_inputs),
-        "theme_reinforcement":      _input_hash(*base_inputs),
-        "master_timeline":          _input_hash(*char_inputs),
-        "character_arc_plan":       _input_hash(*char_inputs),
+    # Collect existing session planning outputs for use by skipped agents
+    _prev_results = {
+        key: session.get(key, {})
+        for key in (
+            "story_architecture", "master_timeline", "technology_rules",
+            "theme_reinforcement", "character_fate_registry",
+            "character_arc_plan", "antagonist_motivation_plan",
+            "pov_focal_character_plan",
+        )
     }
-    # These depend on Group 1 outputs — hash computed after Group 1 runs
-
-    def _needs_regen(agent_key: str) -> bool:
-        return bool(new_hashes.get(agent_key) != prev_hashes.get(agent_key))
 
     try:
-        # --- Group 1: independent agents (run in parallel, skip if unchanged) ---
-        # Results are collected into g1_results; the session is not touched yet.
-        g1_results: dict[str, dict] = {}
-        g1_agents: dict[str, Future[dict]] = {}
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            if _needs_regen("story_architecture"):
-                g1_agents["story_architecture"] = pool.submit(plan_story_architecture, **common)
-            if _needs_regen("master_timeline"):
-                g1_agents["master_timeline"] = pool.submit(
-                    plan_master_timeline, character_list=_characters, **common,
-                )
-            if _needs_regen("technology_rules"):
-                g1_agents["technology_rules"] = pool.submit(plan_technology_rules, **common)
-            if _needs_regen("theme_reinforcement"):
-                g1_agents["theme_reinforcement"] = pool.submit(plan_theme_reinforcement, **common)
-
-            for key, fut in g1_agents.items():
-                g1_results[key] = fut.result()  # may raise; session still untouched
-
-        skipped_g1 = 4 - len(g1_agents)
-        if skipped_g1:
-            logger.info("Skipped %d unchanged Group 1 planning agents", skipped_g1)
-
-        # Merge Group 1 results into the working copy; unchanged agents fall back
-        # to their existing session values.
-        for key in ("story_architecture", "master_timeline", "technology_rules", "theme_reinforcement"):
-            working[key] = g1_results.get(key, session.get(key, {}))
-
-        # Now compute Group 2 hashes (depend on master_timeline working value)
-        _master_timeline = working["master_timeline"]
-        new_hashes["character_fate_registry"] = _input_hash(*char_inputs, _master_timeline)
-        new_hashes["antagonist_motivation_plan"] = _input_hash(*char_inputs, _master_timeline)
-
-        # --- Group 2: depend on Group 1 outputs (run in parallel, skip if unchanged) ---
-        g2_results: dict[str, dict] = {}
-        g2_agents: dict[str, Future[dict]] = {}
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            if _needs_regen("character_fate_registry"):
-                g2_agents["character_fate_registry"] = pool.submit(
-                    plan_character_fate_registry,
-                    character_list=_characters,
-                    master_timeline=_master_timeline, **common,
-                )
-            if _needs_regen("character_arc_plan"):
-                g2_agents["character_arc_plan"] = pool.submit(
-                    plan_character_arc_plan,
-                    character_list=_characters, **common,
-                )
-            if _needs_regen("antagonist_motivation_plan"):
-                g2_agents["antagonist_motivation_plan"] = pool.submit(
-                    plan_antagonist_motivation_plan,
-                    character_list=_characters,
-                    master_timeline=_master_timeline, **common,
-                )
-
-            for key, fut in g2_agents.items():
-                g2_results[key] = fut.result()  # may raise; session still untouched
-
-        skipped_g2 = 3 - len(g2_agents)
-        if skipped_g2:
-            logger.info("Skipped %d unchanged Group 2 planning agents", skipped_g2)
-
-        # Merge Group 2 results into the working copy
-        for key in ("character_fate_registry", "character_arc_plan", "antagonist_motivation_plan"):
-            working[key] = g2_results.get(key, session.get(key, {}))
-
-        # --- Group 3: depends on Group 2 (character_arc_plan) + narrative perspective ---
-        _character_arc_plan = working["character_arc_plan"]
-        pov_hash = _input_hash(*char_inputs, _character_arc_plan, narrative_perspective)
-        new_hashes["pov_focal_character_plan"] = pov_hash
-        if pov_hash != prev_hashes.get("pov_focal_character_plan"):
-            working["pov_focal_character_plan"] = plan_pov_focal_character(
-                character_list=_characters,
-                character_arc_plan=_character_arc_plan,
-                narrative_perspective=narrative_perspective, **common,
-            )  # may raise; session still untouched
-        else:
-            logger.info("Skipped unchanged POV & Focal Character Planner")
-            working["pov_focal_character_plan"] = session.get("pov_focal_character_plan", {})
-
+        planning, new_hashes = run_selective_planning(
+            title=_title,
+            premise=_premise,
+            genre=_genre,
+            chapter_list=_chapters,
+            character_list=_characters,
+            special_instructions=_instructions,
+            narrative_perspective=narrative_perspective,
+            prev_hashes=session.get("_agent_input_hashes", {}),
+            prev_results=_prev_results,
+        )
     except RuntimeError as exc:
         logger.error("Outline re-planning failed: %s", exc)
         return jsonify({"error": friendly_llm_error(exc)}), 502
@@ -440,6 +294,7 @@ def approve_outline() -> Response | tuple[Response, int]:
     # ALL recomputations succeeded.  Commit the full working copy to the
     # session in one block so partial state is never observable.
     # -------------------------------------------------------------------------
+    working.update(planning)
     for key, value in working.items():
         session[key] = value
     session["_agent_input_hashes"] = new_hashes
