@@ -9,6 +9,174 @@ recommended fixes.
 
 ## Critical / High Priority
 
+### 0. Eliminate Snapshot Duplication in Session JSON — OPEN
+
+**Files:**
+- `novelforge/routes/generation/chapters.py` lines 67-102 (snapshot creation, embedded in progress state)
+- `novelforge/routes/generation/chapters.py` lines 157-203 (`_run_chapter_generation_internal` reads from `snap`)
+- `novelforge/routes/generation/revision.py` lines 78-92 (reads `progress_data.get("snapshot")`)
+- `novelforge/routes/export.py` lines 113, 138, 555-603 (reads `progress_data.get("snapshot")`)
+- `novelforge/session/persistence.py` lines 471-512 (`persist_completed_chapters` writes `progress_data` including snapshot)
+- `novelforge/session/persistence.py` lines 226-280 (`save_session_state` writes top-level session keys)
+- `novelforge/session/persistence.py` lines 329-351 (`rebuild_stale_progress` reconstructs progress on load)
+- `novelforge/session/persistence.py` lines 354-407 (`restore_session_from_state` restores session + progress)
+- `novelforge/progress.py` (ProgressManager stores the snapshot in memory as part of the progress entry)
+
+**Problem:**
+The session JSON file stores every piece of novel data **twice**:
+
+1. **Top-level keys** — `title`, `premise`, `genre`, `chapters`, `word_count`,
+   `chapter_list`, `character_list`, all 8 planning agent outputs, `voice_seed`,
+   `narrative_perspective`, `special_instructions` (~199 KB)
+2. **`progress_data.snapshot`** — An identical copy of all the above, embedded
+   inside the progress data dict (~199 KB)
+
+This is because two independent persistence paths evolved:
+- `save_session_state()` writes the Flask session's top-level keys to the JSON file
+- `persist_completed_chapters()` writes the full `progress_manager.get(token)` dict
+  (which includes `snapshot`) into `progress_data`
+
+The duplication doubles the file size (currently ~400 KB before any chapters are
+written, will grow to ~1-2 MB for a 25-chapter novel). Additionally,
+`completed_chapters` at the top level and `progress_data.chapters_done` will also
+be duplicated once chapters complete — each chapter is ~20 KB of content, so 25
+chapters = ~500 KB duplicated.
+
+Measured from a live session (`bf207166`):
+```
+Top-level session keys:  ~199 KB (50% of file)
+progress_data.snapshot:  ~199 KB (50% of file)  ← IDENTICAL COPY
+Total file:              ~398 KB
+```
+
+**Why it matters:**
+- File size is 2x what it needs to be, growing to multi-MB for long novels
+- Two copies of the same data can drift if a bug updates one but not the other
+- The `persist_completed_chapters()` path reads the file, merges in the full
+  progress_data (with snapshot), and writes it back — moving ~200 KB of redundant
+  data through the read-modify-write cycle on every chapter completion
+- Confusing mental model: developers must understand that "snapshot" is just a
+  frozen copy of session state, not separate data
+
+**Constraints:**
+- **All existing functionality must be retained.** The generation background thread,
+  revision endpoint, export endpoint, illustration generation, and session
+  restore/crash recovery must all continue to work identically.
+- **Crash recovery must not lose data.** If the server crashes mid-generation, the
+  session JSON must contain everything needed to resume or display completed
+  chapters. The file must be saved at every stage change.
+- **No data duplication.** Every piece of data should be stored exactly once in the
+  JSON file.
+
+**Current data flow (what needs to change):**
+
+1. **Generation start** (`chapters.py:67-102`): Builds a `snapshot` dict by copying
+   session keys. Passes it to the background thread AND embeds it in the progress
+   manager entry as `initial_state["snapshot"]`.
+
+2. **Background thread** (`chapters.py:157-203`): Reads all novel metadata from the
+   `snap` dict (the snapshot). Does not read from the session or JSON file during
+   generation.
+
+3. **Per-chapter persist** (`persistence.py:471-512`): `persist_completed_chapters()`
+   reads the JSON file, sets `state["completed_chapters"]`, then sets
+   `state["progress_data"] = progress_manager.get(token)` — which includes the full
+   snapshot. Writes the file back.
+
+4. **Revision** (`revision.py:78-92`): Reads `progress_data.get("snapshot")` from
+   the in-memory progress manager to get novel metadata.
+
+5. **Export** (`export.py:113,138,555-603`): Same as revision — reads from
+   `progress_data.get("snapshot")`.
+
+6. **Session restore** (`persistence.py:354-407`): Reads top-level keys from the
+   JSON file into the Flask session. If `progress_data` exists, loads it into the
+   progress manager (which puts the snapshot back in memory).
+
+**Recommended approach (Option A: eliminate snapshot from persistence):**
+
+**Phase 1 — Stop persisting the snapshot:**
+- In `persist_completed_chapters()`, strip `snapshot` from the progress data before
+  writing:
+  ```python
+  if progress is not None:
+      # Don't persist the snapshot — it duplicates top-level session keys
+      progress_copy = {k: v for k, v in progress.items() if k != "snapshot"}
+      state["progress_data"] = progress_copy
+  ```
+- Ensure `save_session_state()` saves all the keys that were in the snapshot as
+  top-level keys (it already does).
+
+**Phase 2 — Rebuild snapshot on load:**
+- In `restore_session_from_state()`, after restoring the Flask session and creating
+  the progress manager entry, inject a snapshot built from the top-level keys:
+  ```python
+  if token and pd:
+      # Rebuild snapshot from top-level session keys (not stored in progress_data)
+      pd["snapshot"] = {
+          "session_id": state.get("session_id", ""),
+          "premise": state.get("premise", ""),
+          "genre": state.get("genre", ""),
+          "chapters": state.get("chapters", 0),
+          "word_count": state.get("word_count", 0),
+          "special_instructions": state.get("special_instructions", ""),
+          "title": state.get("title", ""),
+          "chapter_list": state.get("chapter_list", []),
+          "character_list": state.get("character_list", []),
+          "story_architecture": state.get("story_architecture", {}),
+          "master_timeline": state.get("master_timeline", {}),
+          "character_fate_registry": state.get("character_fate_registry", {}),
+          "character_arc_plan": state.get("character_arc_plan", {}),
+          "antagonist_motivation_plan": state.get("antagonist_motivation_plan", {}),
+          "technology_rules": state.get("technology_rules", {}),
+          "theme_reinforcement": state.get("theme_reinforcement", {}),
+          "pov_focal_character_plan": state.get("pov_focal_character_plan", {}),
+          "voice_seed": state.get("voice_seed", {}),
+          "narrative_perspective": state.get("narrative_perspective", "third_person"),
+      }
+      progress_manager.create(token, pd)
+  ```
+- Do the same in `rebuild_stale_progress()` — inject the snapshot from the state
+  dict.
+
+**Phase 3 — Eliminate `completed_chapters` / `chapters_done` duplication:**
+- Stop writing `state["completed_chapters"]` as a separate top-level key. Instead,
+  read it from `progress_data.chapters_done` on restore.
+- OR stop writing `chapters_done` in progress_data and read from top-level
+  `completed_chapters` on restore.
+- Pick one canonical location and derive the other.
+
+**Phase 4 — Ensure every stage change persists:**
+- Audit all places where novel state changes (planning agents, chapter completion,
+  revision, audit reports) and confirm the JSON file is written.
+- The current `_persist_progress()` throttled writes + forced writes on chapter
+  completion handle most cases, but verify that planning agent updates during
+  `/approve_outline` also trigger a save.
+
+**Phase 5 — Update all snapshot consumers:**
+- `revision.py:78` reads `progress_data.get("snapshot")` — this continues to work
+  because the snapshot is rebuilt in memory on load and still set by
+  `generate_chapters` at generation start. No change needed.
+- `export.py:113,138,555` — same, no change needed.
+- `chapters.py:157-203` — receives `snap` as a function argument, no change needed.
+
+**Phase 6 — Backward compatibility:**
+- The restore path must handle old JSON files that still contain
+  `progress_data.snapshot`. If present, use it; if absent, rebuild from top-level
+  keys. This ensures existing session files load correctly.
+
+**Testing:**
+- Verify session JSON file size is roughly halved after the change.
+- Verify crash recovery: kill the server mid-generation, restart, load session,
+  confirm all completed chapters are present.
+- Verify revision: after loading a restored session, revise a chapter and confirm
+  it uses correct title/genre/characters.
+- Verify export: confirm export uses correct title.
+- Verify old session files (with embedded snapshot) still load correctly.
+- Verify new session files (without embedded snapshot) load correctly.
+
+---
+
 ### 1. Zero Test Coverage for 4 New Pipeline Steps — OPEN
 
 **Files:**

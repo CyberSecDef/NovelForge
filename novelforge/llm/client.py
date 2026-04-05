@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import re
 import threading
 import time
 from typing import Any, cast
@@ -293,14 +294,21 @@ def _to_ascii(text: str) -> str:
     return cast(str, unidecode(text))
 
 
+# Control characters that are invalid in JSON strings or rejected by LLM APIs.
+# Preserves \t (0x09), \n (0x0a), and \r (0x0d) which are valid whitespace.
+_CONTROL_CHAR_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+
 def _sanitize_messages(messages: list[dict]) -> list[dict]:
-    """Return a copy of *messages* with HTML entities unescaped and content transliterated to ASCII."""
+    """Return a copy of *messages* with HTML entities unescaped, content transliterated to ASCII, and control characters stripped."""
     out = []
     for msg in messages:
         cleaned = dict(msg)
         if isinstance(cleaned.get("content"), str):
             # Unescape HTML entities that may be baked into older session data
-            cleaned["content"] = _to_ascii(html.unescape(cleaned["content"]))
+            text = _to_ascii(html.unescape(cleaned["content"]))
+            # Strip control characters that LLM APIs reject (NUL, backspace, etc.)
+            cleaned["content"] = _CONTROL_CHAR_RE.sub('', text)
         out.append(cleaned)
     return out
 
@@ -409,7 +417,8 @@ def _handle_success(
                 status_code=resp.status_code, response_body=body_preview,
             )
 
-    return _to_ascii(data["choices"][0]["message"]["content"])
+    content = _to_ascii(data["choices"][0]["message"]["content"])
+    return _CONTROL_CHAR_RE.sub('', content)
 
 
 def _classify_request_error(
