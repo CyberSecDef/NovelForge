@@ -342,6 +342,11 @@ class TestCharacterFateNormalizerBoundary:
         result = self.agent.normalise({}, character_list=[], chapter_list=[], total_chapters=1)
         assert isinstance(result, dict)
 
+    def test_non_dict_chapter_entries_no_error(self):
+        # chapter_list with non-dict items; total_chapters derived from len()
+        result = self.agent.normalise({}, character_list=[], chapter_list=[None, "bad"], total_chapters=2)
+        assert isinstance(result, dict)
+
     def test_malformed_data_uses_fallback(self):
         result = self.agent.normalise(None, character_list=[], chapter_list=[{"number": 1}], total_chapters=1)  # type: ignore[arg-type]
         assert isinstance(result, dict)
