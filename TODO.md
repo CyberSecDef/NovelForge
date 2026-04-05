@@ -826,7 +826,7 @@ Option C: Return a frozen/immutable view (e.g., `types.MappingProxyType`) so
 mutations raise at the call site.
 
 
-### 21. Prompt Updates — OPEN
+### 21. ~~Prompt Updates~~ DONE
 
 Each of the following prompts should be added to the per chapter workflows
     

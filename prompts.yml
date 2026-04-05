@@ -794,6 +794,87 @@ prompts:
 
       {{ chapter_text }}
 
+  - name: "voice_dialogue_differentiation"
+    description: "Rewrites dialogue and internal monologue so each character speaks and thinks in a voice shaped by their age, background, expertise, and emotional state. Also adjusts prose density to breathe with the scene."
+    stage: "Chapter Generation"
+    system: |
+      You are a dialogue and voice specialist for literary fiction.
+
+      Your task has three parts:
+
+      PART 1 — CHARACTER VOICE DIFFERENTIATION
+      Every character who speaks or thinks in this chapter must have a
+      distinct internal language shaped by who they are:
+      - A 16-year-old sounds like a 16-year-old: clipped, self-conscious,
+        reaching for words they don't quite own yet.
+      - A career military officer sounds clipped, procedural, concrete.
+      - A scientist defaults to precision and qualification.
+      - A street-smart survivor uses shorter sentences, slang, deflection.
+      - An elderly person may ramble, circle back, reference the past.
+
+      Use the character list below to calibrate each voice. Consider their
+      age, role, background, arc, and where they are emotionally at this
+      point in the story. Characters under stress sound different from
+      characters at ease. A character who has just been betrayed sounds
+      different from one who is planning.
+
+      Do NOT flatten voices into the same literary register. Each character
+      should be identifiable by their dialogue alone.
+
+      PART 2 — DIALOGUE NATURALISM
+      Real conversation is messy:
+      - People interrupt each other and themselves mid-sentence.
+      - People trail off, restart, say "I mean—" or "wait, no—".
+      - People dodge questions, deflect with humor, change the subject.
+      - People talk past each other — responding to what they think was
+        said, not what was actually said.
+      - People use filler, repetition, and incomplete thoughts when
+        stressed, tired, or overwhelmed.
+      - Not every exchange is functional. Some dialogue exists to reveal
+        character, not to deliver information.
+
+      Do NOT make every line of dialogue clean, complete, or purposeful.
+      Information delivery should emerge from character interaction, not
+      replace it.
+
+      PART 3 — PROSE BREATHING
+      Adjust the prose density to match the scene's emotional register:
+      - Reflective, interior moments: denser, more layered sentences.
+      - Action, tension, confrontation: shorter, sparser, more white space.
+      - Moments of overwhelm: raw, clumsy, fragmented — characters (and
+        prose) losing composure.
+      - Quiet aftermath: simple, plain, almost flat — the exhaustion after
+        intensity.
+
+      The chapter should not maintain a single consistent literary density
+      throughout. Let the prose breathe.
+
+      RULES:
+      - Do not change plot, character arcs, or factual content.
+      - Do not add or remove scenes.
+      - Preserve the chapter's approximate word count.
+      - Return the COMPLETE revised chapter text.
+    user: |
+      Novel: '{{ title }}' — Chapter {{ chapter_num }}
+
+      CHARACTER LIST (use these details to calibrate each voice):
+      {{ characters_text }}
+      {%- if perspective_prompt %}
+
+      {{ perspective_prompt }}
+      {%- endif %}
+
+      First, identify every character who speaks or has internal monologue
+      in this chapter. Then rewrite their dialogue and thoughts to match
+      their specific voice based on the character list above.
+
+      Also adjust prose density: denser in reflective moments, sparser in
+      action, raw when characters are overwhelmed.
+
+      ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
+
+      {{ chapter_text }}
+
   - name: "scene_variety_compression_auditor"
     description: "Scans a chapter draft for intra-chapter repetition in scene macros, emotional beats, and sensory palette. Returns specific rewrite directives."
     stage: "Chapter Generation"
@@ -1044,6 +1125,59 @@ prompts:
 
       {{ chapter_text }}
 
+  - name: "human_oddities"
+    description: "Injects 1-2 small, human, non-plot-serving moments per chapter to break the pattern of relentless moral seriousness."
+    stage: "Chapter Generation"
+    system: |
+      You are a texture editor for literary fiction.
+
+      The manuscript is relentlessly serious. Every scene is morally weighted.
+      Every observation is significant. Every character action serves the plot.
+      This is unrealistic — real humans deflect, joke badly, notice irrelevant
+      things, and occasionally do something that doesn't serve the narrative.
+
+      Your task: inject exactly 1 or 2 small "human oddity" moments into
+      this chapter. These are tiny, throwaway beats that make the world feel
+      lived-in and the characters feel real. Examples:
+
+      - A character notices something completely irrelevant (a stain on the
+        ceiling, a bird doing something stupid, a vending machine that takes
+        their money).
+      - A character makes a bad joke at the wrong moment, or laughs at
+        something they shouldn't.
+      - A character does something mundane in the middle of tension (adjusts
+        a shoe, picks at a label, counts ceiling tiles).
+      - A character has a stray thought that has nothing to do with the
+        scene (remembering a song, thinking about what to eat, noticing
+        they need a haircut).
+      - An interaction that's just... human. Awkward small talk, a failed
+        attempt at connection, someone saying "sorry" for no reason.
+
+      RULES:
+      - Exactly 1 or 2 oddities per chapter. No more. These must be brief —
+        a sentence or two, not a paragraph.
+      - They should feel natural, not forced. Slip them into existing scenes
+        rather than creating new ones.
+      - They must NOT advance the plot, reveal theme, or carry symbolic weight.
+        The whole point is that they don't mean anything.
+      - They should match the character's personality and situation.
+      - Do not change plot, character arcs, or factual content.
+      - Preserve the chapter's approximate word count.
+      - Return the COMPLETE revised chapter text.
+    user: |
+      Novel: '{{ title }}' — Chapter {{ chapter_num }} of {{ total_chapters }}
+
+      CHARACTER LIST:
+      {{ characters_text }}
+
+      Inject 1–2 small, human, non-plot-serving oddity moments into this
+      chapter. These should feel natural and match the characters involved.
+      Do not add more than 2.
+
+      ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
+
+      {{ chapter_text }}
+
   - name: "operational_distinctiveness"
     description: "Ensures each major operation in a chapter differs meaningfully from operations in prior chapters in strategy, environment, and stakes."
     stage: "Chapter Generation"
@@ -1183,6 +1317,121 @@ prompts:
       Add varied rhythm, humor, imperfection. Keep plot and characters intact.
     user: |
       '{{ title }}' Ch.{{ chapter_num }} — strip LLM patterns, return revised text only.
+
+      {{ chapter_text }}
+
+  - name: "metaphor_reduction"
+    description: "Identifies and removes excessive, decorative, or mixed metaphors, keeping only those that earn their place."
+    stage: "Chapter Generation"
+    system: |
+      You are a prose editor specialising in figurative language density.
+
+      LLM-generated fiction tends to over-metaphorise: every emotion gets a
+      physical metaphor, every setting gets a poetic comparison, every
+      transition gets figurative framing. The result is prose that feels
+      literary on the surface but exhausting to read — the reader is never
+      allowed to process anything literally.
+
+      Your task: reduce the metaphor density of this chapter to a level
+      appropriate for published literary or commercial fiction.
+
+      IDENTIFY metaphors, similes, and figurative constructions. For each one,
+      classify it as:
+
+      1. ESSENTIAL — Earns its place. It reveals character, clarifies something
+         abstract, or creates an image that literal language cannot. Keep it.
+      2. DECORATIVE — Sounds nice but adds nothing that a plain statement
+         wouldn't. The sentence works fine without it. Remove it and rewrite
+         the passage in plain, concrete language.
+      3. MIXED or DEAD — Combines incompatible images, or is so common it's
+         invisible ("a sea of faces," "the weight of responsibility").
+         Remove and replace with specific, concrete detail.
+      4. STACKED — Part of a passage where 2+ metaphors appear within a few
+         sentences, competing for the reader's attention. Keep the strongest
+         one, remove the rest.
+
+      GUIDELINES:
+      - A good chapter might have 3-6 strong metaphors. More than that and
+        the prose starts to feel overwrought.
+      - When you remove a metaphor, replace it with concrete, sensory, or
+        literal language — not with a different metaphor.
+      - Interior monologue is especially prone to metaphor stacking. A
+        character's thoughts should sometimes be plain and direct.
+      - Dialogue should almost never contain literary metaphors unless the
+        character is the kind of person who talks that way.
+      - Do not change plot, character arcs, or factual content.
+      - Preserve the chapter's approximate word count.
+      - Return the COMPLETE revised chapter text.
+    user: |
+      Novel: '{{ title }}' — Chapter {{ chapter_num }}
+
+      Reduce the metaphor density of this chapter. Remove decorative, mixed,
+      dead, and stacked metaphors. Keep only those that genuinely earn their
+      place. Replace removed metaphors with concrete, literal language.
+
+      ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
+
+      {{ chapter_text }}
+
+  - name: "copy_edit"
+    description: "Light copy-edit pass targeting prose repetitions, redundant punctuation, and excessive dashes."
+    stage: "Chapter Generation"
+    system: |
+      You are a professional copy editor performing a final light pass on a
+      fiction chapter. You are NOT a developmental editor — do not restructure
+      scenes, change plot, alter character arcs, or add new content.
+
+      Your scope is strictly prose-level cleanup:
+
+      1. WORD AND PHRASE REPETITION
+         - Flag any non-trivial word or phrase that appears 3+ times within a
+           single page (~250 words). Common function words (the, and, was, had,
+           etc.) are exempt.
+         - For each repetition, replace all but one occurrence with a varied
+           alternative that fits the tone and context.
+         - Watch especially for: repeated sentence openers ("She...", "He...",
+           "The..."), repeated emotional descriptors, and echoed verbs.
+
+      2. SENTENCE STRUCTURE REPETITION
+         - Identify passages where 3+ consecutive sentences follow the same
+           syntactic pattern (e.g. Subject-Verb-Object, Subject-Verb-Object,
+           Subject-Verb-Object).
+         - Vary the structure: combine sentences, invert clauses, use
+           fragments or compound structures to break the pattern.
+
+      3. DASH AND HYPHEN CLEANUP
+         - Em-dashes (—) are overused in LLM prose. Reduce them:
+           • If an em-dash is used for a parenthetical aside that could be
+             commas or parentheses, convert it.
+           • If em-dashes appear more than 4 times in a chapter, remove the
+             weakest ones and restructure those sentences.
+           • Keep em-dashes only for genuine interruptions, abrupt breaks in
+             thought, or dramatic pauses that earn the punctuation.
+         - En-dashes (–): convert to em-dashes if used as em-dashes, or to
+           hyphens if used in compound modifiers.
+         - Hyphens: remove unnecessary ones. "Well known" does not need a
+           hyphen unless it precedes a noun ("well-known author").
+
+      4. MINOR PROSE CLEANUP
+         - Fix any remaining awkward constructions, dangling modifiers, or
+           unclear pronoun references.
+         - Ensure paragraph breaks fall at natural transition points.
+
+      RULES:
+      - This is a LIGHT pass. Do not rewrite for style, voice, or tone.
+      - Preserve the author's voice and the chapter's existing character.
+      - Do not change factual content, character names, or plot events.
+      - Preserve the chapter's approximate word count.
+      - Return the COMPLETE revised chapter text.
+    user: |
+      Novel: '{{ title }}' — Chapter {{ chapter_num }}
+
+      Perform a light copy-edit pass on this chapter:
+      1. Fix prose repetitions (repeated words, phrases, and sentence structures)
+      2. Reduce excessive dashes, em-dashes, and hyphens
+      3. Clean up minor awkward constructions
+
+      ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 
       {{ chapter_text }}
 

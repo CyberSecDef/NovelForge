@@ -102,6 +102,19 @@ def build_prose_refinement_agent_prompt(chapter_text: str, chapter_num: int, tit
     return render_prompt("prose_refinement_agent", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
+def build_voice_dialogue_differentiation_prompt(
+    chapter_text: str, chapter_num: int, title: str,
+    characters_text: str, perspective_prompt: str = "",
+) -> list[dict[str, str]]:
+    return render_prompt(
+        "voice_dialogue_differentiation",
+        title=title, chapter_num=chapter_num,
+        characters_text=characters_text,
+        perspective_prompt=perspective_prompt or "",
+        chapter_text=chapter_text,
+    )
+
+
 def build_scene_variety_compression_auditor_prompt(chapter_text: str, chapter_summary: str, chapter_num: int, title: str) -> list[dict[str, str]]:
     return render_prompt("scene_variety_compression_auditor", title=title, chapter_num=chapter_num,
                          chapter_summary=chapter_summary, chapter_text=chapter_text)
@@ -180,6 +193,19 @@ def build_narrative_momentum_distinctiveness_prompt(
     )
 
 
+def build_human_oddities_prompt(
+    chapter_text: str, chapter_num: int, title: str,
+    total_chapters: int, characters_text: str,
+) -> list[dict[str, str]]:
+    return render_prompt(
+        "human_oddities",
+        title=title, chapter_num=chapter_num,
+        total_chapters=total_chapters,
+        characters_text=characters_text,
+        chapter_text=chapter_text,
+    )
+
+
 def build_operational_distinctiveness_prompt(chapter_text: str, previous_summaries: str, chapter_summary: str,
                                               chapter_num: int, title: str) -> list[dict[str, str]]:
     return render_prompt(
@@ -230,6 +256,14 @@ def build_vocabulary_fix_prompt(
             ),
         },
     ]
+
+
+def build_metaphor_reduction_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    return render_prompt("metaphor_reduction", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
+
+
+def build_copy_edit_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    return render_prompt("copy_edit", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
 def build_chapter_summary_prompt(chapter_text: str, chapter_num: int) -> list[dict[str, str]]:

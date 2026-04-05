@@ -21,7 +21,10 @@ from novelforge.agents.chapter.prompts import (
     build_character_state_updater_prompt,
     build_context_analyzer_prompt,
     build_continuity_gatekeeper_prompt,
+    build_copy_edit_prompt,
     build_editing_agent_prompt,
+    build_human_oddities_prompt,
+    build_metaphor_reduction_prompt,
     build_narrative_momentum_distinctiveness_prompt,
     build_operational_distinctiveness_prompt,
     build_per_chapter_compression_check_prompt,
@@ -32,6 +35,7 @@ from novelforge.agents.chapter.prompts import (
     build_structure_agent_prompt,
     build_synthesizer_prompt,
     build_vocabulary_fix_prompt,
+    build_voice_dialogue_differentiation_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -236,6 +240,16 @@ def _run_all_chapter_agents(
 
     _check_deadline()
     if step_callback:
+        step_callback(f"Chapter {chapter_num}: voice & dialogue differentiation")
+    text = _safe(
+        lambda t: build_voice_dialogue_differentiation_prompt(
+            t, chapter_num, title, characters_text, ctx.perspective_prompt,
+        ),
+        text, action=f"Chapter {chapter_num}: voice & dialogue differentiation",
+    )
+
+    _check_deadline()
+    if step_callback:
         step_callback(f"Chapter {chapter_num}: scene variety & compression audit")
     scene_audit_directives = run_scene_variety_compression_auditor(
         chapter_text=text, chapter_summary=chapter_outline_summary,
@@ -270,6 +284,16 @@ def _run_all_chapter_agents(
             t, previous_summaries, chapter_outline_summary, chapter_num, title, total_chapters,
         ),
         text, action=f"Chapter {chapter_num}: momentum & distinctiveness",
+    )
+
+    _check_deadline()
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: human oddities")
+    text = _safe(
+        lambda t: build_human_oddities_prompt(
+            t, chapter_num, title, total_chapters, characters_text,
+        ),
+        text, action=f"Chapter {chapter_num}: human oddities",
     )
 
     _check_deadline()
@@ -327,6 +351,14 @@ def _run_all_chapter_agents(
         text, action=f"Chapter {chapter_num}: anti-LLM pass",
     )
 
+    _check_deadline()
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: metaphor reduction")
+    text = _safe(
+        lambda t: build_metaphor_reduction_prompt(t, chapter_num, title),
+        text, action=f"Chapter {chapter_num}: metaphor reduction",
+    )
+
     # Vocabulary diversity scan — pure Python, no LLM call
     _check_deadline()
     violations = scan_vocabulary_overuse(text)
@@ -345,6 +377,14 @@ def _run_all_chapter_agents(
     text = _safe(
         lambda t: build_quality_controller_prompt(t, chapter_num, title),
         text, action=f"Chapter {chapter_num}: quality control",
+    )
+
+    _check_deadline()
+    if step_callback:
+        step_callback(f"Chapter {chapter_num}: copy edit")
+    text = _safe(
+        lambda t: build_copy_edit_prompt(t, chapter_num, title),
+        text, action=f"Chapter {chapter_num}: copy edit",
     )
 
     _check_deadline()
