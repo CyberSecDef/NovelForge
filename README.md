@@ -7,6 +7,7 @@
 ## Table of Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Requirements](#requirements)
@@ -207,6 +208,40 @@ Post-Manuscript Audits (after all chapters):
 - **AJAX-only UI** – All form submissions and data fetches use jQuery AJAX; the page never reloads.
 - **Input Validation** – Both client-side (jQuery) and server-side (Python) validation with Bootstrap feedback messages.
 - **Security Headers** – CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and Permissions-Policy on all responses. SRI hashes on all CDN resources.
+
+---
+
+## Screenshots
+
+### Step 1 – Novel Setup
+
+Enter your story premise, choose a genre, set the number of chapters and target word count, and optionally add special events or instructions before generating the outline.
+
+![Step 1 – Novel Setup](docs/screenshots/step1-novel-setup.png)
+
+### Step 2 – Review & Edit Chapter Outline
+
+Review and edit the AI-generated chapter-by-chapter outline. Each chapter title and summary is fully editable in-place before writing begins.
+
+![Step 2 – Chapter Outline](docs/screenshots/step2-chapter-outline.png)
+
+### Step 2 – Review & Edit Characters
+
+Review and refine the AI-generated character list. Add, remove, or edit character names, ages, roles, backstories, and arcs, and choose the narrative perspective.
+
+![Step 2 – Character Development](docs/screenshots/step2-character-development.png)
+
+### Step 3 – Chapter Writing Progress
+
+Once you approve the outline, NovelForge writes every chapter in the background. A live progress bar and chapter-by-chapter status list update in real time as each chapter is completed.
+
+![Step 3 – Chapter Writing](docs/screenshots/step3-chapter-writing.png)
+
+### Step 4 – Export & Revision
+
+When generation is complete, download your manuscript in multiple formats, revise individual chapters with custom instructions, generate cover and scene illustrations, and view the full editor's notes report.
+
+![Step 4 – Export](docs/screenshots/step4-export.png)
 
 ---
 
