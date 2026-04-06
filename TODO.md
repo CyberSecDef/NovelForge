@@ -873,3 +873,27 @@ if not _is_valid_token(token):
 ```
 
 ---
+
+
+
+
+
+### 16. Images not generating
+Illustrations
+Generates 5–10 images from key scenes (requires IMAGE_API_KEY)
+No illustrations were generated.
+
+{
+  "timestamp": "2026-04-06 17:28:29",
+  "type": "image_request",
+  "url": "https://api.openai.com/v1/images/generations",
+  "model": "gpt-image-1-mini",
+  "prompt": "A towering vertical lattice of colossal skyscrapers looms in a low-angle vista, their faces a shifting labyrinth of catwalks, stair-glyphs and suspended bridges that recede into mist; in the foregroun..."
+}
+{
+  "timestamp": "2026-04-06 17:28:41",
+  "type": "image_request",
+  "url": "https://api.openai.com/v1/images/generations",
+  "model": "gpt-image-1-mini",
+  "prompt": "A claustrophobic sealed chamber lit by strobing flares and ringing brass bells, captured at the precise moment of escalation: a young climber (Aldric) hangs mid-fall, half-silhouetted against a wall o..."
+}

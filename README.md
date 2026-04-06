@@ -7,6 +7,7 @@
 ## Table of Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Requirements](#requirements)
@@ -207,6 +208,47 @@ Post-Manuscript Audits (after all chapters):
 - **AJAX-only UI** – All form submissions and data fetches use jQuery AJAX; the page never reloads.
 - **Input Validation** – Both client-side (jQuery) and server-side (Python) validation with Bootstrap feedback messages.
 - **Security Headers** – CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and Permissions-Policy on all responses. SRI hashes on all CDN resources.
+
+---
+
+reenshots
+
+### Step 1 – Novel Setup
+
+Enter your story premise, choose a genre, set the number of chapters and target word count, and optionally add special events or instructions before generating the outline.
+
+![Step 1 – Novel Setup](docs/tab1.jpg)
+
+### Step 2 – Review & Edit Chapter Outline
+
+Review and edit the AI-generated chapter-by-chapter outline. Each chapter title and summary is fully editable in-place before writing begins.
+
+![Step 2 – Chapter Outline](docs/tab2a.jpg)
+
+### Step 2 – Review & Edit Characters
+
+Review and refine the AI-generated character list. Add, remove, or edit character names, ages, roles, backstories, and arcs, and choose the narrative perspective.
+
+![Step 2 – Character Development](docs/tab2b.jpg)
+
+### Step 3 – Chapter Writing Progress
+
+Once you approve the outline, NovelForge writes every chapter in the background. A live progress bar and chapter-by-chapter status list update in real time as each chapter is completed.
+
+![Step 3 – Chapter Writing](docs/tab3.jpg)
+
+### Step 4 – Export & Revision
+
+When generation is complete, download your manuscript in multiple formats, revise individual chapters with custom instructions, generate cover and scene illustrations, and view the full editor's notes report.
+
+![Step 4 – Export](docs/tab4a.jpg)
+![Step 4 – Export](docs/tab4b.jpg)
+
+### Log
+
+Review all the requests and responses to the LLM for the life of this session.
+
+![Step 4 – Export](docs/tab5.jpg)
 
 ---
 
