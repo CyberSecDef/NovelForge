@@ -241,10 +241,11 @@ _GENRE_VOICE_WEIGHTS: dict[str, list[str]] = {
 
 # Validate that every allowed genre has voice weights.
 _missing_voice_genres = ALLOWED_GENRES - _GENRE_VOICE_WEIGHTS.keys()
-assert not _missing_voice_genres, (
-    f"Genres missing from _GENRE_VOICE_WEIGHTS in voice.py: {sorted(_missing_voice_genres)}. "
-    f"Add a voice weight mapping for each."
-)
+if _missing_voice_genres:
+    raise ValueError(
+        f"Genres missing from _GENRE_VOICE_WEIGHTS in voice.py: {sorted(_missing_voice_genres)}. "
+        f"Add a voice weight mapping for each."
+    )
 
 
 def select_voice_seed(genre: str = "", premise: str = "") -> dict[str, str]:

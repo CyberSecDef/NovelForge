@@ -2,10 +2,13 @@
 Tests for novelforge/voice.py — voice seed selection and formatting.
 """
 
+import importlib
 import random
 
 import pytest
 
+import novelforge.validation
+import novelforge.voice
 from novelforge.voice import (
     _PREMISE_KEYWORD_BOOST,
     _PREMISE_KEYWORDS,
@@ -212,3 +215,23 @@ class TestFormatVoicePrompt:
         assert seed["prose_style"] in prompt
         assert seed["emotional_register"] in prompt
         assert seed["sensory_preference"] in prompt
+
+
+
+# ---------------------------------------------------------------------------
+# Genre coverage validation raises ValueError (not silenced by -O flag)
+# ---------------------------------------------------------------------------
+
+class TestVoiceGenreValidation:
+    """voice.py must raise ValueError for missing genre mappings even under -O."""
+
+    def test_raises_value_error_when_genre_missing_from_voice_weights(self, monkeypatch):
+        """Reloading voice.py with an extra ALLOWED_GENRES entry raises ValueError."""
+        extended = novelforge.validation.ALLOWED_GENRES | {"FakeGenreForTest"}
+        monkeypatch.setattr(novelforge.validation, "ALLOWED_GENRES", extended)
+        with pytest.raises(ValueError, match="FakeGenreForTest"):
+            importlib.reload(novelforge.voice)
+
+    def test_no_error_when_all_genres_covered(self):
+        """Reloading voice.py with the standard ALLOWED_GENRES does not raise."""
+        importlib.reload(novelforge.voice)
