@@ -196,7 +196,7 @@ IMAGE_API_URL = os.environ.get("IMAGE_API_URL", "https://api.openai.com/v1/image
 IMAGE_API_KEY = os.environ.get("IMAGE_API_KEY", "")
 
 # Image generation model name to request
-IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1")
+IMAGE_MODEL = os.environ.get("IMAGE_MODEL", "gpt-image-1-mini")
 
 # Image generation size
 IMAGE_SIZE = os.environ.get("IMAGE_SIZE", "1024x1024")
