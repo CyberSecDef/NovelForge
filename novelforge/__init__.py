@@ -1,5 +1,6 @@
 """NovelForge – Flask application factory."""
 
+import collections
 import json
 import logging
 import sys
@@ -236,38 +237,22 @@ def create_app(*, testing: bool = False) -> Flask:
             return jsonify({"entries": []})
 
         try:
-            entries = []
+            window: collections.deque = collections.deque(maxlen=10)
             with open(log_path, "r", encoding="utf-8") as f:
-                content = f.read()
+                for line in f:
+                    stripped = line.strip()
+                    if not stripped:
+                        continue
 
-            json_objects = []
-            current_obj = ""
-            brace_count = 0
-
-            for line in content.split('\n'):
-                if line.strip().startswith('{') and brace_count == 0:
-                    if current_obj:
-                        json_objects.append(current_obj)
-                    current_obj = line + '\n'
-                    brace_count = line.count('{') - line.count('}')
-                elif brace_count > 0:
-                    current_obj += line + '\n'
-                    brace_count += line.count('{') - line.count('}')
-                    if brace_count == 0:
-                        json_objects.append(current_obj)
-                        current_obj = ""
-
-            if current_obj:
-                json_objects.append(current_obj)
-
-            for obj_str in json_objects[-10:]:
-                try:
-                    entry = json.loads(obj_str)
-                    entries.append(entry)
-                except json.JSONDecodeError:
-                    continue
-
-            return jsonify({"entries": entries})
+                    try:
+                        window.append(json.loads(stripped))
+                    except json.JSONDecodeError:
+                        # llm.log is treated as JSONL: one complete JSON object per
+                        # non-empty line. Skip malformed/incomplete lines rather than
+                        # trying to resynchronise based on "{" prefixes, which can
+                        # corrupt pretty-printed nested JSON content.
+                        continue
+            return jsonify({"entries": list(window)})
         except Exception as e:
             logger.error(f"Error reading LLM log: {e}")
             return jsonify({"entries": [], "error": str(e)})
