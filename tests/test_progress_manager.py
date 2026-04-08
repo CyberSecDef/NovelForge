@@ -217,12 +217,15 @@ class TestQueryHelpers:
             progress_manager.create(f"k{i}", _base_state())
         assert set(progress_manager.keys()) == {"k0", "k1", "k2", "k3"}
 
-    def test_snapshot_returns_shallow_copies(self):
-        progress_manager.create("s1", _base_state(step="init"))
+    def test_snapshot_returns_deep_copies(self):
+        progress_manager.create("s1", _base_state(step="init", chapters_done=[{"num": 1}]))
         snap = progress_manager.snapshot()
+        # Top-level field mutation must not affect the store
         snap["s1"]["step"] = "MUTATED"
-        # Original in the store must be unchanged
         assert progress_manager.get("s1")["step"] == "init"
+        # Nested structure mutation must not affect the store either
+        snap["s1"]["chapters_done"][0]["num"] = 999
+        assert progress_manager.get("s1")["chapters_done"][0]["num"] == 1
 
     def test_clear_removes_all_entries(self):
         for i in range(3):
