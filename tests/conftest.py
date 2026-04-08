@@ -230,6 +230,22 @@ def _canned_llm_response(messages, *, action="", json_mode=False):
     if "revision" in act:
         return "The revised chapter content with improvements."
 
+    # Voice & dialogue differentiation pass
+    if "voice" in act and "dialogue" in act:
+        return "The character's voice and dialogue have been differentiated."
+
+    # Human oddities pass
+    if "human oddities" in act:
+        return "The chapter now includes small human, non-plot-serving moments."
+
+    # Metaphor reduction pass
+    if "metaphor" in act:
+        return "Excessive metaphors have been reduced in this chapter."
+
+    # Copy edit pass
+    if "copy edit" in act:
+        return "The chapter has been lightly copy-edited for prose clarity."
+
     # Generic fallback — return the input text slightly modified
     return "Processed output from the LLM agent."
 
