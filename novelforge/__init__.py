@@ -239,41 +239,19 @@ def create_app(*, testing: bool = False) -> Flask:
         try:
             window: collections.deque = collections.deque(maxlen=10)
             with open(log_path, "r", encoding="utf-8") as f:
-                buffered_lines: list[str] = []
-
                 for line in f:
                     stripped = line.strip()
                     if not stripped:
                         continue
 
-                    if buffered_lines:
-                        # If a new JSON object appears before the buffered content
-                        # becomes valid, drop the incomplete buffer and resync.
-                        if stripped.startswith("{"):
-                            try:
-                                window.append(json.loads("\n".join(buffered_lines)))
-                                buffered_lines = []
-                            except json.JSONDecodeError:
-                                buffered_lines = [line.rstrip("\n")]
-                                continue
-
-                        else:
-                            buffered_lines.append(line.rstrip("\n"))
-                            try:
-                                window.append(json.loads("\n".join(buffered_lines)))
-                                buffered_lines = []
-                            except json.JSONDecodeError:
-                                continue
-
-                    else:
-                        try:
-                            window.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            if stripped.startswith("{"):
-                                buffered_lines = [line.rstrip("\n")]
-                            else:
-                                continue
-
+                    try:
+                        all_entries.append(json.loads(stripped))
+                    except json.JSONDecodeError:
+                        # llm.log is treated as JSONL: one complete JSON object per
+                        # non-empty line. Skip malformed/incomplete lines rather than
+                        # trying to resynchronise based on "{" prefixes, which can
+                        # corrupt pretty-printed nested JSON content.
+                        continue
             return jsonify({"entries": list(window)})
         except Exception as e:
             logger.error(f"Error reading LLM log: {e}")
