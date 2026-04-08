@@ -350,7 +350,7 @@ def _build_request(
         "provider": provider.label,
         "url": provider.url,
         "headers": {
-            "Authorization": f"Bearer {provider.api_key[:8]}..." if provider.api_key else "None",
+            "Authorization": "Bearer [REDACTED]" if provider.api_key else "None",
             "Content-Type": "application/json",
         },
         "payload": payload,
