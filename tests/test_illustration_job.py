@@ -139,6 +139,50 @@ class TestGenerateIllustrationsRoute:
         assert novel_state is not None
         assert novel_state.get("illustration_token") == illust_token
 
+    def test_warning_logged_when_novel_progress_entry_missing(
+        self, client, monkeypatch, caplog
+    ):
+        """A warning is emitted (not silently swallowed) when the novel progress
+        entry is deleted before illustration_token can be linked to it."""
+        import logging
+        import novelforge.config as config
+        import novelforge.routes.export as export_module
+        from novelforge.progress import progress_manager as pm
+
+        monkeypatch.setattr(config, "IMAGE_API_KEY", "key")
+        # Prevent the background thread from running so the test stays focused.
+        monkeypatch.setattr(
+            export_module.threading,
+            "Thread",
+            lambda *a, **kw: type("T", (), {"start": lambda s: None, "daemon": True})(),
+        )
+
+        # Patch progress_manager.update so that the first call (linking
+        # illustration_token onto the novel entry) raises KeyError, simulating
+        # a deleted entry.
+        original_update = pm.update
+
+        def _raise_on_novel_token(tok, data):
+            if "illustration_token" in data:
+                raise KeyError(tok)
+            return original_update(tok, data)
+
+        monkeypatch.setattr(pm, "update", _raise_on_novel_token)
+
+        token = "deleted-novel-link"
+        _done_novel(token)
+
+        with caplog.at_level(logging.WARNING, logger="novelforge.routes.export"):
+            client.post("/generate_illustrations",
+                        data=json.dumps({"token": token}),
+                        content_type="application/json")
+
+        warning_msgs = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+        assert any(token in msg for msg in warning_msgs), (
+            "Expected a warning mentioning the missing progress token, got: "
+            + str(warning_msgs)
+        )
+
 
 # ---------------------------------------------------------------------------
 # Background worker: success flow
