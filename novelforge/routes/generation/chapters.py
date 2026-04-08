@@ -37,6 +37,7 @@ from novelforge.agents.planning import (
 )
 from novelforge.agents.chapter import (
     _format_characters,
+    _draft_with_content_retry,
     build_chapter_draft_prompt,
     run_continuity_gatekeeper, run_chapter_rhythm_classifier,
     run_character_state_updater, run_per_chapter_compression_check,
@@ -301,45 +302,23 @@ def _run_chapter_generation_internal(
 
             # 1. Draft (with content-rejection retry)
             _set_step(f"Chapter {chapter_num}: drafting")
-            _draft_content_note = ""
-            for _draft_attempt in range(3):
-                try:
-                    _draft_instructions = special_instructions
-                    if _draft_content_note:
-                        _draft_instructions = f"{special_instructions}\n\n{_draft_content_note}" if special_instructions else _draft_content_note
-                    text = call_llm(
-                        build_chapter_draft_prompt(
-                            premise, genre, title, chapter_num, chapter_title,
-                            chapter_outline_summary, characters_text,
-                            previous_summaries, target_per_chapter, _draft_instructions,
-                            chapter_architecture_context, chapter_timeline_context,
-                            chapter_fate_context, chapter_arc_context,
-                            chapter_antagonist_context, chapter_technology_context,
-                            chapter_theme_context, gatekeeper_brief,
-                            compression_guidance, chapter_rhythm_shape,
-                            chapter_rhythm_reason, chapter_pov_context,
-                            voice_prompt, perspective_prompt,
-                        ),
-                        action=f"Chapter {chapter_num}: drafting"
-                    )
-                    break
-                except ContentRejectionError as _draft_exc:
-                    if _draft_attempt >= 2:
-                        raise
-                    logger.warning(
-                        "Chapter %d draft rejected by content filter (attempt %d/2), "
-                        "adding content guidance and retrying",
-                        chapter_num, _draft_attempt + 1,
-                    )
-                    _draft_content_note = (
-                        "CONTENT NOTE: A previous draft attempt was rejected by a content "
-                        "filter. Handle all mature themes (violence, horror, psychological "
-                        "distress, body horror, etc.) through implication, atmosphere, "
-                        "tension, and literary restraint rather than graphic or explicit "
-                        "description. Show emotional and psychological impact. The story's "
-                        "dark tone must be preserved but conveyed through what is suggested "
-                        "and felt, not what is shown in detail."
-                    )
+            text = _draft_with_content_retry(
+                lambda instr: build_chapter_draft_prompt(
+                    premise, genre, title, chapter_num, chapter_title,
+                    chapter_outline_summary, characters_text,
+                    previous_summaries, target_per_chapter, instr,
+                    chapter_architecture_context, chapter_timeline_context,
+                    chapter_fate_context, chapter_arc_context,
+                    chapter_antagonist_context, chapter_technology_context,
+                    chapter_theme_context, gatekeeper_brief,
+                    compression_guidance, chapter_rhythm_shape,
+                    chapter_rhythm_reason, chapter_pov_context,
+                    voice_prompt, perspective_prompt,
+                ),
+                action=f"Chapter {chapter_num}: drafting",
+                special_instructions=special_instructions,
+                chapter_num=chapter_num,
+            )
 
             ch_ctx = ChapterContext(
                 architecture=chapter_architecture_context,
