@@ -227,6 +227,14 @@ def _canned_llm_response(messages, *, action="", json_mode=False):
             ]
         })
 
+    # Chapter rhythm classifier (returns JSON with a named rhythm shape)
+    if "classifying" in act or ("rhythm" in act and "chapter" in act):
+        return json.dumps({
+            "detected_patterns": [],
+            "recommended_shape_for_this_chapter": "lyrical-interlude",
+            "recommendation_reason": "Default rhythm for test purposes.",
+        })
+
     if "revision" in act:
         return "The revised chapter content with improvements."
 
