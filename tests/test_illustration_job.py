@@ -74,7 +74,7 @@ class TestGenerateIllustrationsRoute:
                             lambda p, filename_prefix="": "img.png")
         monkeypatch.setattr(export_module.threading, "Thread", _SyncThread)
 
-        token = "route-token-test"
+        token = "00000000-0000-4000-8000-000000000030"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -92,7 +92,7 @@ class TestGenerateIllustrationsRoute:
         assert r.status_code == 400
 
     def test_rejects_incomplete_novel(self, client):
-        progress_manager.create("incomplete-novel", {
+        progress_manager.create("00000000-0000-4000-8000-000000000031", {
             "status": "running",
             "current": 1,
             "total": 3,
@@ -101,7 +101,7 @@ class TestGenerateIllustrationsRoute:
             "error": None,
         })
         r = client.post("/generate_illustrations",
-                        data=json.dumps({"token": "incomplete-novel"}),
+                        data=json.dumps({"token": "00000000-0000-4000-8000-000000000031"}),
                         content_type="application/json")
         assert r.status_code == 400
 
@@ -109,7 +109,7 @@ class TestGenerateIllustrationsRoute:
         import novelforge.config as config
         monkeypatch.setattr(config, "IMAGE_API_KEY", "")
 
-        token = "no-key-token"
+        token = "00000000-0000-4000-8000-000000000032"
         _done_novel(token)
         r = client.post("/generate_illustrations",
                         data=json.dumps({"token": token}),
@@ -127,7 +127,7 @@ class TestGenerateIllustrationsRoute:
                             lambda p, filename_prefix="": "img.png")
         monkeypatch.setattr(export_module.threading, "Thread", _SyncThread)
 
-        token = "novel-with-illust-link"
+        token = "00000000-0000-4000-8000-000000000033"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -172,7 +172,7 @@ class TestGenerateIllustrationsRoute:
 
         monkeypatch.setattr(type(pm), "update", _raise_on_novel_token)
 
-        token = "deleted-novel-link"
+        token = "00000000-0000-4000-8000-000000000034"
         _done_novel(token)
 
         with caplog.at_level(logging.WARNING, logger="novelforge.routes.export"):
@@ -203,7 +203,7 @@ class TestIllustrationJobSuccess:
                             lambda p, filename_prefix="": f"{filename_prefix}_ok.png")
         _patch_sync_thread(monkeypatch)
 
-        token = "success-novel"
+        token = "00000000-0000-4000-8000-000000000035"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -225,7 +225,7 @@ class TestIllustrationJobSuccess:
                             lambda p, filename_prefix="": f"{filename_prefix}_ok.png")
         _patch_sync_thread(monkeypatch)
 
-        token = "all-success"
+        token = "00000000-0000-4000-8000-000000000036"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -253,7 +253,7 @@ class TestIllustrationJobSuccess:
                             lambda p, filename_prefix="": f"{filename_prefix}_ok.png")
         _patch_sync_thread(monkeypatch)
 
-        token = "mirror-test"
+        token = "00000000-0000-4000-8000-000000000037"
         _done_novel(token)
 
         client.post("/generate_illustrations",
@@ -277,7 +277,7 @@ class TestIllustrationJobSuccess:
                             lambda p, filename_prefix="": "file.png")
         _patch_sync_thread(monkeypatch)
 
-        token = "poll-test"
+        token = "00000000-0000-4000-8000-000000000038"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -339,7 +339,7 @@ class TestIllustrationJobRetry:
 
         monkeypatch.setattr(export_module, "call_llm", flaky_llm)
 
-        token = "retry-novel"
+        token = "00000000-0000-4000-8000-000000000039"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -364,7 +364,7 @@ class TestIllustrationJobRetry:
                             lambda *a, **kw: (_ for _ in ()).throw(
                                 RuntimeError("LLM always fails")))
 
-        token = "retry-exhausted"
+        token = "00000000-0000-4000-8000-000000000040"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -396,7 +396,7 @@ class TestIllustrationJobRetry:
 
         monkeypatch.setattr(export_module.time, "sleep", tracking_sleep)
 
-        token = "no-sleep-route"
+        token = "00000000-0000-4000-8000-000000000041"
         _done_novel(token)
 
         client.post("/generate_illustrations",
@@ -454,7 +454,7 @@ class TestIllustrationJobPartialFailure:
 
         monkeypatch.setattr(export_module, "call_image_api", partial_image_api)
 
-        token = "partial-fail"
+        token = "00000000-0000-4000-8000-000000000042"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -482,7 +482,7 @@ class TestIllustrationJobPartialFailure:
         monkeypatch.setattr(export_module, "call_image_api",
                             lambda p, filename_prefix="": None)
 
-        token = "all-fail"
+        token = "00000000-0000-4000-8000-000000000043"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",
@@ -511,7 +511,7 @@ class TestIllustrationJobPartialFailure:
         monkeypatch.setattr(export_module, "call_image_api",
                             lambda p, filename_prefix="": None)
 
-        token = "per-img-err"
+        token = "00000000-0000-4000-8000-000000000044"
         _done_novel(token)
 
         r = client.post("/generate_illustrations",

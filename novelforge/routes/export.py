@@ -1,6 +1,7 @@
 """Export, download, and illustration routes."""
 
 import logging
+import re
 import threading
 import time
 import uuid
@@ -23,6 +24,19 @@ from novelforge.agents.chapter import build_illustration_prompt_generator_prompt
 logger = logging.getLogger(__name__)
 
 export_bp = Blueprint("export", __name__)
+
+# ---------------------------------------------------------------------------
+# Progress-token validation
+# ---------------------------------------------------------------------------
+
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+)
+
+
+def _is_valid_token(token: str) -> bool:
+    """Return True iff *token* matches the UUID v4 format used by this app."""
+    return bool(token and _UUID_RE.match(token))
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +119,9 @@ def export_novel() -> Response | tuple[Response, int]:
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
 
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
+
     progress_data = progress_manager.get(token)
 
     if not progress_data or progress_data.get("status") != "done":
@@ -129,6 +146,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
     """Export editor's notes into a Markdown file and return a download URL."""
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
+
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
 
     progress_data = progress_manager.get(token)
 
@@ -543,6 +563,9 @@ def generate_illustrations() -> Response | tuple[Response, int]:
     """Start background illustration generation; returns a job token for polling."""
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
+
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
 
     progress_data = progress_manager.get(token)
 

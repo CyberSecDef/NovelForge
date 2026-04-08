@@ -220,7 +220,7 @@ class TestRoutes:
         assert r.status_code == 400
 
     def test_progress_unknown_token(self, client):
-        r = client.get("/progress/does-not-exist")
+        r = client.get("/progress/00000000-0000-4000-8000-000000000000")
         assert r.status_code == 404
 
     def test_download_nonexistent(self, client):
@@ -230,7 +230,7 @@ class TestRoutes:
     def test_export_no_token(self, client):
         r = client.post(
             "/export",
-            data=json.dumps({"token": "fake-token"}),
+            data=json.dumps({"token": "00000000-0000-4000-8000-000000000010"}),
             content_type="application/json",
         )
         assert r.status_code == 400
@@ -238,7 +238,7 @@ class TestRoutes:
     def test_export_editors_notes_no_token(self, client):
         r = client.post(
             "/export_editors_notes",
-            data=json.dumps({"token": "fake-token"}),
+            data=json.dumps({"token": "00000000-0000-4000-8000-000000000010"}),
             content_type="application/json",
         )
         assert r.status_code == 400
@@ -246,7 +246,7 @@ class TestRoutes:
     def test_export_editors_notes_success_filename(self, client):
         from novelforge.progress import progress_manager
 
-        token = "test-token-editors-notes"
+        token = "00000000-0000-4000-8000-000000000011"
         progress_manager.create(token, {
             "status": "done",
             "current": 0,
@@ -275,7 +275,7 @@ class TestRoutes:
     def test_revise_chapter_requires_instructions(self, client):
         from novelforge.progress import progress_manager
 
-        token = "test-token-revise-empty"
+        token = "00000000-0000-4000-8000-000000000012"
         progress_manager.create(token, {
             "status": "done",
             "current": 1,
@@ -296,7 +296,7 @@ class TestRoutes:
     def test_revise_chapter_success_reruns_agents(self, client, monkeypatch):
         from novelforge.progress import progress_manager
 
-        token = "test-token-revise-success"
+        token = "00000000-0000-4000-8000-000000000013"
         progress_manager.create(token, {
             "status": "done",
             "current": 2,
@@ -368,7 +368,7 @@ class TestRoutes:
         """Editing the session after generation must not affect revision semantics."""
         from novelforge.progress import progress_manager
 
-        token = "test-token-snapshot-isolation"
+        token = "00000000-0000-4000-8000-000000000014"
         original_title = "Original Title"
         changed_title = "Completely Different Title"
 

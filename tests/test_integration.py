@@ -312,12 +312,12 @@ class TestGenerateChapters:
 
     def test_progress_full_endpoint_unknown_token(self, client):
         """/progress/<token>/full returns 404 for unknown token."""
-        r = client.get("/progress/nonexistent-token/full")
+        r = client.get("/progress/00000000-0000-4000-8000-000000000000/full")
         assert r.status_code == 404
 
     def test_progress_endpoint_unknown_token(self, client):
         """/progress/<token> returns 404 for unknown token."""
-        r = client.get("/progress/nonexistent-token")
+        r = client.get("/progress/00000000-0000-4000-8000-000000000000")
         assert r.status_code == 404
 
 
@@ -432,7 +432,16 @@ class TestReviseChapter:
     """Chapter revision with mocked LLM."""
 
     def _make_token(self, suffix: str = "") -> str:
-        return f"test-revise-{suffix}" if suffix else "test-revise-integration"
+        # Use deterministic UUID-format tokens keyed by suffix so each test has
+        # a unique valid token that passes format validation.
+        _suffix_map = {
+            "": "00000000-0000-4000-8000-000000000070",
+            "content": "00000000-0000-4000-8000-000000000071",
+            "invalidation": "00000000-0000-4000-8000-000000000072",
+            "persist": "00000000-0000-4000-8000-000000000073",
+            "persist-invalidate": "00000000-0000-4000-8000-000000000074",
+        }
+        return _suffix_map.get(suffix, f"00000000-0000-4000-8000-{suffix[:12].ljust(12, '0')}")
 
     def _create_progress(self, token: str, *, with_reports: bool = False, session_id: str = "") -> None:
         state: dict = {
@@ -566,7 +575,7 @@ class TestReviseChapter:
 class TestExport:
     """Export routes with mocked progress data."""
 
-    def _seed_done(self, client, token="export-test"):
+    def _seed_done(self, client, token="00000000-0000-4000-8000-000000000080"):
         progress_manager.create(token, {
             "status": "done",
             "current": 2,
@@ -588,7 +597,7 @@ class TestExport:
             sess["title"] = "Export Test Novel"
 
     def test_export_manuscript(self, client):
-        token = "export-manuscript"
+        token = "00000000-0000-4000-8000-000000000081"
         self._seed_done(client, token)
         r = client.post(
             "/export",
@@ -599,7 +608,7 @@ class TestExport:
         assert "download_url" in r.get_json()
 
     def test_export_not_complete(self, client):
-        token = "export-incomplete"
+        token = "00000000-0000-4000-8000-000000000082"
         progress_manager.create(token, {"status": "running", "current": 1, "total": 5, "step": "", "chapters_done": [], "error": None})
         r = client.post(
             "/export",
@@ -609,7 +618,7 @@ class TestExport:
         assert r.status_code == 400
 
     def test_export_editors_notes(self, client):
-        token = "export-notes"
+        token = "00000000-0000-4000-8000-000000000083"
         self._seed_done(client, token)
         r = client.post(
             "/export_editors_notes",
@@ -623,7 +632,7 @@ class TestExport:
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
-        token = "export-download"
+        token = "00000000-0000-4000-8000-000000000084"
         self._seed_done(client, token)
         r = client.post(
             "/export",
@@ -689,7 +698,7 @@ class TestIllustrations:
         import novelforge.config as config
         monkeypatch.setattr(config, "IMAGE_API_KEY", "")
 
-        token = "illust-no-key"
+        token = "00000000-0000-4000-8000-000000000085"
         progress_manager.create(token, {
             "status": "done",
             "current": 1,

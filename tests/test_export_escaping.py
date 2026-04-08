@@ -192,7 +192,7 @@ class TestRelationshipTableEscaping:
     _EXPECTED_ROW_PIPES = 5
 
     def test_pipe_in_character_name_escaped(self, client, tmp_path, monkeypatch):
-        token = "esc-rel-pipe-name"
+        token = "00000000-0000-4000-8000-000000000050"
         _seed_token(token, character_relationship_map={
             "characters": ["Alice | Wonderland", "Bob"],
             "relationships": [
@@ -213,7 +213,7 @@ class TestRelationshipTableEscaping:
             )
 
     def test_pipe_in_relationship_type_escaped(self, client, tmp_path, monkeypatch):
-        token = "esc-rel-pipe-type"
+        token = "00000000-0000-4000-8000-000000000051"
         _seed_token(token, character_relationship_map={
             "characters": ["Alice", "Bob"],
             "relationships": [
@@ -225,7 +225,7 @@ class TestRelationshipTableEscaping:
         assert r"\|" in content  # pipe was escaped somewhere in the table
 
     def test_pipe_in_description_escaped(self, client, tmp_path, monkeypatch):
-        token = "esc-rel-pipe-desc"
+        token = "00000000-0000-4000-8000-000000000052"
         _seed_token(token, character_relationship_map={
             "characters": ["Alice", "Bob"],
             "relationships": [
@@ -243,7 +243,7 @@ class TestRelationshipTableEscaping:
         assert r"\|" in content
 
     def test_newline_in_description_removed(self, client, tmp_path, monkeypatch):
-        token = "esc-rel-nl-desc"
+        token = "00000000-0000-4000-8000-000000000053"
         _seed_token(token, character_relationship_map={
             "characters": ["Alice", "Bob"],
             "relationships": [
@@ -277,7 +277,7 @@ class TestMermaidEscaping:
     def test_double_quote_in_character_name_escaped(
         self, client, tmp_path, monkeypatch
     ):
-        token = "esc-mermaid-quote-name"
+        token = "00000000-0000-4000-8000-000000000054"
         _seed_token(token, character_relationship_map={
             "characters": ['Al"ice', "Bob"],
             "relationships": [
@@ -295,7 +295,7 @@ class TestMermaidEscaping:
     def test_double_quote_in_edge_label_escaped(
         self, client, tmp_path, monkeypatch
     ):
-        token = "esc-mermaid-quote-edge"
+        token = "00000000-0000-4000-8000-000000000055"
         _seed_token(token, character_relationship_map={
             "characters": ["Alice", "Bob"],
             "relationships": [
@@ -321,7 +321,7 @@ class TestMermaidEscaping:
         self, client, tmp_path, monkeypatch
     ):
         """Edge labels with pipes must use -- "…" --> style, not -->|…| style."""
-        token = "esc-mermaid-pipe-edge"
+        token = "00000000-0000-4000-8000-000000000056"
         _seed_token(token, character_relationship_map={
             "characters": ["Alice", "Bob"],
             "relationships": [
@@ -339,7 +339,7 @@ class TestMermaidEscaping:
     def test_newline_in_character_name_removed(
         self, client, tmp_path, monkeypatch
     ):
-        token = "esc-mermaid-nl-name"
+        token = "00000000-0000-4000-8000-000000000057"
         _seed_token(token, character_relationship_map={
             "characters": ["Al\nice", "Bob"],
             "relationships": [
@@ -365,7 +365,7 @@ class TestListItemEscaping:
     def test_newline_in_consistency_issue_collapsed(
         self, client, tmp_path, monkeypatch
     ):
-        token = "esc-list-nl-consistency"
+        token = "00000000-0000-4000-8000-000000000058"
         _seed_token(token, consistency={
             "overall_assessment": "Some issues.",
             "issues": ["Chapter 1 is\ngood\nbut chapter 2 is not"],
@@ -381,7 +381,7 @@ class TestListItemEscaping:
         self, client, tmp_path, monkeypatch
     ):
         """Pipes in list items are left as-is (not a table context)."""
-        token = "esc-list-pipe-ok"
+        token = "00000000-0000-4000-8000-000000000059"
         _seed_token(token, consistency={
             "overall_assessment": "Fine.",
             "issues": ["Chapters 1|2|3 need work"],
@@ -393,7 +393,7 @@ class TestListItemEscaping:
         self, client, tmp_path, monkeypatch
     ):
         """A value containing backtick fences doesn't open a new code block."""
-        token = "esc-list-fence"
+        token = "00000000-0000-4000-8000-000000000060"
         hostile_thread = "```python\nprint('hello')\n```"
         _seed_token(token, loose_thread_report={
             "thread_integrity": "weak",
@@ -418,7 +418,7 @@ class TestListItemEscaping:
     def test_newline_in_recommendation_collapsed(
         self, client, tmp_path, monkeypatch
     ):
-        token = "esc-list-nl-rec"
+        token = "00000000-0000-4000-8000-000000000061"
         _seed_token(token, narrative_compression_report={
             "compression_priority": "medium",
             "overall_assessment": "OK",
