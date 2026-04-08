@@ -47,7 +47,7 @@ from novelforge.session.persistence import (
     get_session_id, save_session_state, persist_completed_chapters,
 )
 from novelforge.routes.generation._shared import (
-    generation_bp, _PROGRESS_PERSIST_INTERVAL,
+    generation_bp, _PROGRESS_PERSIST_INTERVAL, _is_valid_token,
 )
 from novelforge.routes.generation.audits import run_post_manuscript_audits
 
@@ -536,6 +536,8 @@ _LIGHTWEIGHT_FIELDS = ("status", "current", "total", "step", "error", "error_cod
 @generation_bp.route("/progress/<token>")
 def progress(token: str) -> Response | tuple[Response, int]:
     """Lightweight poll endpoint – returns only status/step fields, not chapter content."""
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
     data = progress_manager.get(token)
     if data is None:
         return jsonify({"error": "Unknown token"}), 404
@@ -547,6 +549,8 @@ def progress(token: str) -> Response | tuple[Response, int]:
 @generation_bp.route("/progress/<token>/full")
 def progress_full(token: str) -> Response | tuple[Response, int]:
     """Full progress endpoint – returns the complete payload including chapter content and reports."""
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
     data = progress_manager.get(token)
     if data is None:
         return jsonify({"error": "Unknown token"}), 404

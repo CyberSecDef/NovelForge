@@ -1,6 +1,21 @@
 """Shared state for the generation route package."""
 
+import re
+
 from flask import Blueprint
+
+# ---------------------------------------------------------------------------
+# Progress-token validation
+# ---------------------------------------------------------------------------
+
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+)
+
+
+def _is_valid_token(token: str) -> bool:
+    """Return True iff *token* matches the UUID v4 format used by this app."""
+    return bool(token and _UUID_RE.match(token))
 
 generation_bp = Blueprint("generation", __name__)
 

@@ -19,6 +19,7 @@ import novelforge.config as config
 from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.llm.image import call_image_api
 from novelforge.agents.chapter import build_illustration_prompt_generator_prompt
+from novelforge.routes.generation._shared import _is_valid_token
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,9 @@ def export_novel() -> Response | tuple[Response, int]:
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
 
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
+
     progress_data = progress_manager.get(token)
 
     if not progress_data or progress_data.get("status") != "done":
@@ -129,6 +133,9 @@ def export_editors_notes() -> Response | tuple[Response, int]:
     """Export editor's notes into a Markdown file and return a download URL."""
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
+
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
 
     progress_data = progress_manager.get(token)
 
@@ -543,6 +550,9 @@ def generate_illustrations() -> Response | tuple[Response, int]:
     """Start background illustration generation; returns a job token for polling."""
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
+
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
 
     progress_data = progress_manager.get(token)
 

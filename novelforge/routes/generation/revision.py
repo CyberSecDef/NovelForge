@@ -29,7 +29,7 @@ from novelforge.agents.chapter import (
 )
 from novelforge.session.persistence import persist_completed_chapters
 from novelforge.routes.generation._shared import (
-    generation_bp, _DERIVED_REPORT_FIELDS,
+    generation_bp, _DERIVED_REPORT_FIELDS, _is_valid_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,8 @@ def revise_chapter() -> Response | tuple[Response, int]:
 
     if not token:
         return jsonify({"error": "Missing progress token."}), 400
+    if not _is_valid_token(token):
+        return jsonify({"error": "Invalid progress token."}), 400
     if chapter_number < 1:
         return jsonify({"error": "Chapter number must be at least 1."}), 400
     if not instructions:

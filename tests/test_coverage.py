@@ -127,7 +127,7 @@ class TestEditorsNotesFormatting:
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
-        token = "editors-full"
+        token = "00000000-0000-4000-8000-000000000020"
         progress_manager.create(token, self._full_progress_data())
         with client.session_transaction() as sess:
             sess["title"] = "Full Notes Test"
@@ -160,7 +160,7 @@ class TestEditorsNotesFormatting:
         assert "Repeated chase scene" in content
 
     def test_editors_notes_no_content(self, client):
-        token = "editors-empty"
+        token = "00000000-0000-4000-8000-000000000021"
         progress_manager.create(token, {"status": "done", "current": 0, "total": 0, "step": "", "chapters_done": [], "error": None})
         with client.session_transaction() as sess:
             sess["title"] = "Empty"
@@ -663,7 +663,7 @@ class TestManuscriptExport:
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
-        token = "export-file-test"
+        token = "00000000-0000-4000-8000-000000000022"
         progress_manager.create(token, {
             "status": "done",
             "current": 2,

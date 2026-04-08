@@ -57,7 +57,7 @@ class TestExportUsesSnapshot:
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
-        token = "snap-export-title"
+        token = "00000000-0000-4000-8000-000000000001"
         _done_token(token, title="Snapshot Novel Title")
 
         # Deliberately set a *different* title in the live session.
@@ -84,7 +84,7 @@ class TestExportUsesSnapshot:
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
-        token = "snap-export-repro"
+        token = "00000000-0000-4000-8000-000000000002"
         _done_token(token, title="Reproducible Title")
 
         # First export with one session title.
@@ -116,7 +116,7 @@ class TestExportUsesSnapshot:
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
-        token = "snap-export-no-snap"
+        token = "00000000-0000-4000-8000-000000000003"
         progress_manager.create(token, {
             "status": "done",
             "current": 1,
@@ -153,7 +153,7 @@ class TestEditorsNotesUsesSnapshot:
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
-        token = "snap-notes-title"
+        token = "00000000-0000-4000-8000-000000000004"
         _done_token(token, title="Snapshot Notes Title")
 
         with client.session_transaction() as sess:
@@ -176,7 +176,7 @@ class TestEditorsNotesUsesSnapshot:
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
-        token = "snap-notes-heading"
+        token = "00000000-0000-4000-8000-000000000005"
         _done_token(token, title="Correct Notes Title")
 
         with client.session_transaction() as sess:
@@ -250,7 +250,7 @@ class TestIllustrationsUsesSnapshot:
 
         monkeypatch.setattr(export_module.threading, "Thread", SyncThread)
 
-        token = "snap-illust-meta"
+        token = "00000000-0000-4000-8000-000000000006"
         _done_token(
             token,
             title="Snapshot Illustration Novel",
