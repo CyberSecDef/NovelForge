@@ -1,5 +1,6 @@
 """NovelForge – Flask application factory."""
 
+import collections
 import json
 import logging
 import sys
@@ -236,7 +237,7 @@ def create_app(*, testing: bool = False) -> Flask:
             return jsonify({"entries": []})
 
         try:
-            all_entries = []
+            window: collections.deque = collections.deque(maxlen=10)
             with open(log_path, "r", encoding="utf-8") as f:
                 buffered_lines: list[str] = []
 
@@ -250,7 +251,7 @@ def create_app(*, testing: bool = False) -> Flask:
                         # becomes valid, drop the incomplete buffer and resync.
                         if stripped.startswith("{"):
                             try:
-                                all_entries.append(json.loads("\n".join(buffered_lines)))
+                                window.append(json.loads("\n".join(buffered_lines)))
                                 buffered_lines = []
                             except json.JSONDecodeError:
                                 buffered_lines = [line.rstrip("\n")]
@@ -259,21 +260,21 @@ def create_app(*, testing: bool = False) -> Flask:
                         else:
                             buffered_lines.append(line.rstrip("\n"))
                             try:
-                                all_entries.append(json.loads("\n".join(buffered_lines)))
+                                window.append(json.loads("\n".join(buffered_lines)))
                                 buffered_lines = []
                             except json.JSONDecodeError:
                                 continue
 
                     else:
                         try:
-                            all_entries.append(json.loads(line))
+                            window.append(json.loads(line))
                         except json.JSONDecodeError:
                             if stripped.startswith("{"):
                                 buffered_lines = [line.rstrip("\n")]
                             else:
                                 continue
 
-            return jsonify({"entries": all_entries[-10:]})
+            return jsonify({"entries": list(window)})
         except Exception as e:
             logger.error(f"Error reading LLM log: {e}")
             return jsonify({"entries": [], "error": str(e)})

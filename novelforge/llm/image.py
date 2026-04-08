@@ -48,7 +48,7 @@ def call_image_api(prompt: str, *, filename_prefix: str = "illustration") -> str
         "model": config.IMAGE_MODEL,
         "prompt": prompt[:200] + "..." if len(prompt) > 200 else prompt,
     }
-    llm_logger.info(json.dumps(request_log, indent=2))
+    llm_logger.info(json.dumps(request_log))
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
