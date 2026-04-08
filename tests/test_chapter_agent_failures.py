@@ -180,10 +180,19 @@ class TestOptionalPassFallbackValues:
         assert "boom" in result[PASS_FAILURE_KEY]
 
     def test_rhythm_classifier_fallback_is_otherwise_empty(self, monkeypatch):
-        """The fallback dict must not carry false business data (only PASS_FAILURE_KEY)."""
+        """The fallback dict must carry PASS_FAILURE_KEY and safe-default business keys."""
         _patch_chapter_call_llm(monkeypatch, _raise_runtime("x"))
         result = run_chapter_rhythm_classifier(**_CHAPTER_KWARGS_STR, title="Novel")
-        assert set(result.keys()) == {PASS_FAILURE_KEY}
+        assert PASS_FAILURE_KEY in result
+        # Minimal safe defaults must be present so callers can .get() without KeyError
+        assert "recommended_shape_for_this_chapter" in result
+        assert "recommendation_reason" in result
+        # No spurious keys beyond the three above
+        assert set(result.keys()) == {
+            PASS_FAILURE_KEY,
+            "recommended_shape_for_this_chapter",
+            "recommendation_reason",
+        }
 
 
 # ---------------------------------------------------------------------------

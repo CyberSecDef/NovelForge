@@ -160,14 +160,17 @@ class TestGenerateIllustrationsRoute:
         # Patch progress_manager.update so that the first call (linking
         # illustration_token onto the novel entry) raises KeyError, simulating
         # a deleted entry.
-        original_update = pm.update
+        # NOTE: patch the *class* method, not the instance, to avoid leaving a
+        # stale instance attribute on the singleton after monkeypatch teardown
+        # (which would bypass class-level spies installed by other tests).
+        original_class_update = type(pm).update
 
-        def _raise_on_novel_token(tok, data):
+        def _raise_on_novel_token(self, tok, data):
             if "illustration_token" in data:
                 raise KeyError(tok)
-            return original_update(tok, data)
+            return original_class_update(self, tok, data)
 
-        monkeypatch.setattr(pm, "update", _raise_on_novel_token)
+        monkeypatch.setattr(type(pm), "update", _raise_on_novel_token)
 
         token = "deleted-novel-link"
         _done_novel(token)

@@ -186,7 +186,11 @@ def run_chapter_rhythm_classifier(
                 "chapter_num": chapter_num,
                 "failure_summary": failure_summary,
             })
-        return {PASS_FAILURE_KEY: failure_summary}
+        return {
+            PASS_FAILURE_KEY: failure_summary,
+            "recommended_shape_for_this_chapter": "",
+            "recommendation_reason": "",
+        }
 
 
 # ---------------------------------------------------------------------------
