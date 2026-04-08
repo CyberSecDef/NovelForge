@@ -245,7 +245,7 @@ def create_app(*, testing: bool = False) -> Flask:
                         continue
 
                     try:
-                        all_entries.append(json.loads(stripped))
+                        window.append(json.loads(stripped))
                     except json.JSONDecodeError:
                         # llm.log is treated as JSONL: one complete JSON object per
                         # non-empty line. Skip malformed/incomplete lines rather than
