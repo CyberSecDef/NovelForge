@@ -571,7 +571,10 @@ def generate_illustrations() -> Response | tuple[Response, int]:
     try:
         progress_manager.update(token, {"illustration_token": illust_token})
     except KeyError:
-        pass
+        logger.warning(
+            "Could not link illustration to novel (progress entry %s not found).",
+            token,
+        )
 
     thread = threading.Thread(
         target=_run_illustration_generation,
