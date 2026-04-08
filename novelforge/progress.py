@@ -182,12 +182,14 @@ class ProgressManager:
             return list(self._store.keys())
 
     def snapshot(self) -> dict[str, ProgressState]:
-        """Return shallow copies of every entry, keyed by token.
+        """Return deep copies of every entry, keyed by token.
 
-        Primarily intended for diagnostics and test assertions.
+        Callers can read or mutate the returned dicts freely without
+        corrupting shared state.  Primarily intended for diagnostics and
+        test assertions.
         """
         with self._lock:
-            return {k: dict(v) for k, v in self._store.items()}  # type: ignore[misc]
+            return {k: copy.deepcopy(v) for k, v in self._store.items()}  # type: ignore[misc]
 
     def clear(self) -> None:
         """Remove all entries (primarily for test teardown)."""
