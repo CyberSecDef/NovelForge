@@ -15,7 +15,6 @@ import uuid
 import pytest
 
 from novelforge.routes.generation._shared import _is_valid_token, _UUID_RE
-from novelforge.routes.export import _is_valid_token as _export_is_valid_token
 from novelforge.progress import progress_manager
 
 
@@ -55,12 +54,13 @@ class TestIsValidToken:
     def test_none_like_string_rejected(self):
         assert not _is_valid_token("None")
 
-    def test_export_module_helper_matches(self):
-        """Both copies of _is_valid_token must behave identically."""
-        valid = str(uuid.uuid4())
-        assert _is_valid_token(valid) == _export_is_valid_token(valid)
-        assert _is_valid_token("bad-token") == _export_is_valid_token("bad-token")
-        assert _is_valid_token("") == _export_is_valid_token("")
+    def test_export_module_uses_shared_helper(self):
+        """export.py must re-use the shared _is_valid_token from _shared.py."""
+        from novelforge.routes.export import _is_valid_token as export_helper
+        from novelforge.routes.generation._shared import _is_valid_token as shared_helper
+        assert export_helper is shared_helper, (
+            "export._is_valid_token must be the same object as generation._shared._is_valid_token"
+        )
 
 
 # ---------------------------------------------------------------------------

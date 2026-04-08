@@ -1,7 +1,6 @@
 """Export, download, and illustration routes."""
 
 import logging
-import re
 import threading
 import time
 import uuid
@@ -20,23 +19,11 @@ import novelforge.config as config
 from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.llm.image import call_image_api
 from novelforge.agents.chapter import build_illustration_prompt_generator_prompt
+from novelforge.routes.generation._shared import _is_valid_token
 
 logger = logging.getLogger(__name__)
 
 export_bp = Blueprint("export", __name__)
-
-# ---------------------------------------------------------------------------
-# Progress-token validation
-# ---------------------------------------------------------------------------
-
-_UUID_RE = re.compile(
-    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-)
-
-
-def _is_valid_token(token: str) -> bool:
-    """Return True iff *token* matches the UUID v4 format used by this app."""
-    return bool(token and _UUID_RE.match(token))
 
 
 # ---------------------------------------------------------------------------
