@@ -112,7 +112,7 @@ def call_image_api(prompt: str, *, filename_prefix: str = "illustration") -> str
 
                 # Download with streaming and size limit (20 MB max)
                 _MAX_IMAGE_BYTES = 20 * 1024 * 1024
-                img_resp = requests.get(image_url, timeout=60, stream=True)
+                img_resp = requests.get(image_url, timeout=config.IMAGE_TIMEOUT, stream=True)
                 img_resp.raise_for_status()
                 chunks: list[bytes] = []
                 downloaded = 0
