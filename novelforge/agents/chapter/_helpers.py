@@ -160,6 +160,60 @@ def _call_with_content_retry(
     raise ContentRejectionError(f"Content retry limit exceeded for {action}")
 
 
+# Content-guidance note injected into special_instructions on draft retries.
+_DRAFT_CONTENT_NOTE = (
+    "CONTENT NOTE: A previous draft attempt was rejected by a content "
+    "filter. Handle all mature themes (violence, horror, psychological "
+    "distress, body horror, etc.) through implication, atmosphere, "
+    "tension, and literary restraint rather than graphic or explicit "
+    "description. Show emotional and psychological impact. The story's "
+    "dark tone must be preserved but conveyed through what is suggested "
+    "and felt, not what is shown in detail."
+)
+
+
+def _draft_with_content_retry(
+    build_prompt_fn: Callable[[str], list[dict]],
+    *,
+    action: str,
+    special_instructions: str,
+    chapter_num: int,
+    max_attempts: int = 3,
+) -> str:
+    """
+    Call the LLM to produce an initial chapter draft, with content-rejection retry.
+
+    On ``ContentRejectionError`` a content-guidance note is appended to
+    ``special_instructions`` and the prompt is rebuilt via ``build_prompt_fn``.
+    Up to ``max_attempts`` are made before the error is re-raised.
+
+    ``build_prompt_fn`` must accept a single ``instructions`` string and return
+    the message list to pass to :func:`call_llm`.
+    """
+    content_note = ""
+    for attempt in range(max_attempts):
+        try:
+            instructions = special_instructions
+            if content_note:
+                instructions = (
+                    f"{special_instructions}\n\n{content_note}"
+                    if special_instructions
+                    else content_note
+                )
+            return call_llm(build_prompt_fn(instructions), action=action)
+        except ContentRejectionError:
+            if attempt >= max_attempts - 1:
+                raise
+            logger.warning(
+                "Chapter %d draft rejected by content filter (attempt %d/%d), "
+                "adding content guidance and retrying",
+                chapter_num, attempt + 1, max_attempts - 1,
+            )
+            content_note = _DRAFT_CONTENT_NOTE
+    # Unreachable, but keeps the type checker happy
+    raise ContentRejectionError(f"Draft content retry limit exceeded for {action}")
+
+
 # ---------------------------------------------------------------------------
 # Vocabulary watchlists and scanning
 # ---------------------------------------------------------------------------

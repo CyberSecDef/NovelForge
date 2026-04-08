@@ -298,7 +298,7 @@ class TestForceWriteOnTerminalStates:
         _create_progress(token)
         snap = _seed_snap()
 
-        mocker.patch("novelforge.routes.generation.chapters.call_llm", side_effect=RuntimeError("boom"))
+        mocker.patch("novelforge.agents.chapter._helpers.call_llm", side_effect=RuntimeError("boom"))
 
         written = self._collect_final_snapshot(monkeypatch, tmp_path, token)
         _run_chapter_generation_internal(token, snap, [], [], 0)
@@ -318,15 +318,16 @@ class TestForceWriteOnTerminalStates:
         _create_progress(token)
         snap = _seed_snap()
 
-        # ContentRejectionError has an inner retry loop that exhausts 3 attempts;
-        # patching with side_effect ensures all draft calls raise and the outer
-        # except ContentRejectionError handler is reached.
+        # ContentRejectionError has an inner retry loop (inside _draft_with_content_retry
+        # in novelforge.agents.chapter._helpers) that exhausts 3 attempts; patching
+        # _helpers.call_llm with side_effect ensures all draft calls raise and the outer
+        # except ContentRejectionError handler in the generation worker is reached.
         #
-        # Use gen_mod.ContentRejectionError (the class bound in generation.py's own
-        # namespace) so the raised instance matches what generation.py's except
-        # clauses check, regardless of any module-reload in other tests.
+        # Use ContentRejectionError imported at module level so the raised instance matches
+        # what generation.py's except clauses check, regardless of any module-reload in
+        # other tests.
         mocker.patch(
-            "novelforge.routes.generation.chapters.call_llm",
+            "novelforge.agents.chapter._helpers.call_llm",
             side_effect=ContentRejectionError("policy"),
         )
 
@@ -350,7 +351,7 @@ class TestForceWriteOnTerminalStates:
         snap = _seed_snap()
 
         mocker.patch(
-            "novelforge.routes.generation.chapters.call_llm",
+            "novelforge.agents.chapter._helpers.call_llm",
             side_effect=CircuitBreakerError("cb"),
         )
 
@@ -374,7 +375,7 @@ class TestForceWriteOnTerminalStates:
         snap = _seed_snap()
 
         mocker.patch(
-            "novelforge.routes.generation.chapters.call_llm",
+            "novelforge.agents.chapter._helpers.call_llm",
             side_effect=AllProvidersExhaustedError("all"),
         )
 
