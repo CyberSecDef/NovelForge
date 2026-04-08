@@ -233,7 +233,7 @@ def create_app(*, testing: bool = False) -> Flask:
         log_path = Path(config.LOGS_DIR) / "llm.log"
 
         if not log_path.exists():
-            logger.warning(f"LLM log file not found at {log_path}")
+            logger.warning("LLM log file not found at %s", log_path)
             return jsonify({"entries": []})
 
         try:

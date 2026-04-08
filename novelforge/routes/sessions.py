@@ -68,9 +68,9 @@ def delete_session() -> Response:
         session_file = get_session_file_path()
         if session_file.exists():
             session_file.unlink()
-            logger.info(f"Deleted session file {session_file}")
+            logger.info("Deleted session file %s", session_file)
     except Exception as e:
-        logger.error(f"Failed to delete session file: {e}")
+        logger.error("Failed to delete session file: %s", e)
 
     token = session.get("progress_token", "")
     if token:
