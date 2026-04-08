@@ -5,6 +5,50 @@ import novelforge.config as cfg
 
 
 # ---------------------------------------------------------------------------
+# _resolve_dir helper
+# ---------------------------------------------------------------------------
+
+class TestResolveDir:
+    """Unit tests for the _resolve_dir() helper."""
+
+    def test_returns_project_root_relative_path_when_unset(self, monkeypatch):
+        monkeypatch.delenv("NF_TEST_DIR", raising=False)
+        result = cfg._resolve_dir("NF_TEST_DIR", "my/subdir")
+        assert result == str(cfg.PROJECT_ROOT / "my/subdir")
+
+    def test_returns_project_root_relative_path_for_relative_env_var(self, monkeypatch):
+        monkeypatch.setenv("NF_TEST_DIR", "custom/path")
+        result = cfg._resolve_dir("NF_TEST_DIR", "default/path")
+        assert result == str(cfg.PROJECT_ROOT / "custom/path")
+
+    def test_raises_for_absolute_path(self, monkeypatch):
+        monkeypatch.setenv("NF_TEST_DIR", "/etc/passwd")
+        with pytest.raises(ValueError, match="NF_TEST_DIR"):
+            cfg._resolve_dir("NF_TEST_DIR", "default")
+
+    def test_error_message_contains_bad_value(self, monkeypatch):
+        monkeypatch.setenv("NF_TEST_DIR", "/absolute/path")
+        with pytest.raises(ValueError, match="/absolute/path"):
+            cfg._resolve_dir("NF_TEST_DIR", "default")
+
+    def test_raises_for_root_path(self, monkeypatch):
+        monkeypatch.setenv("NF_TEST_DIR", "/")
+        with pytest.raises(ValueError):
+            cfg._resolve_dir("NF_TEST_DIR", "default")
+
+    def test_relative_default_accepted_when_env_var_unset(self, monkeypatch):
+        monkeypatch.delenv("NF_TEST_DIR", raising=False)
+        # Should not raise; default is relative
+        result = cfg._resolve_dir("NF_TEST_DIR", "logs")
+        assert result.endswith("logs")
+
+    def test_result_is_string(self, monkeypatch):
+        monkeypatch.delenv("NF_TEST_DIR", raising=False)
+        result = cfg._resolve_dir("NF_TEST_DIR", "data")
+        assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
 # get_env_int helper
 # ---------------------------------------------------------------------------
 

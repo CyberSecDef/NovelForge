@@ -233,17 +233,35 @@ MAX_WORD_COUNT = get_env_int("MAX_WORD_COUNT", 500000, min_value=1)
 # Flask secret key – override via SECRET_KEY environment variable in production
 SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
 
+
+def _resolve_dir(env_var: str, default: str) -> str:
+    """Return the absolute path for a directory env var, anchored to PROJECT_ROOT.
+
+    Raises:
+        ValueError: if the env var is set to an absolute path.  All directory
+            env vars must be relative to *PROJECT_ROOT* to prevent arbitrary
+            filesystem access.
+    """
+    raw = os.environ.get(env_var, default)
+    if os.path.isabs(raw):
+        raise ValueError(
+            f"{env_var} must be a relative path (got {raw!r}). "
+            "Directory env vars are resolved relative to the project root."
+        )
+    return str(PROJECT_ROOT / raw)
+
+
 # Directory where Flask-Session stores server-side session files
-SESSION_FILE_DIR = str(PROJECT_ROOT / os.environ.get("SESSION_FILE_DIR", "sessions/flask"))
+SESSION_FILE_DIR = _resolve_dir("SESSION_FILE_DIR", "sessions/flask")
 
 # Directory where exported novel files are stored temporarily
-EXPORT_DIR = str(PROJECT_ROOT / os.environ.get("EXPORT_DIR", "exports"))
+EXPORT_DIR = _resolve_dir("EXPORT_DIR", "exports")
 
 # Directory where novel session JSON files are stored
-NOVELS_DIR = str(PROJECT_ROOT / os.environ.get("NOVELS_DIR", "sessions/novels"))
+NOVELS_DIR = _resolve_dir("NOVELS_DIR", "sessions/novels")
 
 # Directory for log files
-LOGS_DIR = str(PROJECT_ROOT / os.environ.get("LOGS_DIR", "logs"))
+LOGS_DIR = _resolve_dir("LOGS_DIR", "logs")
 
 
 class ConfigurationError(Exception):
