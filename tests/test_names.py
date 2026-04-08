@@ -187,6 +187,6 @@ class TestNameGenreValidation:
         with pytest.raises(ValueError, match="FakeGenreForTest"):
             importlib.reload(novelforge.names)
 
-    def test_no_error_when_all_genres_covered(self, monkeypatch):
+    def test_no_error_when_all_genres_covered(self):
         """Reloading names.py with the standard ALLOWED_GENRES does not raise."""
         importlib.reload(novelforge.names)

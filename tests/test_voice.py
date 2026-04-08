@@ -232,6 +232,6 @@ class TestVoiceGenreValidation:
         with pytest.raises(ValueError, match="FakeGenreForTest"):
             importlib.reload(novelforge.voice)
 
-    def test_no_error_when_all_genres_covered(self, monkeypatch):
+    def test_no_error_when_all_genres_covered(self):
         """Reloading voice.py with the standard ALLOWED_GENRES does not raise."""
         importlib.reload(novelforge.voice)
