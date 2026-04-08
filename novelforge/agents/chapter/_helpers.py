@@ -207,7 +207,7 @@ def _draft_with_content_retry(
             logger.warning(
                 "Chapter %d draft rejected by content filter (attempt %d/%d), "
                 "adding content guidance and retrying",
-                chapter_num, attempt + 1, max_attempts - 1,
+                chapter_num, attempt + 1, max_attempts,
             )
             content_note = _DRAFT_CONTENT_NOTE
     # Unreachable, but keeps the type checker happy
