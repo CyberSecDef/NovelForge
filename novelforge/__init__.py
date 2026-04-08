@@ -236,38 +236,16 @@ def create_app(*, testing: bool = False) -> Flask:
             return jsonify({"entries": []})
 
         try:
-            entries = []
+            all_entries = []
             with open(log_path, "r", encoding="utf-8") as f:
-                content = f.read()
+                for line in f:
+                    if line.strip():
+                        try:
+                            all_entries.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
 
-            json_objects = []
-            current_obj = ""
-            brace_count = 0
-
-            for line in content.split('\n'):
-                if line.strip().startswith('{') and brace_count == 0:
-                    if current_obj:
-                        json_objects.append(current_obj)
-                    current_obj = line + '\n'
-                    brace_count = line.count('{') - line.count('}')
-                elif brace_count > 0:
-                    current_obj += line + '\n'
-                    brace_count += line.count('{') - line.count('}')
-                    if brace_count == 0:
-                        json_objects.append(current_obj)
-                        current_obj = ""
-
-            if current_obj:
-                json_objects.append(current_obj)
-
-            for obj_str in json_objects[-10:]:
-                try:
-                    entry = json.loads(obj_str)
-                    entries.append(entry)
-                except json.JSONDecodeError:
-                    continue
-
-            return jsonify({"entries": entries})
+            return jsonify({"entries": all_entries[-10:]})
         except Exception as e:
             logger.error(f"Error reading LLM log: {e}")
             return jsonify({"entries": [], "error": str(e)})

@@ -767,6 +767,101 @@ class TestLLMLog:
         r = client.post("/clear_log")
         assert r.status_code == 200
 
+    def test_llm_log_parses_single_line_entries(self, tmp_path, monkeypatch):
+        """One-JSON-per-line log format is parsed correctly."""
+        import json as _json
+        import novelforge.config as cfg
+
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        monkeypatch.setattr(cfg, "LOGS_DIR", str(logs_dir))
+
+        entry1 = {"type": "request", "action": "test1", "timestamp": "2024-01-01 00:00:00"}
+        entry2 = {"type": "response", "action": "test2", "timestamp": "2024-01-01 00:00:01"}
+        log_path = logs_dir / "llm.log"
+        log_path.write_text(
+            _json.dumps(entry1) + "\n" + _json.dumps(entry2) + "\n",
+            encoding="utf-8",
+        )
+
+        from novelforge import create_app, limiter
+        flask_app = create_app(testing=True)
+        flask_app.config["SECRET_KEY"] = "test-secret"
+        flask_app.config["WTF_CSRF_ENABLED"] = False
+        limiter.enabled = False
+        with flask_app.test_client() as c:
+            r = c.get("/llm_log")
+
+        assert r.status_code == 200
+        data = r.get_json()
+        assert len(data["entries"]) == 2
+        assert data["entries"][0]["type"] == "request"
+        assert data["entries"][1]["type"] == "response"
+
+    def test_llm_log_parses_entries_with_braces_in_strings(self, tmp_path, monkeypatch):
+        """Brace characters inside JSON string values do not break parsing."""
+        import json as _json
+        import novelforge.config as cfg
+
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        monkeypatch.setattr(cfg, "LOGS_DIR", str(logs_dir))
+
+        entry = {
+            "type": "request",
+            "action": "test",
+            "timestamp": "2024-01-01 00:00:00",
+            "payload": {"key": "value with { brace } and another {brace}"},
+        }
+        log_path = logs_dir / "llm.log"
+        log_path.write_text(_json.dumps(entry) + "\n", encoding="utf-8")
+
+        from novelforge import create_app, limiter
+        flask_app = create_app(testing=True)
+        flask_app.config["SECRET_KEY"] = "test-secret"
+        flask_app.config["WTF_CSRF_ENABLED"] = False
+        limiter.enabled = False
+        with flask_app.test_client() as c:
+            r = c.get("/llm_log")
+
+        assert r.status_code == 200
+        data = r.get_json()
+        assert len(data["entries"]) == 1
+        assert data["entries"][0]["payload"]["key"] == "value with { brace } and another {brace}"
+
+    def test_llm_log_returns_last_ten_entries(self, tmp_path, monkeypatch):
+        """Only the last 10 entries are returned when the log has more."""
+        import json as _json
+        import novelforge.config as cfg
+
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        monkeypatch.setattr(cfg, "LOGS_DIR", str(logs_dir))
+
+        entries = [
+            {"type": "request", "seq": i, "timestamp": f"2024-01-01 00:00:{i:02d}"}
+            for i in range(15)
+        ]
+        log_path = logs_dir / "llm.log"
+        log_path.write_text(
+            "\n".join(_json.dumps(e) for e in entries) + "\n",
+            encoding="utf-8",
+        )
+
+        from novelforge import create_app, limiter
+        flask_app = create_app(testing=True)
+        flask_app.config["SECRET_KEY"] = "test-secret"
+        flask_app.config["WTF_CSRF_ENABLED"] = False
+        limiter.enabled = False
+        with flask_app.test_client() as c:
+            r = c.get("/llm_log")
+
+        assert r.status_code == 200
+        data = r.get_json()
+        assert len(data["entries"]) == 10
+        assert data["entries"][0]["seq"] == 5
+        assert data["entries"][-1]["seq"] == 14
+
 
 class TestNovelforgeDebugEnvVar:
     """Verify that NOVELFORGE_DEBUG controls debug mode in app.py entrypoint."""

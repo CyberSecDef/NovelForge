@@ -281,7 +281,7 @@ def _log_llm_error(
     if exception_chain:
         error_log["exception_chain"] = exception_chain
 
-    llm_logger.info(json.dumps(error_log, indent=2))
+    llm_logger.info(json.dumps(error_log))
     logger.error(
         "LLM error [%s] action=%s attempt=%d/%d status=%s: %s | response_body=%s",
         error_type, action, attempt, MAX_RETRIES, status_code,
@@ -355,7 +355,7 @@ def _build_request(
         },
         "payload": payload,
     }
-    llm_logger.info(json.dumps(request_log, indent=2))
+    llm_logger.info(json.dumps(request_log))
 
     return headers, payload
 
@@ -383,7 +383,7 @@ def _handle_success(
         "headers": dict(resp.headers),
         "response": data,
     }
-    llm_logger.info(json.dumps(response_log, indent=2))
+    llm_logger.info(json.dumps(response_log))
 
     # Accumulate token usage if available
     usage = data.get("usage")
