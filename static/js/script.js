@@ -1359,10 +1359,76 @@ $(function () {
     $gallery.removeClass("d-none");
   }
 
+  // Poll the illustration job token until it reaches a terminal state,
+  // then fetch the full payload and render the images.
+  function _pollIllustrationJob(illustToken, _errorRetries) {
+    var retries = _errorRetries || 0;
+    $.ajax({
+      url: "/progress/" + illustToken,
+      method: "GET",
+      success: function (data) {
+        if (data.status === "done") {
+          // Job finished – fetch the full payload to get the illustrations array.
+          $.ajax({
+            url: "/progress/" + illustToken + "/full",
+            method: "GET",
+            success: function (full) {
+              renderIllustrations(full.illustrations || []);
+            },
+            error: function () {
+              renderIllustrations([]);
+            },
+            complete: function () {
+              $("#illustrations-spinner").addClass("d-none");
+              $("#illustrations-spinner-label").addClass("d-none").text("");
+              _enableExportButtons();
+            },
+          });
+        } else if (data.status === "error") {
+          showAlert(
+            data.error ||
+              "Illustration generation failed. The AI service may be rate-limited — wait a few minutes and try again."
+          );
+          $("#illustrations-spinner").addClass("d-none");
+          $("#illustrations-spinner-label").addClass("d-none").text("");
+          _enableExportButtons();
+        } else {
+          // Still running – update the spinner label and keep polling.
+          var stepText = data.step || "Generating\u2026";
+          var current = data.current || 0;
+          var total = data.total || 0;
+          var label = total > 0
+            ? stepText + " (" + current + "/" + total + ")"
+            : stepText;
+          $("#illustrations-spinner-label").text(label);
+          setTimeout(function () {
+            _pollIllustrationJob(illustToken, 0);
+          }, 3000);
+        }
+      },
+      error: function () {
+        // Retry on transient network errors, up to 10 attempts.
+        if (retries < 10) {
+          setTimeout(function () {
+            _pollIllustrationJob(illustToken, retries + 1);
+          }, 5000);
+        } else {
+          showAlert(
+            "Lost connection to the server while waiting for illustrations. Please check your connection and try again."
+          );
+          $("#illustrations-spinner").addClass("d-none");
+          $("#illustrations-spinner-label").addClass("d-none").text("");
+          _enableExportButtons();
+        }
+      },
+    });
+  }
+
   $("#btn-generate-illustrations").on("click", function () {
     clearAlerts();
     var $btn = $(this);
     $("#illustrations-spinner").removeClass("d-none");
+    $("#illustrations-spinner-label").removeClass("d-none").text("Starting\u2026");
     _disableExportButtons();
 
     $.ajax({
@@ -1370,18 +1436,26 @@ $(function () {
       method: "POST",
       contentType: "application/json",
       data: JSON.stringify({ token: _progressToken }),
-      timeout: 600000, // 10 min timeout for image generations
       success: function (resp) {
-        renderIllustrations(resp.illustrations || []);
+        var illustToken = resp.illustration_token;
+        if (illustToken) {
+          // Backend accepted the job; poll until done.
+          _pollIllustrationJob(illustToken, 0);
+        } else {
+          // Unexpected: no token in response.
+          renderIllustrations(resp.illustrations || []);
+          $("#illustrations-spinner").addClass("d-none");
+          $("#illustrations-spinner-label").addClass("d-none").text("");
+          _enableExportButtons();
+        }
       },
       error: function (xhr) {
         var msg =
           (xhr.responseJSON && xhr.responseJSON.error) ||
           "Illustration generation failed. The AI service may be rate-limited — wait a few minutes and try again.";
         showAlert(msg);
-      },
-      complete: function () {
         $("#illustrations-spinner").addClass("d-none");
+        $("#illustrations-spinner-label").addClass("d-none").text("");
         _enableExportButtons();
       },
     });
