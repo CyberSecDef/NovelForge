@@ -1517,7 +1517,18 @@ $(function () {
   // LLM Log Display
   // -------------------------------------------------------------------
   var _seenLogSignatures = {};
-  var _logPollInterval = null;
+  var _logPollTimeout = null;
+  var _logPollSameCount = 0;  // consecutive polls with no new entries
+  // Backoff schedule: 0-1 same polls → 15s, 2 → 30s, 3 → 60s, 4 → 2min, 5 → 5min, 6+ → 10min
+  var _LOG_POLL_DELAYS = [15000, 15000, 30000, 60000, 120000, 300000, 600000];
+
+  function _scheduleLogPoll() {
+    if (_logPollTimeout) {
+      clearTimeout(_logPollTimeout);
+    }
+    var delay = _LOG_POLL_DELAYS[Math.min(_logPollSameCount, _LOG_POLL_DELAYS.length - 1)];
+    _logPollTimeout = setTimeout(pollLLMLog, delay);
+  }
 
   function entrySignature(entry) {
     if (!entry) return "";
@@ -1609,16 +1620,22 @@ $(function () {
           _hasInitializedLogSnapshot = true;
           _activeLLMRequests = 0;
           setStickyStatus(DEFAULT_STICKY_STATUS, { force: true });
+          _scheduleLogPoll();
           return;
         }
 
-        if (entries.length === 0) return;
+        if (entries.length === 0) {
+          _logPollSameCount++;
+          _scheduleLogPoll();
+          return;
+        }
 
         // Clear placeholder on first visible log entry
         if (Object.keys(_seenLogSignatures).length === 0) {
           $("#llm-chat-messages").empty();
         }
 
+        var foundNew = false;
         for (var i = 0; i < entries.length; i++) {
           var entry = entries[i];
           var signature = entrySignature(entry);
@@ -1626,6 +1643,7 @@ $(function () {
             continue;
           }
 
+          foundNew = true;
           _seenLogSignatures[signature] = true;
 
           if (entry.type === "request") {
@@ -1646,16 +1664,24 @@ $(function () {
             addLogMessage(formatted);
           }
         }
+
+        if (foundNew) {
+          _logPollSameCount = 0;
+        } else {
+          _logPollSameCount++;
+        }
+        _scheduleLogPoll();
       },
       error: function() {
         // Silently fail - log polling is non-critical
+        _logPollSameCount++;
+        _scheduleLogPoll();
       }
     });
   }
 
-  // Start polling for LLM log updates
-  _logPollInterval = setInterval(pollLLMLog, 15000); // Poll every 15 seconds
-  pollLLMLog(); // Initial poll
+  // Start polling for LLM log updates (with adaptive backoff)
+  pollLLMLog(); // Initial poll; subsequent polls are scheduled inside pollLLMLog
 
   // Clear log button — clears display and server-side log file
   $("#btn-clear-log").on("click", function() {
@@ -1667,6 +1693,7 @@ $(function () {
     _seenLogSignatures = {};
     _activeLLMRequests = 0;
     _hasInitializedLogSnapshot = false;
+    _logPollSameCount = 0;
     setStickyStatus(DEFAULT_STICKY_STATUS, { force: true });
 
     // Clear the server-side log file
