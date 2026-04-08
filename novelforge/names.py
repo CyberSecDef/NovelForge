@@ -51,10 +51,11 @@ _GENRE_GROUP: dict[str, str] = {
 
 # Validate that every allowed genre has a name-pool mapping.
 _missing_name_genres = ALLOWED_GENRES - _GENRE_GROUP.keys()
-assert not _missing_name_genres, (
-    f"Genres missing from _GENRE_GROUP in names.py: {sorted(_missing_name_genres)}. "
-    f"Add a style-group mapping for each."
-)
+if _missing_name_genres:
+    raise ValueError(
+        f"Genres missing from _GENRE_GROUP in names.py: {sorted(_missing_name_genres)}. "
+        f"Add a style-group mapping for each."
+    )
 
 # ---------------------------------------------------------------------------
 # Name pool data

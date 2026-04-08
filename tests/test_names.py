@@ -1,7 +1,11 @@
 """Tests for the novelforge.names module (genre-aware name pools)."""
 
+import importlib
+
 import pytest
 
+import novelforge.names
+import novelforge.validation
 from novelforge.names import (
     _GENRE_GROUP,
     _NAMES,
@@ -167,3 +171,22 @@ class TestFormatNamePoolForPrompt:
         assert "male first names" in result.lower()
         assert "female first names" in result.lower()
         assert "last names" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Genre coverage validation raises ValueError (not silenced by -O flag)
+# ---------------------------------------------------------------------------
+
+class TestNameGenreValidation:
+    """names.py must raise ValueError for missing genre mappings even under -O."""
+
+    def test_raises_value_error_when_genre_missing_from_genre_group(self, monkeypatch):
+        """Reloading names.py with an extra ALLOWED_GENRES entry raises ValueError."""
+        extended = novelforge.validation.ALLOWED_GENRES | {"FakeGenreForTest"}
+        monkeypatch.setattr(novelforge.validation, "ALLOWED_GENRES", extended)
+        with pytest.raises(ValueError, match="FakeGenreForTest"):
+            importlib.reload(novelforge.names)
+
+    def test_no_error_when_all_genres_covered(self, monkeypatch):
+        """Reloading names.py with the standard ALLOWED_GENRES does not raise."""
+        importlib.reload(novelforge.names)
