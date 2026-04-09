@@ -260,6 +260,18 @@ $(function () {
     if (combined.indexOf("revise") !== -1 || combined.indexOf("revision") !== -1) {
       return "Applying Chapter Revisions";
     }
+    if (combined.indexOf("voice & dialogue") !== -1 || combined.indexOf("voice and dialogue") !== -1) {
+      return "Differentiating character voices";
+    }
+    if (combined.indexOf("human oddities") !== -1) {
+      return "Adding human texture";
+    }
+    if (combined.indexOf("metaphor reduction") !== -1) {
+      return "Reducing metaphor density";
+    }
+    if (combined.indexOf("copy edit") !== -1) {
+      return "Copy editing";
+    }
 
     return "Prompting LLM";
   }
