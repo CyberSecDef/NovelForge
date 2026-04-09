@@ -1,8 +1,221 @@
 /* NovelForge – custom styles */
 
+/* ----------------------------------------------------------------
+   Typography: Dual-font system
+   - UI elements: system sans-serif (Segoe UI / system-ui)
+   - Literary content (.nf-literary): Lora serif from Google Fonts
+   Modular type scale with 1.25 ratio:
+     caption: 0.8rem | body: 1rem | h6: 1.25rem | h5: 1.563rem
+     h4: 1.953rem | h3: 2.441rem | h2: 3.052rem | h1: 3.815rem
+---------------------------------------------------------------- */
+
+:root {
+  /* Typography */
+  --nf-font-ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --nf-font-literary: "Lora", Georgia, "Times New Roman", serif;
+  --nf-scale-caption: 0.8rem;
+  --nf-scale-body: 1rem;
+  --nf-scale-h6: 1.25rem;
+  --nf-scale-h5: 1.563rem;
+  --nf-scale-h4: 1.953rem;
+  --nf-scale-h3: 2.441rem;
+  --nf-scale-h2: 3.052rem;
+
+  /* Brand color palette */
+  --nf-ink: #1B2A4A;
+  --nf-ink-light: #2a3f6a;
+  --nf-gold: #C4960C;
+  --nf-gold-hover: #d4a61c;
+  --nf-parchment: #FAF9F6;
+  --nf-text: #1a1a1a;
+  --nf-text-muted: #6B7280;
+  --nf-border: #d5cfc3;
+}
+
 body {
-  background-color: #f8f9fa;
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background-color: var(--nf-parchment);
+  color: var(--nf-text);
+  font-family: var(--nf-font-ui);
+}
+
+/* Override Bootstrap's muted text with brand tone */
+.text-muted {
+  color: var(--nf-text-muted) !important;
+}
+
+/* Literary content: serif font for all writing-related surfaces */
+.nf-literary {
+  font-family: var(--nf-font-literary);
+}
+
+/* Novel title treatment — large serif for a book-title feel */
+.nf-title {
+  font-family: var(--nf-font-literary);
+  font-size: var(--nf-scale-h3);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+/* Novel title as an input field — match the title treatment */
+input.nf-title {
+  font-size: var(--nf-scale-h4);
+  height: auto;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Writing surface — paper-like textarea for premise and literary input */
+.nf-writing-surface {
+  padding: 1.25rem;
+  background-color: #fffef8;
+  border-color: var(--nf-border);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.04);
+  font-size: 1.05rem;
+  line-height: 1.75;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, min-height 0.3s ease;
+}
+
+.nf-writing-surface::placeholder {
+  color: #a09882;
+  font-style: italic;
+}
+
+.nf-writing-surface:focus {
+  background-color: #fffef8;
+  border-color: #b8a67e;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.04),
+              0 0 0 0.2rem rgba(184, 166, 126, 0.25);
+  min-height: 14rem;
+}
+
+/* Hero / welcome section */
+.nf-hero-heading {
+  font-size: var(--nf-scale-h2);
+  font-weight: 600;
+  color: var(--nf-ink);
+  margin-bottom: 0.3rem;
+}
+
+.nf-hero-subtitle {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.nf-hero-rule {
+  position: relative;
+  border-top: 1px solid var(--nf-border);
+  width: 60%;
+  margin: 0 auto;
+}
+
+.nf-hero-ornament::before {
+  content: "\2766";
+  position: absolute;
+  top: -0.7em;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--nf-parchment);
+  padding: 0 0.6rem;
+  color: var(--nf-text-muted);
+  font-size: 1rem;
+}
+
+/* Step 4 title page treatment */
+.nf-title-page {
+  padding: 2rem 1rem 0.5rem;
+}
+
+/* Section divider — subtle border-top */
+.nf-section-divider {
+  border-top: 1px solid var(--nf-border);
+}
+
+/* Fieldset grouping for form sections */
+.nf-fieldset {
+  border: 1px solid var(--nf-border);
+  border-radius: 0.5rem;
+  padding: 1.25rem 1.25rem 0.5rem;
+}
+
+.nf-fieldset-legend {
+  float: none;
+  width: auto;
+  padding: 0 0.5rem;
+  font-size: var(--nf-scale-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nf-text-muted);
+}
+
+/* Advanced options collapse toggle */
+.nf-advanced-toggle {
+  color: var(--nf-text-muted);
+  transition: color 0.2s ease;
+}
+
+.nf-advanced-toggle:hover {
+  color: var(--nf-text);
+}
+
+.nf-collapse-icon {
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.nf-advanced-toggle[aria-expanded="true"] .nf-collapse-icon {
+  transform: rotate(90deg);
+}
+
+/* Chapter summary cells in outline table — serif for readability */
+#chapter-tbody .editable-cell,
+#characters-tbody .editable-cell {
+  font-family: var(--nf-font-literary);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+/* Unified brand card headers */
+.bg-nf-ink {
+  background: linear-gradient(135deg, var(--nf-ink), var(--nf-ink-light));
+  color: #fff;
+}
+
+.bg-nf-ink .btn-outline-light:hover {
+  color: var(--nf-ink);
+}
+
+/* Animated writing indicator for Step 3 */
+.nf-writing-indicator {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: var(--nf-gold);
+  margin-left: 0.4em;
+  vertical-align: text-bottom;
+  animation: nf-blink 1s step-end infinite;
+}
+
+@keyframes nf-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Modular type scale for card headers */
+.card-header h4 {
+  font-size: var(--nf-scale-h6);
+}
+
+h1 { font-size: var(--nf-scale-h2); }
+h2 { font-size: var(--nf-scale-h3); }
+h3 { font-size: var(--nf-scale-h4); }
+h4 { font-size: var(--nf-scale-h5); }
+h5 { font-size: var(--nf-scale-h6); }
+h6 { font-size: var(--nf-scale-body); }
+
+/* Caption-sized helper */
+.nf-caption {
+  font-size: var(--nf-scale-caption);
 }
 
 /* Editable table cells */
@@ -11,30 +224,346 @@ body {
   white-space: pre-wrap;
 }
 
+/* Step progress indicator */
+.nf-step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.nf-step-track {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.nf-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  position: relative;
+  transition: opacity 0.2s ease;
+  opacity: 0.5;
+}
+
+.nf-step:hover {
+  opacity: 0.8;
+}
+
+.nf-step.active {
+  opacity: 1;
+}
+
+.nf-step-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border: 2px solid var(--nf-border);
+  background: var(--nf-parchment);
+  color: var(--nf-text-muted);
+  font-weight: 700;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.nf-step.active .nf-step-circle {
+  background: var(--nf-ink);
+  border-color: var(--nf-ink);
+  color: #fff;
+}
+
+.nf-step.completed .nf-step-circle {
+  background: var(--nf-gold);
+  border-color: var(--nf-gold);
+  color: #fff;
+}
+
+.nf-step-label {
+  font-size: var(--nf-scale-caption);
+  font-weight: 600;
+  color: var(--nf-text-muted);
+  white-space: nowrap;
+}
+
+.nf-step.active .nf-step-label {
+  color: var(--nf-text);
+}
+
+.nf-step.completed .nf-step-label {
+  color: var(--nf-text);
+}
+
+.nf-step-line {
+  flex: 1;
+  height: 2px;
+  background: var(--nf-border);
+  transition: background 0.3s ease;
+}
+
+.nf-step-line.completed {
+  background: var(--nf-gold);
+}
+
+/* Log button in step bar */
+.nf-step-log-btn {
+  background: none;
+  border: 1px solid var(--nf-border);
+  border-radius: 50%;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nf-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.nf-step-log-btn:hover {
+  color: var(--nf-text);
+  border-color: var(--nf-text-muted);
+}
+
+.nf-step-log-btn.active {
+  background: var(--nf-ink);
+  border-color: var(--nf-ink);
+  color: #fff;
+}
+
+/* Mobile: collapse labels, show only icons */
+@media (max-width: 575.98px) {
+  .nf-step-label {
+    display: none;
+  }
+
+  .nf-step.active .nf-step-label {
+    display: block;
+  }
+
+  .nf-step-circle {
+    width: 1.8rem;
+    height: 1.8rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* Tab pane transitions — fade-in with upward slide */
+.tab-pane.fade {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  transform: translateY(12px);
+}
+
+.tab-pane.show {
+  transform: translateY(0);
+}
+
+/* Pulse animation on the active step circle */
+.nf-step.active .nf-step-circle {
+  animation: nf-step-pulse 0.5s ease-out;
+}
+
+@keyframes nf-step-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(27, 42, 74, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(27, 42, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(27, 42, 74, 0); }
+}
+
 /* Progress steps */
 .step-panel {
   transition: opacity 0.3s ease;
 }
 
-/* Chapter preview accordion */
+/* Brand progress bar */
+.nf-progress {
+  height: 28px;
+  border-radius: 1rem;
+  background-color: #e9ecef;
+  overflow: hidden;
+}
+
+.nf-progress-bar {
+  background: linear-gradient(90deg, var(--nf-gold), #E8B400);
+  border-radius: 1rem;
+  transition: width 0.6s ease;
+  position: relative;
+  overflow: hidden;
+  color: var(--nf-text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
+}
+
+/* Shimmer animation while in progress */
+.nf-progress-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: nf-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes nf-shimmer {
+  0% { left: -50%; }
+  100% { left: 150%; }
+}
+
+/* Completion glow when bar reaches 100% */
+.nf-progress-bar[aria-valuenow="100"] {
+  background: var(--nf-gold);
+  animation: nf-glow 1.5s ease-out 1;
+}
+
+.nf-progress-bar[aria-valuenow="100"]::after {
+  animation: none;
+}
+
+@keyframes nf-glow {
+  0% { box-shadow: 0 0 8px rgba(196, 150, 12, 0.6); }
+  50% { box-shadow: 0 0 20px rgba(196, 150, 12, 0.8); }
+  100% { box-shadow: 0 0 0 transparent; }
+}
+
+/* Chapter preview accordion — literary reading surface */
+#chapters-preview-accordion .accordion-item {
+  border: none;
+  border-bottom: 1px solid var(--nf-border);
+  background: transparent;
+}
+
+#chapters-preview-accordion .accordion-item:last-child {
+  border-bottom: none;
+}
+
+#chapters-preview-accordion .accordion-button {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--nf-border);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 1.25rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+#chapters-preview-accordion .accordion-button:not(.collapsed) {
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+
+#chapters-preview-accordion .accordion-button::after {
+  position: absolute;
+  right: 0;
+  top: 1.5rem;
+}
+
+#chapters-preview-accordion .accordion-button .chapter-number-label {
+  font-family: var(--nf-font-literary);
+  font-size: var(--nf-scale-caption);
+  font-variant: small-caps;
+  letter-spacing: 0.1em;
+  color: var(--nf-text-muted);
+  margin-bottom: 0.2rem;
+}
+
+#chapters-preview-accordion .accordion-button .chapter-title-label {
+  font-family: var(--nf-font-literary);
+  font-size: var(--nf-scale-h6);
+  font-weight: 600;
+}
+
+#chapters-preview-accordion .accordion-body {
+  padding: 1.5rem 2rem 2rem;
+}
+
+#chapters-preview-accordion .accordion-body .chapter-reading-text {
+  max-width: 90%;
+  margin: 0 auto;
+  white-space: pre-wrap;
+  font-family: var(--nf-font-literary);
+  font-size: 1rem;
+  line-height: 1.9;
+}
+
+/* Drop-cap on first letter of chapter content */
+#chapters-preview-accordion .accordion-body .chapter-reading-text::first-letter {
+  font-family: var(--nf-font-literary);
+  font-size: 3.2em;
+  float: left;
+  line-height: 0.8;
+  margin-right: 0.08em;
+  margin-top: 0.05em;
+  font-weight: 700;
+}
+
+/* Fallback for non-preview accordion bodies */
 .accordion-body {
   max-height: 400px;
   overflow-y: auto;
   white-space: pre-wrap;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--nf-font-literary);
   font-size: 0.97rem;
   line-height: 1.75;
 }
 
-/* Navbar brand */
-.navbar-brand {
-  font-size: 1.4rem;
-  letter-spacing: -0.5px;
+/* Navbar */
+.nf-navbar {
+  background: linear-gradient(135deg, var(--nf-ink), var(--nf-ink-light));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-/* Card headers */
-.card-header h4 {
-  font-size: 1.15rem;
+.nf-navbar .navbar-brand {
+  font-family: var(--nf-font-literary);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #fff;
+}
+
+.nf-navbar .navbar-brand:hover {
+  color: var(--nf-gold);
+}
+
+.nf-navbar .navbar-text {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Ghost buttons for navbar actions */
+.nf-nav-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.75);
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.nf-nav-btn:hover,
+.nf-nav-btn:focus {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nf-nav-btn-danger:hover,
+.nf-nav-btn-danger:focus {
+  color: #ff6b6b;
+  background-color: rgba(255, 107, 107, 0.1);
 }
 
 /* Make tables more readable */
@@ -66,8 +595,8 @@ body {
 .llm-chat-window {
   height: 400px;
   overflow-y: auto;
-  background-color: #f8f9fa;
-  border-top: 1px solid #dee2e6;
+  background-color: var(--nf-parchment);
+  border-top: 1px solid var(--nf-border);
 }
 
 .llm-chat-messages {
@@ -143,9 +672,21 @@ body {
    that use hardcoded light-mode colors.
 ---------------------------------------------------------------- */
 
+/* Dark mode brand palette overrides */
+[data-bs-theme="dark"] {
+  --nf-ink: #1B2A4A;
+  --nf-ink-light: #2a3f6a;
+  --nf-gold: #d4a61c;
+  --nf-gold-hover: #e4b62c;
+  --nf-parchment: #1a1d21;
+  --nf-text: #dee2e6;
+  --nf-text-muted: #8e9aab;
+  --nf-border: #495057;
+}
+
 /* Base background */
 [data-bs-theme="dark"] body {
-  background-color: #1a1d21;
+  background-color: var(--nf-parchment);
 }
 
 /* Cards and panels */
@@ -204,6 +745,26 @@ body {
   color: #f8f9fa;
 }
 
+/* Writing surface — dark mode warm tones */
+[data-bs-theme="dark"] .nf-writing-surface {
+  background-color: #1e1d1a;
+  border-color: #3d3630;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.2);
+  color: #e8e0d4;
+}
+
+[data-bs-theme="dark"] .nf-writing-surface::placeholder {
+  color: #7a7060;
+}
+
+[data-bs-theme="dark"] .nf-writing-surface:focus {
+  background-color: #23211d;
+  border-color: #b8a67e;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.2),
+              0 0 0 0.2rem rgba(184, 166, 126, 0.2);
+  color: #f0e8dc;
+}
+
 [data-bs-theme="dark"] .form-control::placeholder {
   color: #6c757d;
 }
@@ -229,6 +790,34 @@ body {
   border-color: #495057;
 }
 
+/* Chapter preview accordion — dark mode reading surface */
+[data-bs-theme="dark"] #chapters-preview-accordion .accordion-item {
+  border-bottom-color: var(--nf-border);
+}
+
+[data-bs-theme="dark"] #chapters-preview-accordion .accordion-button {
+  background: transparent;
+  border-bottom-color: var(--nf-border);
+  color: var(--nf-text);
+}
+
+[data-bs-theme="dark"] #chapters-preview-accordion .accordion-button:not(.collapsed) {
+  background: transparent;
+  color: var(--nf-text);
+}
+
+[data-bs-theme="dark"] #chapters-preview-accordion .accordion-button .chapter-number-label {
+  color: var(--nf-text-muted);
+}
+
+[data-bs-theme="dark"] #chapters-preview-accordion .accordion-body {
+  background: transparent;
+}
+
+[data-bs-theme="dark"] #chapters-preview-accordion .accordion-body .chapter-reading-text {
+  color: var(--nf-text);
+}
+
 /* Progress chapter list */
 [data-bs-theme="dark"] .list-group-item {
   background-color: #212529;
@@ -245,10 +834,19 @@ body {
   background-color: #343a40;
 }
 
+[data-bs-theme="dark"] .nf-progress {
+  background-color: #2b3035;
+}
+
+[data-bs-theme="dark"] .nf-progress-bar {
+  color: #1a1a1a;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
 /* LLM Chat Log */
 [data-bs-theme="dark"] .llm-chat-window {
-  background-color: #1a1d21;
-  border-top-color: #495057;
+  background-color: var(--nf-parchment);
+  border-top-color: var(--nf-border);
 }
 
 [data-bs-theme="dark"] .llm-message.request .llm-bubble {
@@ -321,7 +919,7 @@ body {
 
 /* Misc text */
 [data-bs-theme="dark"] .text-muted {
-  color: #8e9aab !important;
+  color: var(--nf-text-muted) !important;
 }
 
 /* Nav tabs */

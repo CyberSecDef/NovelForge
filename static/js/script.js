@@ -83,6 +83,43 @@ $(function () {
     "#step-done": "#step4-complete-export-btn",
   };
 
+  // Map step IDs to their index in the step indicator (0-based)
+  var STEP_INDEX = {
+    "#step-input": 0,
+    "#step-outline": 1,
+    "#step-progress": 2,
+    "#step-done": 3,
+  };
+
+  function _updateStepIndicator(activeId) {
+    var activeIdx = STEP_INDEX[activeId];
+    if (activeIdx === undefined) {
+      // Log tab or unknown — just dim all steps, highlight log
+      $(".nf-step").removeClass("active completed");
+      $(".nf-step-line").removeClass("completed");
+      $(".nf-step-log-btn").addClass("active");
+      return;
+    }
+    $(".nf-step-log-btn").removeClass("active");
+    $(".nf-step").each(function (i) {
+      var $step = $(this);
+      $step.removeClass("active completed");
+      if (i < activeIdx) {
+        $step.addClass("completed");
+        // Replace number with checkmark for completed steps
+        $step.find(".nf-step-circle").html('<i class="bi bi-check"></i>');
+      } else if (i === activeIdx) {
+        $step.addClass("active");
+        $step.find(".nf-step-circle").text(i + 1);
+      } else {
+        $step.find(".nf-step-circle").text(i + 1);
+      }
+    });
+    $(".nf-step-line").each(function (i) {
+      $(this).toggleClass("completed", i < activeIdx);
+    });
+  }
+
   function showStep(id) {
     var tabButtonSelector = STEP_TAB_BUTTONS[id];
     var tabButton = tabButtonSelector ? document.querySelector(tabButtonSelector) : null;
@@ -90,12 +127,31 @@ $(function () {
       bootstrap.Tab.getOrCreateInstance(tabButton).show();
     }
 
+    // Update the step progress indicator
+    _updateStepIndicator(id);
+
+    // Hide the welcome hero once user navigates away from initial state
+    $("#nf-hero").addClass("d-none");
+
     // Legacy cleanup: ensure old section-based d-none classes do not hide content.
     $.each(STEPS, function (_, sel) {
       $(sel).removeClass("d-none");
     });
     $("html, body").animate({ scrollTop: 0 }, 200);
   }
+
+  // Sync step indicator when user clicks step buttons directly
+  $(document).on("shown.bs.tab", ".nf-step, .nf-step-log-btn", function () {
+    var id = null;
+    var target = $(this).attr("data-bs-target");
+    // Find which step ID maps to this tab target
+    if (target === "#step1-novel-setup-tab") id = "#step-input";
+    else if (target === "#step2-plan-tab") id = "#step-outline";
+    else if (target === "#step3-chapter-writing-tab") id = "#step-progress";
+    else if (target === "#step4-complete-export-tab") id = "#step-done";
+    else if (target === "#log-tab") { _updateStepIndicator(null); return; }
+    if (id) _updateStepIndicator(id);
+  });
 
   // -------------------------------------------------------------------
   // Alert helpers
@@ -1075,14 +1131,15 @@ $(function () {
         '<button class="accordion-button collapsed" type="button" ' +
         'data-bs-toggle="collapse" data-bs-target="#' + id + '" ' +
         'aria-expanded="false" aria-controls="' + id + '">' +
-        "Chapter " + escapeHtml(ch.number) + ": " + escapeHtml(ch.title) +
+        '<span class="chapter-number-label">Chapter ' + escapeHtml(ch.number) + '</span>' +
+        '<span class="chapter-title-label">' + escapeHtml(ch.title) + '</span>' +
         "</button></h2>" +
         '<div id="' + id + '" class="accordion-collapse collapse" aria-labelledby="' + heading + '">' +
-        '<div class="accordion-body"><pre class="mb-0 text-wrap"></pre></div>' +
+        '<div class="accordion-body"><div class="chapter-reading-text"></div></div>' +
         "</div></div>"
       );
-      // Use .text() on the <pre> element to safely insert content with newlines preserved
-      $item.find("pre").text(ch.content || "");
+      // Use .text() to safely insert content with newlines preserved
+      $item.find(".chapter-reading-text").text(ch.content || "");
       $acc.append($item);
     });
 
@@ -1096,6 +1153,20 @@ $(function () {
     // Generation complete — re-enable the approve button for potential future use
     $("#btn-approve-outline").prop("disabled", false);
   }
+
+  // Render Mermaid when the relationship-map tab becomes visible,
+  // since Mermaid cannot measure layout inside a hidden tab pane.
+  $(document).on("shown.bs.tab", "#tab-relationship-map", function () {
+    var $pre = $("#relationship-mermaid");
+    var code = $pre.attr("data-mermaid-src");
+    if (!code) return;
+    try {
+      $pre.removeAttr("data-processed").text(code);
+      if (typeof mermaid !== "undefined" && mermaid.run) {
+        mermaid.run({ nodes: [$pre[0]] });
+      }
+    } catch (e) { /* fallback: raw text already visible */ }
+  });
 
   function _renderRelationshipMap(mapData) {
     var $panel = $("#relationship-map-panel");
@@ -1135,16 +1206,8 @@ $(function () {
     }
 
     var mermaidCode = lines.join("\n");
-    $pre.removeAttr("data-processed").text(mermaidCode);
-
-    // Re-render with Mermaid
-    try {
-      if (typeof mermaid !== "undefined" && mermaid.run) {
-        mermaid.run({ nodes: [$pre[0]] });
-      }
-    } catch (e) {
-      // Fallback: show raw text
-    }
+    // Store source for deferred rendering when the tab becomes visible
+    $pre.attr("data-mermaid-src", mermaidCode).text(mermaidCode);
 
     $panel.removeClass("d-none");
   }
@@ -1735,6 +1798,9 @@ $(function () {
     (function () {
       var sd = window._savedSessionData;
 
+      // Hide hero when restoring a session
+      $("#nf-hero").addClass("d-none");
+
       // Step 1 form fields
       if (sd.premise) $("#premise").val(sd.premise);
       if (sd.genre) $("#genre").val(sd.genre);
@@ -1742,6 +1808,9 @@ $(function () {
       if (sd.word_count) $("#word_count").val(sd.word_count);
       if (sd.special_events) $("#special_events").val(sd.special_events);
       if (sd.special_instructions) $("#special_instructions").val(sd.special_instructions);
+      if (sd.special_events || sd.special_instructions) {
+        $("#advanced-options").addClass("show");
+      }
       $("#premise-count").text((sd.premise || "").length);
 
       // Step 2 outline + characters

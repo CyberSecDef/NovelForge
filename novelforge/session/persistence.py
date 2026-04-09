@@ -267,12 +267,15 @@ def save_session_state() -> bool:
         "voice_seed": session.get("voice_seed", {}),
     }
 
-    # Add progress store data if available
+    # Add progress store data if available.
+    # Strip _live before persisting — it is an in-memory runtime flag and
+    # causes stale-running detection to fail when loaded back from disk.
     token = session.get("progress_token")
     if token:
         progress = progress_manager.get(token)
         if progress is not None:
-            state["progress_data"] = progress
+            pd_to_save = {k: v for k, v in progress.items() if k != "_live"}
+            state["progress_data"] = pd_to_save
             # Keep completed_chapters in sync with progress data
             done = progress.get("chapters_done", [])
             if done:
@@ -391,9 +394,13 @@ def restore_session_from_state(state: dict) -> None:
     session["illustrations"] = state.get("illustrations", [])
     session["voice_seed"] = state.get("voice_seed", {})
 
-    # Restore progress store if available, rebuilding stale snapshots in one place
+    # Restore progress store if available, rebuilding stale snapshots in one place.
+    # _live is an in-memory flag set during active generation; it is never
+    # meaningful on disk, so strip it before evaluating staleness.
     token = state.get("progress_token", "")
     pd = state.get("progress_data")
+    if pd:
+        pd.pop("_live", None)
     completed = state.get("completed_chapters", [])
     if token:
         if completed and (
@@ -500,7 +507,9 @@ def persist_completed_chapters(
             if progress_token:
                 progress = progress_manager.get(progress_token)
                 if progress is not None:
-                    state["progress_data"] = progress
+                    state["progress_data"] = {
+                        k: v for k, v in progress.items() if k != "_live"
+                    }
 
             _atomic_write(session_file, json.dumps(state, indent=2))
         return True

@@ -14,7 +14,7 @@ Don’t use the names: Vale, Mercer, Hart, Voss, Quinn, Wren, Cross, Thorne
 
 - Generate a comma separated list of 5 special events that will occur in the novel
 
-- Create a comma separated list of 10 special instructions for this story.  Things like dark, religion, abstract.  also add how it is important not to repeat themes, motifs, scenes, etc.
+- Create a comma separated list of 10 special instructions for this story.  Things like dark, super powers, puzzles, abstract.  also add how it is important not to repeat themes, motifs, scenes, etc.
 
 ## Post Processing
 
@@ -40,7 +40,7 @@ Each POV character should think in a distinct internal language shaped by their 
 Current dialogue is too clean, too functional, too information-delivery. Characters complete thoughts, speak in well-formed sentences, and rarely interrupt each other or themselves.
 
 - Humor, Strangeness, and the Unexpected
-The novel is relentlessly serious. Every scene is morally weighted. Every observation is significant. Real humans deflect, joke badly, notice irrelevant things, and occasionally do something that doesn't serve the plot.  create a plan to inject these odities throughout the novel.
+The novel is relentlessly serious. Every scene is morally weighted. Every observation is significant. Real humans deflect, joke badly, notice irrelevant things, and occasionally do something that doesn't serve the plot.  create a plan to inject these odities throughout the novel.  1-2 oddities per chapter.
 
 - Prose Texture Variation
 The prose maintains a consistent literary density throughout. It should breathe -- denser in reflective moments, sparser in action, occasionally raw or clumsy when characters are overwhelmed.

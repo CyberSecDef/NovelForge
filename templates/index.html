@@ -13,6 +13,11 @@
   <!-- Bootstrap Icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" />
 
+  <!-- Google Fonts: Lora (literary content) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+
   <link rel="stylesheet" href="/static/css/style.css" />
 
   <!-- CSRF token for AJAX requests -->
@@ -24,15 +29,15 @@
   <!-- =====================================================================
      NAVBAR
 ====================================================================== -->
-  <nav class="navbar navbar-dark bg-dark navbar-expand-lg">
+  <nav class="navbar nf-navbar navbar-expand-lg">
     <div class="container-fluid">
-      <a class="navbar-brand fw-bold" href="#">
-        <i class="bi bi-book-half me-2"></i>NovelForge
+      <a class="navbar-brand" href="#">
+        <i class="bi bi-feather me-2"></i>NovelForge
       </a>
-      <span class="navbar-text text-secondary small" id="sticky-status-text">AI-Powered Novel Generator</span>
-      <div class="d-flex align-items-center ms-auto gap-2">
+      <span class="navbar-text small" id="sticky-status-text">AI-Powered Novel Generator</span>
+      <div class="d-flex align-items-center ms-auto gap-1">
         <div class="dropdown">
-          <button class="btn btn-sm btn-outline-info dropdown-toggle" type="button"
+          <button class="btn btn-sm nf-nav-btn dropdown-toggle" type="button"
             id="btn-sessions-dropdown" data-bs-toggle="dropdown" aria-expanded="false"
             title="Load a previous session">
             <i class="bi bi-journal-bookmark me-1"></i>Sessions
@@ -42,15 +47,15 @@
             <li><span class="dropdown-item text-muted">Loading...</span></li>
           </ul>
         </div>
-        <button class="btn btn-sm btn-outline-light" id="btn-new-session"
+        <button class="btn btn-sm nf-nav-btn" id="btn-new-session"
           title="Start a new session (archives current progress)">
-          <i class="bi bi-file-earmark-plus me-1"></i>New Session
+          <i class="bi bi-file-earmark-plus me-1"></i>New
         </button>
-        <button class="btn btn-sm btn-outline-danger" id="btn-delete-session"
+        <button class="btn btn-sm nf-nav-btn nf-nav-btn-danger" id="btn-delete-session"
           title="Delete the current session">
-          <i class="bi bi-trash me-1"></i>Delete Session
+          <i class="bi bi-trash"></i>
         </button>
-        <button class="btn btn-sm btn-outline-warning" id="btn-toggle-theme"
+        <button class="btn btn-sm nf-nav-btn" id="btn-toggle-theme"
           title="Toggle dark/light mode" aria-label="Toggle dark or light mode">
           <i class="bi bi-moon-fill" id="theme-icon"></i>
         </button>
@@ -69,41 +74,46 @@
     <div id="global-alert-area" aria-live="polite" role="status"></div>
 
 
-    <ul class="nav nav-tabs" role="tablist">
-      <li class="nav-item" role="presentation">
-
-        <button id="step1-novel-setup-btn" class="nav-link active" aria-current="page" data-bs-toggle="tab"
-          data-bs-target="#step1-novel-setup-tab" type="button" role="tab" aria-controls="step1-novel-setup-tab"
-          aria-selected="true">
-          Step 1 - Novel Setup
+    <!-- Step progress indicator -->
+    <div class="nf-step-indicator mb-4" role="tablist" aria-label="Novel creation steps">
+      <div class="nf-step-track">
+        <button class="nf-step active" id="step1-novel-setup-btn" data-bs-toggle="tab"
+          data-bs-target="#step1-novel-setup-tab" type="button" role="tab"
+          aria-controls="step1-novel-setup-tab" aria-selected="true">
+          <span class="nf-step-circle">1</span>
+          <span class="nf-step-label">Imagine</span>
         </button>
-      </li>
-      <li class="nav-item dropdown" role="presentation">
-        <button id="step2-review-plan-btn" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" type="button"
-          role="tab" aria-expanded="false">
-          Step 2 - Review Plan
+        <div class="nf-step-line"></div>
+        <button class="nf-step" id="step2-chapter-outline-btn" data-bs-toggle="tab"
+          data-bs-target="#step2-plan-tab" type="button" role="tab"
+          aria-controls="step2-plan-tab" aria-selected="false">
+          <span class="nf-step-circle">2</span>
+          <span class="nf-step-label">Plan</span>
         </button>
-        <ul class="dropdown-menu">
-          <li><button id="step2-chapter-outline-btn" class="dropdown-item" data-bs-toggle="tab"
-              data-bs-target="#step2-chapter-outline-tab" type="button" role="tab">Chapter Outline</button></li>
-          <li><button id="step2-character-development-btn" class="dropdown-item" data-bs-toggle="tab"
-              data-bs-target="#step2-character-development-tab" type="button" role="tab">Character Development</button>
-          </li>
-        </ul>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button id="step3-chapter-writing-btn" class="nav-link" data-bs-toggle="tab"
-          data-bs-target="#step3-chapter-writing-tab" type="button" role="tab">Step 3 - Chapter Writing</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button id="step4-complete-export-btn" class="nav-link" data-bs-toggle="tab"
-          data-bs-target="#step4-complete-export-tab" type="button" role="tab">Step 4 - Complete/Export</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button id="log-btn" class="nav-link" data-bs-toggle="tab" data-bs-target="#log-tab" type="button"
-          role="tab">Log</button>
-      </li>
-    </ul>
+        <div class="nf-step-line"></div>
+        <button class="nf-step" id="step3-chapter-writing-btn" data-bs-toggle="tab"
+          data-bs-target="#step3-chapter-writing-tab" type="button" role="tab"
+          aria-controls="step3-chapter-writing-tab" aria-selected="false">
+          <span class="nf-step-circle">3</span>
+          <span class="nf-step-label">Write</span>
+        </button>
+        <div class="nf-step-line"></div>
+        <button class="nf-step" id="step4-complete-export-btn" data-bs-toggle="tab"
+          data-bs-target="#step4-complete-export-tab" type="button" role="tab"
+          aria-controls="step4-complete-export-tab" aria-selected="false">
+          <span class="nf-step-circle">4</span>
+          <span class="nf-step-label">Publish</span>
+        </button>
+      </div>
+      <button class="nf-step-log-btn" id="log-btn" data-bs-toggle="tab"
+        data-bs-target="#log-tab" type="button" role="tab"
+        aria-controls="log-tab" aria-selected="false" title="LLM Log">
+        <i class="bi bi-chat-dots"></i>
+      </button>
+    </div>
+    <!-- Hidden helper button for character-development sub-tab (used by JS) -->
+    <button id="step2-character-development-btn" class="d-none" data-bs-toggle="tab"
+      data-bs-target="#step2-plan-tab" type="button" role="tab"></button>
 
     <div class="tab-content" id="myTabContent">
       <div class="tab-pane fade show active" id="step1-novel-setup-tab" role="tabpanel"
@@ -112,22 +122,30 @@
        STEP 1 – Input Form
   ================================================================ -->
         <div id="step-input" class="step-panel">
+
+          <!-- Hero / welcome section (hidden once outline generated or session restored) -->
+          <div id="nf-hero" class="text-center mb-4">
+            <h2 class="nf-literary nf-hero-heading">What story will you tell?</h2>
+            <p class="text-muted nf-hero-subtitle">Describe your vision and NovelForge will bring it to life.</p>
+            <div class="nf-hero-rule"><span class="nf-hero-ornament"></span></div>
+          </div>
+
           <div class="row justify-content-center">
             <div class="col-lg-12">
 
               <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-nf-ink">
                   <h4 class="mb-0"><i class="bi bi-pencil-square me-2"></i>Step 1 – Novel Setup</h4>
                 </div>
                 <div class="card-body">
                   <form id="novel-form" novalidate>
 
                     <!-- Premise -->
-                    <div class="mb-3">
+                    <div class="mb-4">
                       <label for="premise" class="form-label fw-semibold">
                         Story Premise <span class="text-danger">*</span>
                       </label>
-                      <textarea class="form-control" id="premise" name="premise" rows="4" maxlength="2000"
+                      <textarea class="form-control nf-literary nf-writing-surface" id="premise" name="premise" rows="7" maxlength="2000"
                         placeholder="Describe your story idea…" required></textarea>
                       <div class="d-flex justify-content-between">
                         <div class="invalid-feedback">Please enter a story premise (max 2000 chars).</div>
@@ -136,7 +154,7 @@
                     </div>
 
                     <!-- Genre -->
-                    <div class="mb-3">
+                    <div class="mb-5">
                       <label for="genre" class="form-label fw-semibold">
                         Genre <span class="text-danger">*</span>
                       </label>
@@ -148,50 +166,63 @@
                       <div class="invalid-feedback">Please select a genre.</div>
                     </div>
 
-                    <div class="row">
-                      <!-- Chapters -->
-                      <div class="col-md-6 mb-3">
-                        <label for="chapters" class="form-label fw-semibold">
-                          Number of Chapters <span class="text-danger">*</span>
-                          <i class="bi bi-info-circle text-primary ms-1" data-bs-toggle="tooltip"
-                            title="Recommended: 15–25 chapters for a full-length novel."></i>
-                        </label>
-                        <input type="number" class="form-control" id="chapters" name="chapters" min="3" value="15"
-                          required />
-                        <div class="invalid-feedback">Minimum 3 chapters required.</div>
+                    <!-- Novel Parameters -->
+                    <fieldset class="nf-fieldset mb-5">
+                      <legend class="nf-fieldset-legend">Novel Parameters</legend>
+                      <div class="row">
+                        <!-- Chapters -->
+                        <div class="col-md-6 mb-3">
+                          <label for="chapters" class="form-label fw-semibold">
+                            Number of Chapters <span class="text-danger">*</span>
+                            <i class="bi bi-info-circle text-primary ms-1" data-bs-toggle="tooltip"
+                              title="Recommended: 15–25 chapters for a full-length novel."></i>
+                          </label>
+                          <input type="number" class="form-control" id="chapters" name="chapters" min="3" value="15"
+                            required />
+                          <div class="invalid-feedback">Minimum 3 chapters required.</div>
+                        </div>
+
+                        <!-- Word count -->
+                        <div class="col-md-6 mb-3">
+                          <label for="word_count" class="form-label fw-semibold">
+                            Target Word Count <span class="text-danger">*</span>
+                            <i class="bi bi-info-circle text-primary ms-1" data-bs-toggle="tooltip"
+                              title="Recommended: 80,000–90,000 words for a standard novel."></i>
+                          </label>
+                          <input type="number" class="form-control" id="word_count" name="word_count" min="1000"
+                            value="85000" required />
+                          <div class="invalid-feedback">Word count must be at least 1,000.</div>
+                        </div>
                       </div>
+                    </fieldset>
 
-                      <!-- Word count -->
-                      <div class="col-md-6 mb-3">
-                        <label for="word_count" class="form-label fw-semibold">
-                          Target Word Count <span class="text-danger">*</span>
-                          <i class="bi bi-info-circle text-primary ms-1" data-bs-toggle="tooltip"
-                            title="Recommended: 80,000–90,000 words for a standard novel."></i>
-                        </label>
-                        <input type="number" class="form-control" id="word_count" name="word_count" min="1000"
-                          value="85000" required />
-                        <div class="invalid-feedback">Word count must be at least 1,000.</div>
+                    <!-- Advanced Options (collapsed) -->
+                    <div class="mb-5">
+                      <a class="fw-semibold text-decoration-none nf-advanced-toggle" data-bs-toggle="collapse"
+                        href="#advanced-options" role="button" aria-expanded="false" aria-controls="advanced-options">
+                        <i class="bi bi-chevron-right me-1 nf-collapse-icon"></i>Advanced Options
+                      </a>
+                      <div class="collapse mt-3" id="advanced-options">
+                        <!-- Special Events -->
+                        <div class="mb-4">
+                          <label for="special_events" class="form-label fw-semibold">
+                            Special Events
+                            <small class="text-muted fw-normal">(optional, comma-separated or bullet points)</small>
+                          </label>
+                          <textarea class="form-control" id="special_events" name="special_events" rows="2"
+                            placeholder="e.g. A dragon attack in chapter 5, A wedding in the final act…"></textarea>
+                        </div>
+
+                        <!-- Special Instructions -->
+                        <div class="mb-3">
+                          <label for="special_instructions" class="form-label fw-semibold">
+                            Special Instructions
+                            <small class="text-muted fw-normal">(optional)</small>
+                          </label>
+                          <textarea class="form-control" id="special_instructions" name="special_instructions" rows="2"
+                            placeholder="e.g. Avoid clichés, emphasize diversity, dark tone…"></textarea>
+                        </div>
                       </div>
-                    </div>
-
-                    <!-- Special Events -->
-                    <div class="mb-3">
-                      <label for="special_events" class="form-label fw-semibold">
-                        Special Events
-                        <small class="text-muted fw-normal">(optional, comma-separated or bullet points)</small>
-                      </label>
-                      <textarea class="form-control" id="special_events" name="special_events" rows="2"
-                        placeholder="e.g. A dragon attack in chapter 5, A wedding in the final act…"></textarea>
-                    </div>
-
-                    <!-- Special Instructions -->
-                    <div class="mb-4">
-                      <label for="special_instructions" class="form-label fw-semibold">
-                        Special Instructions
-                        <small class="text-muted fw-normal">(optional)</small>
-                      </label>
-                      <textarea class="form-control" id="special_instructions" name="special_instructions" rows="2"
-                        placeholder="e.g. Avoid clichés, emphasize diversity, dark tone…"></textarea>
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-lg w-100" id="btn-generate-outline">
@@ -207,95 +238,106 @@
 
 
       </div>
-      <div class="tab-pane fade" id="step2-chapter-outline-tab" role="tabpanel" aria-labelledby="step2-chapter-outline-btn"
+      <div class="tab-pane fade" id="step2-plan-tab" role="tabpanel" aria-labelledby="step2-chapter-outline-btn"
         tabindex="0">
 
         <div class="card shadow-sm">
-          <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h4 class="mb-0"><i class="bi bi-list-ol me-2"></i>Step 2 – Review &amp; Edit Chapter Outline</h4>
+          <div class="card-header bg-nf-ink">
+            <h4 class="mb-0"><i class="bi bi-list-ol me-2"></i>Step 2 – Review &amp; Edit Your Plan</h4>
           </div>
-        </div>
-        <div class="card shadow-sm">
-
           <div class="card-body">
 
-            <!-- Title -->
-            <div class="mb-4">
-              <label for="outline-title" class="form-label fw-semibold fs-5">Novel Title</label>
-              <input type="text" class="form-control form-control-lg" id="outline-title" />
-            </div>
+            <!-- Sub-tabs: Chapter Outline / Character Development -->
+            <ul class="nav nav-tabs mb-4" id="step2-sub-tabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="sub-tab-outline" data-bs-toggle="tab"
+                  data-bs-target="#sub-panel-outline" type="button" role="tab"
+                  aria-controls="sub-panel-outline" aria-selected="true">
+                  <i class="bi bi-list-ol me-1"></i>Chapter Outline
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="sub-tab-characters" data-bs-toggle="tab"
+                  data-bs-target="#sub-panel-characters" type="button" role="tab"
+                  aria-controls="sub-panel-characters" aria-selected="false">
+                  <i class="bi bi-people me-1"></i>Characters
+                </button>
+              </li>
+            </ul>
 
-            <!-- Chapter Outline -->
-            <h5 class="fw-semibold mb-2">Chapter Outline</h5>
-            <div class="table-responsive mb-4">
-              <table class="table table-bordered table-hover align-top" id="chapter-table" aria-label="Chapter outline">
-                <thead class="table-dark">
-                  <tr>
-                    <th scope="col" style="width:60px">#</th>
-                    <th scope="col" style="width:220px">Title</th>
-                    <th scope="col">Summary</th>
-                    <th scope="col" style="width:180px">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="chapter-tbody">
-                  <!-- Populated by JS -->
-                </tbody>
-              </table>
-            </div>
+            <div class="tab-content" id="step2-sub-content">
+              <!-- Chapter Outline sub-panel -->
+              <div class="tab-pane fade show active" id="sub-panel-outline" role="tabpanel"
+                aria-labelledby="sub-tab-outline" tabindex="0">
 
-          </div>
-        </div>
+                <!-- Title -->
+                <div class="mb-4">
+                  <label for="outline-title" class="form-label fw-semibold fs-5">Novel Title</label>
+                  <input type="text" class="form-control form-control-lg nf-literary nf-title" id="outline-title" />
+                </div>
 
-
-      </div>
-      <div class="tab-pane fade" id="step2-character-development-tab" role="tabpanel" aria-labelledby="step2-character-development-btn"
-        tabindex="0">
-        <div class="card shadow-sm">
-          <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h4 class="mb-0"><i class="bi bi-list-ol me-2"></i>Step 2 – Review &amp; Edit Character Development</h4>
-          </div>
-        </div>
-        <div class="card shadow-sm">
-
-          <div class="card-body">
-
-            <!-- Narrative Perspective -->
-            <div class="row mb-4">
-              <div class="col-md-6">
-                <label for="narrative-perspective" class="form-label fw-semibold">
-                  <i class="bi bi-eye me-1"></i>Narrative Perspective
-                </label>
-                <select class="form-select" id="narrative-perspective" aria-label="Narrative perspective">
-                  <option value="third_person" selected>Third Person Narration</option>
-                  <!-- First-person options populated dynamically from character list -->
-                </select>
-                <div class="form-text">Choose third person or first person through a specific character's eyes.</div>
+                <!-- Chapter Outline -->
+                <h5 class="fw-semibold mb-2">Chapter Outline</h5>
+                <div class="table-responsive mb-4">
+                  <table class="table table-bordered table-hover align-top" id="chapter-table" aria-label="Chapter outline">
+                    <thead class="table-dark">
+                      <tr>
+                        <th scope="col" style="width:60px">#</th>
+                        <th scope="col" style="width:220px">Title</th>
+                        <th scope="col">Summary</th>
+                        <th scope="col" style="width:180px">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="chapter-tbody">
+                      <!-- Populated by JS -->
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
 
-            <!-- Characters -->
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h5 class="fw-semibold mb-0">Main Characters</h5>
-              <button class="btn btn-sm btn-outline-primary" id="btn-add-character">
-                <i class="bi bi-plus-circle me-1"></i>Add Character
-              </button>
-            </div>
-            <div class="table-responsive mb-4">
-              <table class="table table-bordered table-hover align-top" id="characters-table" aria-label="Character development">
-                <thead class="table-dark">
-                  <tr>
-                    <th scope="col">Name</th>
-                    <th scope="col">Age</th>
-                    <th scope="col">Role</th>
-                    <th scope="col">Background</th>
-                    <th scope="col">Arc</th>
-                    <th scope="col" style="width:80px">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="characters-tbody">
-                  <!-- Populated by JS -->
-                </tbody>
-              </table>
+              <!-- Character Development sub-panel -->
+              <div class="tab-pane fade" id="sub-panel-characters" role="tabpanel"
+                aria-labelledby="sub-tab-characters" tabindex="0">
+
+                <!-- Narrative Perspective -->
+                <div class="row mb-4">
+                  <div class="col-md-6">
+                    <label for="narrative-perspective" class="form-label fw-semibold">
+                      <i class="bi bi-eye me-1"></i>Narrative Perspective
+                    </label>
+                    <select class="form-select" id="narrative-perspective" aria-label="Narrative perspective">
+                      <option value="third_person" selected>Third Person Narration</option>
+                      <!-- First-person options populated dynamically from character list -->
+                    </select>
+                    <div class="form-text">Choose third person or first person through a specific character's eyes.</div>
+                  </div>
+                </div>
+
+                <!-- Characters -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h5 class="fw-semibold mb-0">Main Characters</h5>
+                  <button class="btn btn-sm btn-outline-primary" id="btn-add-character">
+                    <i class="bi bi-plus-circle me-1"></i>Add Character
+                  </button>
+                </div>
+                <div class="table-responsive mb-4">
+                  <table class="table table-bordered table-hover align-top" id="characters-table" aria-label="Character development">
+                    <thead class="table-dark">
+                      <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Age</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Background</th>
+                        <th scope="col">Arc</th>
+                        <th scope="col" style="width:80px">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="characters-tbody">
+                      <!-- Populated by JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
 
             <button class="btn btn-success btn-lg w-100" id="btn-approve-outline">
@@ -312,8 +354,8 @@
           <div class="row justify-content-center">
             <div class="col-lg-12">
               <div class="card shadow-sm">
-                <div class="card-header bg-warning">
-                  <h4 class="mb-0"><i class="bi bi-pen me-2"></i>Step 3 – Writing Chapters…</h4>
+                <div class="card-header bg-nf-ink">
+                  <h4 class="mb-0"><i class="bi bi-pen me-2"></i>Step 3 – Writing Chapters<span class="nf-writing-indicator"></span></h4>
                 </div>
                 <div class="card-body">
                   <p class="text-muted mb-3">
@@ -324,8 +366,8 @@
                     <span id="progress-label" aria-live="polite">Preparing…</span>
                     <span id="progress-percent">0%</span>
                   </div>
-                  <div class="progress mb-4" style="height: 24px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" id="progress-bar"
+                  <div class="progress nf-progress mb-4">
+                    <div class="progress-bar nf-progress-bar" id="progress-bar"
                       role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
                     </div>
                   </div>
@@ -345,135 +387,138 @@
         <div id="step-done" class="step-panel">
           <div class="row justify-content-center">
             <div class="col-lg-12">
-              <div class="card shadow-sm">
-                <div class="card-header bg-success text-white">
-                  <h4 class="mb-0"><i class="bi bi-trophy me-2"></i>Your Novel is Ready!</h4>
-                </div>
-                <div class="card-body text-center">
 
-                  <p class="lead mb-1">
-                    <strong id="done-title"></strong>
-                  </p>
-                  <p class="text-muted mb-4" id="done-stats"></p>
+              <!-- Title page treatment -->
+              <div class="nf-title-page text-center mb-4">
+                <h2 id="done-title" class="nf-literary nf-title mb-2"></h2>
+                <p class="text-muted mb-0" id="done-stats"></p>
+                <div class="nf-hero-rule mt-3"><span class="nf-hero-ornament"></span></div>
+              </div>
 
-                  <!-- Writing statistics dashboard -->
-                  <div id="writing-stats-panel" class="card border-0 text-start mb-3 d-none">
-                    <div class="card-body">
-                      <h6 class="fw-semibold mb-2">
-                        <a class="text-decoration-none" data-bs-toggle="collapse" href="#writing-stats-collapse"
-                          role="button" aria-expanded="false" aria-controls="writing-stats-collapse">
-                          <i class="bi bi-bar-chart me-2"></i>Writing Statistics
-                          <i class="bi bi-chevron-down ms-1 small"></i>
-                        </a>
-                      </h6>
-                      <div class="collapse" id="writing-stats-collapse">
-                        <div class="row g-3 mb-3" id="writing-stats-summary">
-                          <!-- Populated by JS -->
-                        </div>
-                        <div class="table-responsive">
-                          <table class="table table-sm table-bordered align-middle mb-0" aria-label="Per-chapter writing statistics">
-                            <thead class="table-dark">
-                              <tr>
-                                <th scope="col">#</th>
-                                <th scope="col">Title</th>
-                                <th scope="col" class="text-end">Words</th>
-                                <th scope="col" class="text-end">Time</th>
-                                <th scope="col" class="text-end">LLM Calls</th>
-                                <th scope="col" class="text-end">Tokens</th>
-                              </tr>
-                            </thead>
-                            <tbody id="writing-stats-tbody">
-                              <!-- Populated by JS -->
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              <!-- Consistency notes -->
+              <div id="consistency-alert" class="alert alert-info text-start d-none mb-4">
+                <h6 class="fw-semibold"><i class="bi bi-clipboard-check me-2"></i>Editor's Notes</h6>
+                <p id="consistency-assessment" class="mb-1 nf-literary"></p>
+                <ul id="consistency-issues" class="mb-0 ps-3"></ul>
+              </div>
 
-                  <!-- Consistency notes -->
-                  <div id="consistency-alert" class="alert alert-info text-start d-none">
-                    <h6 class="fw-semibold"><i class="bi bi-clipboard-check me-2"></i>Editor's Notes</h6>
-                    <p id="consistency-assessment" class="mb-1"></p>
-                    <ul id="consistency-issues" class="mb-0 ps-3"></ul>
-                  </div>
-
-                  <div class="card bg-light border-0 text-start mb-3">
-                    <div class="card-body">
-                      <h6 class="fw-semibold mb-3"><i class="bi bi-pencil-square me-2"></i>Revise Individual Chapter
-                      </h6>
-                      <div class="row g-3">
-                        <div class="col-md-4">
-                          <label for="revise-chapter-select" class="form-label mb-1">Chapter</label>
-                          <select id="revise-chapter-select" class="form-select"></select>
-                        </div>
-                        <div class="col-md-8">
-                          <label for="revise-instructions" class="form-label mb-1">Revision Instructions</label>
-                          <textarea id="revise-instructions" class="form-control" rows="3" maxlength="4000"
-                            placeholder="Example: Increase tension in the final scene and foreshadow chapter 9's betrayal."></textarea>
-                        </div>
-                      </div>
-                      <button class="btn btn-primary mt-3" id="btn-revise-chapter">
-                        <span class="spinner-border spinner-border-sm d-none me-2" id="revise-chapter-spinner"></span>
-                        <i class="bi bi-arrow-repeat me-2"></i>Apply Instructions to Chapter
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="mb-3">
-                    <div class="d-flex flex-wrap gap-2">
-                      <button class="btn btn-success" id="btn-export-manuscript">
-                        <span class="spinner-border spinner-border-sm d-none me-2" id="export-manuscript-spinner"></span>
-                        <i class="bi bi-file-earmark-text me-1"></i>Download Manuscript
-                      </button>
-                      <button class="btn btn-outline-info" id="btn-export-editors-notes">
-                        <span class="spinner-border spinner-border-sm d-none me-2" id="export-editors-notes-spinner"></span>
-                        <i class="bi bi-clipboard-check me-1"></i>Download Editor's Notes
-                      </button>
-                      <button class="btn btn-outline-secondary" id="btn-start-over">
-                        <i class="bi bi-arrow-counterclockwise me-1"></i>Start Over
-                      </button>
-                    </div>
-                  </div>
-                  <div class="mb-3">
-                    <h6 class="text-muted mb-2">Illustrations</h6>
-                    <button class="btn btn-outline-primary" id="btn-generate-illustrations">
-                      <span class="spinner-border spinner-border-sm d-none me-2" id="illustrations-spinner"></span>
-                      <span id="illustrations-spinner-label" class="d-none me-1"></span>
-                      <i class="bi bi-palette me-1"></i>Generate Cover &amp; Chapter Illustrations
+              <!-- Actions row: exports + illustrations -->
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <h6 class="fw-semibold mb-3"><i class="bi bi-download me-2"></i>Export</h6>
+                  <div class="d-flex flex-wrap gap-2 mb-3">
+                    <button class="btn btn-success" id="btn-export-manuscript">
+                      <span class="spinner-border spinner-border-sm d-none me-2" id="export-manuscript-spinner"></span>
+                      <i class="bi bi-file-earmark-text me-1"></i>Download Manuscript
                     </button>
-                    <small class="text-muted d-block mt-1">Generates 5–10 images from key scenes (requires IMAGE_API_KEY)</small>
+                    <button class="btn btn-outline-info" id="btn-export-editors-notes">
+                      <span class="spinner-border spinner-border-sm d-none me-2" id="export-editors-notes-spinner"></span>
+                      <i class="bi bi-clipboard-check me-1"></i>Editor's Notes
+                    </button>
                   </div>
-
+                  <button class="btn btn-outline-secondary btn-sm" id="btn-start-over">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Start Over
+                  </button>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="fw-semibold mb-3"><i class="bi bi-palette me-2"></i>Illustrations</h6>
+                  <button class="btn btn-outline-primary" id="btn-generate-illustrations">
+                    <span class="spinner-border spinner-border-sm d-none me-2" id="illustrations-spinner"></span>
+                    <span id="illustrations-spinner-label" class="d-none me-1"></span>
+                    <i class="bi bi-palette me-1"></i>Generate Cover &amp; Scenes
+                  </button>
+                  <small class="text-muted d-block mt-1">5–10 images from key scenes (requires IMAGE_API_KEY)</small>
                   <!-- Illustration gallery -->
                   <div class="row g-3 mt-2 d-none" id="illustrations-gallery" aria-label="Generated illustrations">
                     <!-- Populated by JS -->
                   </div>
+                </div>
+              </div>
 
-                  <!-- Character relationship map -->
-                  <div id="relationship-map-panel" class="card border-0 text-start mt-3 d-none">
-                    <div class="card-body">
-                      <h6 class="fw-semibold mb-2">
-                        <a class="text-decoration-none" data-bs-toggle="collapse" href="#relationship-map-collapse"
-                          role="button" aria-expanded="false" aria-controls="relationship-map-collapse">
-                          <i class="bi bi-diagram-3 me-2"></i>Character Relationships
-                          <i class="bi bi-chevron-down ms-1 small"></i>
-                        </a>
-                      </h6>
-                      <div class="collapse" id="relationship-map-collapse">
-                        <div class="text-center">
-                          <pre class="mermaid" id="relationship-mermaid"></pre>
-                        </div>
-                      </div>
+              <!-- Revision panel -->
+              <div class="nf-section-divider mb-4"></div>
+              <div class="mb-4">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-pencil-square me-2"></i>Revise Individual Chapter</h6>
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <label for="revise-chapter-select" class="form-label mb-1">Chapter</label>
+                    <select id="revise-chapter-select" class="form-select"></select>
+                  </div>
+                  <div class="col-md-8">
+                    <label for="revise-instructions" class="form-label mb-1">Revision Instructions</label>
+                    <textarea id="revise-instructions" class="form-control" rows="3" maxlength="4000"
+                      placeholder="Example: Increase tension in the final scene and foreshadow chapter 9's betrayal."></textarea>
+                  </div>
+                </div>
+                <button class="btn btn-primary mt-3" id="btn-revise-chapter">
+                  <span class="spinner-border spinner-border-sm d-none me-2" id="revise-chapter-spinner"></span>
+                  <i class="bi bi-arrow-repeat me-2"></i>Apply Instructions to Chapter
+                </button>
+              </div>
+
+              <!-- Insights: Writing Statistics + Character Relationships (tabbed) -->
+              <div class="nf-section-divider mb-4"></div>
+              <ul class="nav nav-tabs mb-3" id="insights-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" id="tab-writing-stats" data-bs-toggle="tab"
+                    data-bs-target="#panel-writing-stats" type="button" role="tab"
+                    aria-controls="panel-writing-stats" aria-selected="true">
+                    <i class="bi bi-bar-chart me-1"></i>Writing Statistics
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="tab-relationship-map" data-bs-toggle="tab"
+                    data-bs-target="#panel-relationship-map" type="button" role="tab"
+                    aria-controls="panel-relationship-map" aria-selected="false">
+                    <i class="bi bi-diagram-3 me-1"></i>Character Relationships
+                  </button>
+                </li>
+              </ul>
+              <div class="tab-content mb-4" id="insights-tab-content">
+                <!-- Writing Statistics tab -->
+                <div class="tab-pane fade show active" id="panel-writing-stats" role="tabpanel"
+                  aria-labelledby="tab-writing-stats" tabindex="0">
+                  <div id="writing-stats-panel" class="d-none">
+                    <div class="row g-3 mb-3" id="writing-stats-summary">
+                      <!-- Populated by JS -->
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table table-sm table-bordered align-middle mb-0" aria-label="Per-chapter writing statistics">
+                        <thead class="table-dark">
+                          <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">Title</th>
+                            <th scope="col" class="text-end">Words</th>
+                            <th scope="col" class="text-end">Time</th>
+                            <th scope="col" class="text-end">LLM Calls</th>
+                            <th scope="col" class="text-end">Tokens</th>
+                          </tr>
+                        </thead>
+                        <tbody id="writing-stats-tbody">
+                          <!-- Populated by JS -->
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-
-                  <!-- Preview accordion -->
-                  <div class="accordion mt-4 text-start" id="chapters-preview-accordion">
-                    <!-- Populated by JS -->
+                </div>
+                <!-- Character Relationships tab -->
+                <div class="tab-pane fade" id="panel-relationship-map" role="tabpanel"
+                  aria-labelledby="tab-relationship-map" tabindex="0">
+                  <div id="relationship-map-panel" class="d-none">
+                    <div class="text-center">
+                      <pre class="mermaid" id="relationship-mermaid"></pre>
+                    </div>
                   </div>
                 </div>
               </div>
+
+              <!-- Chapter previews -->
+              <div class="nf-section-divider mb-4"></div>
+              <h5 class="nf-literary fw-semibold mb-3"><i class="bi bi-book me-2"></i>Chapter Previews</h5>
+              <div class="accordion text-start" id="chapters-preview-accordion">
+                <!-- Populated by JS -->
+              </div>
+
             </div>
           </div>
         </div><!-- /#step-done -->
@@ -494,7 +539,7 @@
             <div class="col-lg-12">
               <div class="card shadow-sm">
                 
-                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <div class="card-header bg-nf-ink d-flex justify-content-between align-items-center">
                   <h4 class="mb-0"><i class="bi bi-chat-dots me-2"></i>LLM Conversation Log</h4>
                   <button class="btn btn-sm btn-outline-light" id="btn-clear-log" title="Clear log display">
                     <i class="bi bi-trash"></i>
@@ -541,6 +586,7 @@
         startOnLoad: false,
         theme: document.documentElement.getAttribute("data-bs-theme") === "dark" ? "dark" : "default",
         flowchart: { curve: "basis", padding: 15 },
+        maxTextSize: 200000,
       });
     </script>
 
