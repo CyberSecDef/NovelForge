@@ -1694,6 +1694,7 @@ $(function () {
     _activeLLMRequests = 0;
     _hasInitializedLogSnapshot = false;
     _logPollSameCount = 0;
+    _scheduleLogPoll();
     setStickyStatus(DEFAULT_STICKY_STATUS, { force: true });
 
     // Clear the server-side log file
