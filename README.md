@@ -15,10 +15,10 @@
 - [Configuration](#configuration)
 - [Running the App](#running-the-app)
 - [Usage Walkthrough](#usage-walkthrough)
-  - [Step 1 – Novel Setup](#step-1--novel-setup)
-  - [Step 2 – Review & Edit Outline](#step-2--review--edit-outline)
-  - [Step 3 – Chapter Generation](#step-3--chapter-generation)
-  - [Step 4 – Export & Revision](#step-4--export--revision)
+  - [Step 1 – Imagine (Novel Setup)](#step-1--imagine-novel-setup)
+  - [Step 2 – Plan (Review & Edit)](#step-2--plan-review--edit)
+  - [Step 3 – Write (Chapter Generation)](#step-3--write-chapter-generation)
+  - [Step 4 – Publish (Export & Revision)](#step-4--publish-export--revision)
 - [API Routes](#api-routes)
 - [LLM Integration & Agents](#llm-integration--agents)
   - [Prompt Architecture](#prompt-architecture)
@@ -87,33 +87,34 @@ thread orchestrates all steps, with a 60-minute per-chapter timeout.
                     +--------v----------+
                     | Chapter Rhythm    |
                     | Classifier        |  Recommend contrasting narrative rhythm
-                    +--------+----------+
+                    +--------+----------+  (with cross-chapter rhythm history)
                              |
                     +--------v----------+
                     | 1. Draft Agent    |  Initial prose with full planning context
                     +--------+----------+
                              |
               +--------------v--------------+
-              |  18-Step Refinement Pipeline |
+              |  19-Step Refinement Pipeline |
               |                             |
-              |  2.  Prose Refinement       |  Dialogue + scene momentum
-              |  3.  Voice & Dialogue Diff. |  Character-specific speech & prose breathing
-              |  4.  Scene Variety Audit    |  Detect intra-chapter repetition
-              |  5.  Context Analyzer       |  World-building & timeline
-              |  6.  Editing Agent          |  Plot holes, pacing, consistency
-              |  7.  Momentum & Distinct.   |  Cross-chapter redundancy
-              |  8.  Human Oddities         |  1-2 non-plot-serving human moments
-              |  9.  Structure Agent        |  Fits story architecture role
-              |  10. Operational Distinct.  |  Unique ops per chapter
-              |  11. Character Agent        |  Deepen arcs & consistency
-              |  12. Synthesizer            |  Unify voice and theme
-              |  13. Polish Agent           |  Grammar, style, vivid language
-              |  14. Anti-LLM Agent         |  Strip robotic patterns
-              |  15. Metaphor Reduction     |  Remove excessive figurative language
+              |  2.  Rhythm Compliance      |  Verify draft follows assigned rhythm
+              |  3.  Prose Refinement       |  Dialogue + scene momentum
+              |  4.  Voice & Dialogue Diff. |  Character-specific speech & prose breathing
+              |  5.  Scene Variety Audit    |  Detect intra- and cross-chapter repetition
+              |  6.  Context Analyzer       |  World-building & timeline
+              |  7.  Editing Agent          |  Plot holes, pacing, consistency
+              |  8.  Momentum & Distinct.   |  Cross-chapter redundancy (rhythm-aware)
+              |  9.  Human Oddities         |  1-2 non-plot-serving human moments
+              |  10. Structure Agent        |  Fits story architecture role (rhythm-aware)
+              |  11. Operational Distinct.  |  Unique ops per chapter (rhythm-aware)
+              |  12. Character Agent        |  Deepen arcs & consistency
+              |  13. Synthesizer            |  Unify voice and theme
+              |  14. Polish Agent           |  Grammar, style, vivid language
+              |  15. Anti-LLM Agent         |  Strip robotic patterns
+              |  16. Metaphor Reduction     |  Remove excessive figurative language
               |      Vocabulary Scanner     |  Pure Python word-boundary scan
-              |  16. Quality Controller     |  Engagement, tension, pacing check
-              |  17. Copy Edit              |  Prose repetitions, dash cleanup
-              |  18. Summarizer             |  100-200 word continuity summary
+              |  17. Quality Controller     |  Engagement, tension, pacing check
+              |  18. Copy Edit              |  Prose repetitions, dash cleanup
+              |  19. Summarizer             |  Continuity summary with structural metadata
               |                             |
               +--------------+--------------+
                              |
@@ -121,7 +122,7 @@ thread orchestrates all steps, with a 60-minute per-chapter timeout.
               |  Post-Chapter Passes        |
               |                             |
               |  A. Character State Updater |  Record definitive states
-              |  B. Compression Check       |  Redundancy guidance for next ch.
+              |  B. Compression Check       |  Structured ban directives for next ch.
               +--------------+--------------+
                              |
                              v
@@ -181,74 +182,107 @@ Post-Manuscript Audits (after all chapters):
 ## Features
 
 - **Full Novel Generation** – Produces complete fiction novels (default 80,000–90,000 words) chapter by chapter using a configurable LLM API.
-- **Multi-Step Guided Workflow** – Four-step single-page application: input → outline review → chapter writing → export.
-- **Editable Outline** – AI-generated title, chapter-by-chapter outline, and character list are all fully editable before writing begins.
+- **Multi-Step Guided Workflow** – Four-step single-page application with a visual step-progress indicator: Imagine → Plan → Write → Publish.
+- **Brand-Designed UI** – Custom literary theme with dual-font typography (Lora serif for literary content, system sans-serif for UI), ink-blue and warm-gold colour palette, warm parchment backgrounds, and smooth dark/light mode transitions.
+- **Editable Outline** – AI-generated title, chapter-by-chapter outline, and character list are all fully editable before writing begins. Chapters displayed as draggable cards with a table-view fallback. Characters displayed as colour-coded cards with expandable Background and Arc sections.
 - **21 Genre Options** – Adventure, Contemporary Fiction, Crime, Dystopian, Fantasy, Gothic Fiction, Historical Fiction, Horror, Literary Fiction, Magical Realism, Mystery, Noir, Paranormal, Romance, Satire Humor, Science Fiction, Speculative Fiction, Thriller, Urban Fantasy, Western, Young Adult.
 - **Narrative Perspective** – Choose third-person omniscient or first-person narration from any character's perspective.
 - **Structured Story Architecture** – Outline generation follows a nine-phase narrative model (Hook → Setup → Inciting Incident → Rising Action → Midpoint Shift → Complications → Crisis → Climax → Resolution) with correct structural proportions.
 - **Voice Seed System** – Each novel is assigned a unique prose voice (lyrical, sparse, gothic, kinetic, etc.) to prevent the uniform style LLMs default to.
 - **Eight Planning Agents** – Before chapter generation, specialised agents create comprehensive constraints: Story Architecture, Master Timeline, Character Fate Registry, Character Arcs, Antagonist Motivations, Technology Rules, Theme Reinforcement, and POV & Focal Character.
-- **20+ Per-Chapter Agents** – Each chapter passes through continuity gatekeeper, rhythm classification, drafting, prose refinement, voice & dialogue differentiation, scene variety audit, context analysis, editing, momentum & distinctiveness, human oddities injection, structure validation, operational distinctiveness, character deepening, synthesis, polishing, anti-LLM pass, metaphor reduction, vocabulary scanning, quality control, copy editing, and summarisation.
+- **20+ Per-Chapter Agents** – Each chapter passes through continuity gatekeeper, rhythm classification, drafting, rhythm compliance verification, prose refinement, voice & dialogue differentiation, scene variety audit (intra- and cross-chapter), context analysis, editing, momentum & distinctiveness (rhythm-aware), human oddities injection, structure validation (rhythm-aware), operational distinctiveness (rhythm-aware), character deepening, synthesis, polishing, anti-LLM pass, metaphor reduction, vocabulary scanning, quality control, copy editing, and summarisation with structural metadata.
+- **Anti-Repetition Pipeline** – Six-layer system prevents structural repetition: rhythm history tracking across chapters, rhythm compliance verification, enriched chapter summaries with structural metadata, cross-chapter scene variety auditing, structured compression ban directives, and rhythm-aware downstream agents.
 - **Voice & Dialogue Differentiation** – Dedicated pass rewrites dialogue so each character speaks in a voice shaped by their age, background, and emotional state. Breaks the "clean, functional" dialogue pattern with natural interruptions, deflections, and incomplete thoughts.
 - **Human Oddities Injection** – Injects 1–2 small, non-plot-serving human moments per chapter (bad jokes, stray thoughts, irrelevant observations) to break relentless moral seriousness.
 - **Metaphor Reduction** – Identifies and removes excessive, decorative, mixed, or stacked metaphors, keeping only those that earn their place.
 - **Copy Edit Pass** – Final prose cleanup targeting word/phrase/sentence repetitions and reducing excessive em-dashes.
 - **Vocabulary Scanner** – Pure Python word-boundary regex scanner that enforces hard-banned LLM fingerprint words, soft-limited overused words, and banned multi-word patterns.
-- **Per-Chapter Compression Check** – After each chapter, a compression analyser identifies redundancy patterns and provides guidance to the next chapter to avoid repetition.
+- **Per-Chapter Compression Check** – After each chapter, a compression analyser identifies redundancy patterns and outputs structured ban directives (banned operations, emotional beats, openings, resolutions, plus required contrast) for the next chapter.
 - **Anti-LLM Agent** – Dedicated LLM pass that removes robotic language patterns, overused phrases, and LLM hallmarks to produce human-sounding prose.
-- **Continuity Tracking** – Each completed chapter generates a 100–200 word summary that is fed to subsequent chapters to maintain consistency. Character state is tracked and updated after each chapter.
+- **Continuity Tracking** – Each completed chapter generates a continuity summary with structural metadata (rhythm, opening type, resolution approach, emotional arc, dominant scene type) that is fed to subsequent chapters.
 - **Ten Post-Generation Audit Agents** – Comprehensive analysis including consistency pass, global continuity audit, narrative compression analysis, character resolution validation, thematic payoff analysis, climax integrity check, loose thread resolution, reader immersion testing, pacing & tension heatmap, and character relationship mapping.
 - **Chapter Revision** – Users can revise any chapter with custom instructions; the revised chapter runs through the full agent pipeline (with per-chapter timeout).
 - **Comprehensive Editor's Notes** – Export all diagnostic reports from the 10 post-generation audits to identify chapters needing revision.
 - **Session Persistence** – Crash recovery automatically saves progress; interrupted generations can be resumed.
-- **Live Progress Bar** – Browser polls the backend with adaptive backoff; a Bootstrap progress bar updates in real time as chapters are written.
+- **Live Progress Timeline** – Vertical timeline with completed/in-progress/upcoming chapter nodes, live word counter, elapsed time, ETA, and current agent step display.
+- **Skeleton Loading Screens** – Animated placeholder cards while waiting for outline generation, setting expectations for incoming content.
 - **Markdown Export** – Four export variants: clean manuscript, annotated, publishing-ready, and critique copy.
-- **Illustration Generation** – Optional cover and scene illustrations via image generation API.
+- **Illustration Gallery** – Optional cover and scene illustrations via image generation API, displayed in a flexbox gallery with lightbox modal preview.
+- **Writing Statistics Dashboard** – Per-chapter word counts with sparkline bars, generation times, LLM call counts, token usage, and summary cards (total words, average words/chapter, average time/chapter, total generation time, LLM calls, total tokens).
 - **Multi-Provider LLM Fallback** – Configure primary + numbered fallback providers; requests automatically cascade through providers on failure.
 - **AJAX-only UI** – All form submissions and data fetches use jQuery AJAX; the page never reloads.
+- **First-Run Tooltip Tour** – On first visit, subtle popovers guide new users to the premise and genre fields.
+- **Responsive Design** – Mobile-friendly with touch-optimised cards, sticky generate button, collapsible step indicator, and generous touch targets.
+- **Dark Mode** – Warm "reading by lamplight" dark palette with smooth 0.3s transitions on all major containers.
+- **Accessibility** – Gold focus-visible rings on all interactive elements, aria-labels on step indicators and editable cells, aria-live regions for progress updates.
 - **Input Validation** – Both client-side (jQuery) and server-side (Python) validation with Bootstrap feedback messages.
 - **Security Headers** – CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and Permissions-Policy on all responses. SRI hashes on all CDN resources.
 
 ---
 
-reenshots
+## Screenshots
 
-### Step 1 – Novel Setup
+### Step 1 – Imagine (Novel Setup)
 
-Enter your story premise, choose a genre, set the number of chapters and target word count, and optionally add special events or instructions before generating the outline.
+Enter your story premise, choose a genre, set the number of chapters and target word count. Advanced options (special events, special instructions) are tucked in a collapsible section.
 
-![Step 1 – Novel Setup](docs/tab1.jpg)
+![Step 1 – Novel Setup (top)](docs/imagine-1.jpg)
+![Step 1 – Novel Setup (advanced options)](docs/imagine-2.jpg)
 
-### Step 2 – Review & Edit Chapter Outline
+### Step 2 – Plan (Chapter Outline)
 
-Review and edit the AI-generated chapter-by-chapter outline. Each chapter title and summary is fully editable in-place before writing begins.
+Review and edit the AI-generated chapter outline. Chapters are displayed as draggable cards with a kebab menu for reordering and insertion. Toggle to a table view for density. The novel title is editable inline.
 
-![Step 2 – Chapter Outline](docs/tab2a.jpg)
+![Step 2 – Chapter Outline (card view)](docs/plan-1.jpg)
+![Step 2 – Chapter Outline (table view)](docs/plan-2.jpg)
 
-### Step 2 – Review & Edit Characters
+### Step 2 – Plan (Characters)
 
-Review and refine the AI-generated character list. Add, remove, or edit character names, ages, roles, backstories, and arcs, and choose the narrative perspective.
+Review and refine the AI-generated character list displayed as colour-coded cards. Each card shows name, role badge, age, and expandable Background and Arc sections. Choose the narrative perspective from a dropdown. Add new characters via the dashed "+" card.
 
-![Step 2 – Character Development](docs/tab2b.jpg)
+![Step 2 – Character Development](docs/plan-3.jpg)
 
-### Step 3 – Chapter Writing Progress
+### Step 4 – Publish (Writing Statistics)
 
-Once you approve the outline, NovelForge writes every chapter in the background. A live progress bar and chapter-by-chapter status list update in real time as each chapter is completed.
+The completion banner shows the novel title, chapter count, and word count with Download Manuscript and Editor's Notes buttons. The Writing Statistics tab displays per-chapter metrics with sparkline word-count bars, longest/slowest badges, and summary cards.
 
-![Step 3 – Chapter Writing](docs/tab3.jpg)
+![Step 4 – Writing Statistics](docs/publish-1.jpg)
 
-### Step 4 – Export & Revision
+### Step 4 – Publish (Character Relationships)
 
-When generation is complete, download your manuscript in multiple formats, revise individual chapters with custom instructions, generate cover and scene illustrations, and view the full editor's notes report.
+The Character Relationships tab renders a Mermaid diagram mapping all character connections and relationship types.
 
-![Step 4 – Export](docs/tab4a.jpg)
-![Step 4 – Export](docs/tab4b.jpg)
+![Step 4 – Character Relationships](docs/publish-2.jpg)
 
-### Log
+### Step 4 – Publish (Editor's Notes)
 
-Review all the requests and responses to the LLM for the life of this session.
+The Editor's Notes tab shows the post-generation audit findings with an overall assessment and specific issues list.
 
-![Step 4 – Export](docs/tab5.jpg)
+![Step 4 – Editor's Notes](docs/publish-3.jpg)
+
+### Step 4 – Publish (Illustrations)
+
+Generate cover and scene illustrations via the image API. Images are displayed in a flexbox gallery with cover badge and lightbox preview on click.
+
+![Step 4 – Illustrations](docs/publish-4.jpg)
+
+### Step 4 – Publish (Chapter Previews)
+
+Expand any chapter to preview its full content inline. Each chapter shows a decorative chapter number in small-caps, a serif title, and the full text with drop-cap styling and comfortable reading line-height.
+
+![Step 4 – Chapter Previews](docs/publish-5.jpg)
+
+### Step 4 – Publish (Revise Chapter)
+
+Select a chapter and provide custom revision instructions. The chapter runs through the full agent pipeline with timeout protection.
+
+![Step 4 – Revise Chapter](docs/publish-6.jpg)
+
+### LLM Conversation Log
+
+The Log tab shows all LLM exchanges with human-readable labels (e.g., "Drafting Chapter Content", "Polishing Chapter Prose"), a searchable filter bar, and an exchange count badge.
+
+![LLM Conversation Log](docs/log-1.jpg)
 
 ---
 
@@ -262,6 +296,7 @@ Review all the requests and responses to the LLM for the life of this session.
 | Frontend framework | Bootstrap 5.3 |
 | Frontend icons | Bootstrap Icons 1.13 |
 | Client scripting | jQuery 3.7 |
+| Fonts | Google Fonts (Lora — 400, 600, italic 400) with `display=swap` and preconnect |
 | Diagrams | Mermaid.js 11.14 (character relationship maps) |
 | LLM API | Any OpenAI-compatible chat completions endpoint |
 | Image API | Any OpenAI-compatible image generation endpoint (optional) |
@@ -282,6 +317,7 @@ NovelForge/
 ├── .env.example            # Template for environment variable configuration
 ├── CLAUDE.md               # Guidance for Claude Code AI assistant
 ├── TODO.md                 # Tracked issues and improvements
+├── docs/                   # Screenshots and documentation images
 ├── novelforge/             # Main application package
 │   ├── __init__.py         # App factory: create_app(), limiter, security headers, index route
 │   ├── config.py           # Configuration from environment variables
@@ -332,10 +368,10 @@ NovelForge/
 │       ├── export.py       # /export, /export_editors_notes, /generate_illustrations, /download
 │       └── sessions.py     # /list_sessions, /load_session, /delete_session, /new_session
 ├── templates/
-│   └── index.html          # Single-page application HTML (Bootstrap 5, genres from server)
+│   └── index.html          # Single-page application HTML (Bootstrap 5, step indicator, sub-tabs)
 ├── static/
-│   ├── css/style.css       # Custom styles (light + dark mode)
-│   └── js/script.js        # jQuery client (AJAX, progress polling, session management)
+│   ├── css/style.css       # Custom styles (brand palette, typography, animations, dark mode, responsive)
+│   └── js/script.js        # jQuery client (AJAX, progress timeline, drag-drop, skeletons, tour)
 ├── tests/                  # 832 tests across 29 files (pytest)
 │   ├── conftest.py         # Shared fixtures: app, client, mock_llm
 │   └── test_*.py           # Test modules (see Testing section)
@@ -465,21 +501,20 @@ The application starts on `http://127.0.0.1:5000` by default. Open this URL in y
 
 ## Usage Walkthrough
 
-### Step 1 – Novel Setup
+### Step 1 – Imagine (Novel Setup)
 
-Fill in the input form on the home page:
+Fill in the input form on the home page. A welcome hero section greets first-time users with "What story will you tell?" and disappears once you begin.
 
 | Field | Details |
 |---|---|
 | **Story Premise** | Required. Describe your story idea. Maximum **2,000 characters** (enforced client- and server-side with a live counter). |
 | **Genre** | Required. Select from 21 genres (rendered from the authoritative server-side genre list). |
-| **Number of Chapters** | Required. Minimum **3**, maximum 100. Recommended 15–25 (tooltip shown). |
+| **Number of Chapters** | Required. Minimum **3**, maximum 100. Recommended 15–25 (tooltip shown). Grouped in a "Novel Parameters" fieldset with Target Word Count. |
 | **Target Word Count** | Required. Minimum 1,000, maximum 500,000. Recommended 80,000–90,000 (tooltip shown). |
-| **Narrative Perspective** | Optional. Third person (default) or first person from a specific character's POV. |
-| **Special Events** | Optional. Comma-separated or bulleted events to incorporate. |
-| **Special Instructions** | Optional. Global writing guidance. |
+| **Special Events** | Optional. Comma-separated or bulleted events to incorporate. Hidden in a collapsible "Advanced Options" section. |
+| **Special Instructions** | Optional. Global writing guidance. Hidden in "Advanced Options". |
 
-Click **Generate Outline**. The application:
+Click **Generate Outline**. The button transitions to "Conjuring your story..." with an animated icon. Skeleton loading placeholders appear in the Plan tab immediately while the LLM works. On success, a green flash confirms the outline is ready. The application:
 
 1. Generates a catchy title.
 2. Generates a chapter-by-chapter outline following the nine-phase narrative architecture.
@@ -487,49 +522,61 @@ Click **Generate Outline**. The application:
 4. Selects a unique voice seed for prose style.
 5. Runs all eight planning agents in parallel groups to create comprehensive story constraints.
 
-### Step 2 – Review & Edit Outline
+### Step 2 – Plan (Review & Edit)
 
-The generated outline is displayed in an editable table. You can:
+The Plan step uses internal sub-tabs for **Chapter Outline** and **Characters**.
 
-- Edit the **novel title** in an input field.
-- Edit any **chapter title** or **chapter summary** inline (cells are `contenteditable`).
-- Edit any **character field** (name, age, role, background, arc) inline.
-- Add or delete chapters and characters.
-- Select **narrative perspective** (third person or first person from any character).
+**Chapter Outline tab:**
+- Edit the **novel title** in a large serif input field.
+- Chapters are displayed as **draggable cards** with a numbered badge, editable serif title, and editable summary. A kebab menu (three dots) on each card provides Move Up/Down, Add Before/After, and Delete actions. Drag and drop to reorder.
+- Toggle to a **table view** using the card/table view buttons for a denser layout.
+
+**Characters tab:**
+- Characters are displayed as **colour-coded cards** in a responsive 2-column grid. Each card has a coloured left border (auto-assigned from an 8-colour palette), an editable name heading, a role badge, age detail, and expandable Background and Arc sections.
+- Add new characters via the dashed-border "+" card.
+- Select **narrative perspective** (third person or first person from any character) via a dropdown.
 
 Click **Approve & Write Chapters** when satisfied. Edits are collected by jQuery and POSTed to `/approve_outline`, which saves the final outline to the session and selectively regenerates only the planning agents whose inputs changed (via input hashing). Character renames are automatically propagated to chapter summaries, premise, and planning agent inputs. Chapter writing then begins automatically.
 
-### Step 3 – Chapter Generation
+### Step 3 – Write (Chapter Generation)
 
-A Bootstrap progress bar tracks writing progress with an estimated time remaining display. The progress label updates in real time to show the current agent step. The browser polls `/progress/<token>` with adaptive backoff (15s → 30s → 60s cap) that resets when progress changes.
+The Write step provides a live writing atmosphere with a subtle ruled-line background pattern:
+
+- A **"Currently writing"** callout with gold accent shows the active chapter title.
+- A **progress bar** with warm gold gradient and shimmer animation tracks completion percentage. On reaching 100%, a brief glow animation plays.
+- A **stats bar** shows live word count, elapsed time, and estimated time remaining.
+- A **vertical timeline** shows completed chapters (green checkmark, expandable preview), the in-progress chapter (pulsing gold dot with current agent step), and upcoming chapters (outlined dots).
+
+The browser polls `/progress/<token>` with adaptive backoff (15s → 30s → 60s cap) that resets when progress changes.
 
 **For each chapter**, the backend runs a **multi-step pipeline** (20+ LLM calls):
 
 0. **Continuity Gatekeeper** – Validates hard constraints before drafting.
-0b. **Chapter Rhythm Classifier** – Recommends contrasting narrative rhythm.
-1. **Draft** – Initial prose written with full context, planning guidance, and voice seed.
-2. **Prose Refinement** – Refines dialogue and scene momentum.
-3. **Voice & Dialogue Differentiation** – Rewrites dialogue for character-specific voices, natural speech patterns, and prose breathing.
-4. **Scene Variety Audit** – Detects intra-chapter repetition (directives only).
-5. **Context Analyser** – Checks world-building facts, timeline, and technology rules.
-6. **Editing Agent** – Fixes plot holes, pacing problems, and character inconsistencies.
-7. **Momentum & Distinctiveness** – Eliminates cross-chapter redundancy and ensures escalation.
-8. **Human Oddities** – Injects 1–2 small, non-plot-serving human moments.
-9. **Structure Agent** – Verifies the chapter fulfils its designated role in the story architecture.
-10. **Operational Distinctiveness** – Ensures each chapter has unique operations and methods.
-11. **Character Agent** – Deepens character arcs and corrects out-of-character moments.
-12. **Synthesiser** – Unifies narrative voice and thematic thread after all specialist passes.
-13. **Polish Agent** – Elevates grammar, style, and vivid language.
-14. **Anti-LLM Agent** – Strips robotic patterns and forbidden words.
-15. **Metaphor Reduction** – Removes excessive, decorative, mixed, and stacked metaphors.
-16. **Vocabulary Scanner** – Pure Python word-boundary regex scan (no LLM call).
-17. **Quality Controller** – Checks reader engagement, tension, pacing, and hook strength.
-18. **Copy Edit** – Final pass for prose repetitions, sentence structure variation, and dash cleanup.
-19. **Summariser** – Produces a 100–200 word continuity summary for subsequent chapters.
+0b. **Chapter Rhythm Classifier** – Recommends contrasting narrative rhythm using cross-chapter rhythm history.
+1. **Draft** – Initial prose written with full context, planning guidance, voice seed, and structured compression ban directives.
+2. **Rhythm Compliance Verifier** – Checks whether the draft actually follows the assigned rhythm; restructures if it defaulted to a generic pattern.
+3. **Prose Refinement** – Refines dialogue and scene momentum.
+4. **Voice & Dialogue Differentiation** – Rewrites dialogue for character-specific voices, natural speech patterns, and prose breathing.
+5. **Scene Variety Audit** – Detects intra-chapter and cross-chapter repetition (directives only).
+6. **Context Analyser** – Checks world-building facts, timeline, and technology rules.
+7. **Editing Agent** – Fixes plot holes, pacing problems, and character inconsistencies.
+8. **Momentum & Distinctiveness** – Eliminates cross-chapter redundancy and ensures escalation (rhythm-aware).
+9. **Human Oddities** – Injects 1–2 small, non-plot-serving human moments.
+10. **Structure Agent** – Verifies the chapter fulfils its designated role in the story architecture (rhythm-aware).
+11. **Operational Distinctiveness** – Ensures each chapter has unique operations and methods (rhythm-aware).
+12. **Character Agent** – Deepens character arcs and corrects out-of-character moments.
+13. **Synthesiser** – Unifies narrative voice and thematic thread after all specialist passes.
+14. **Polish Agent** – Elevates grammar, style, and vivid language.
+15. **Anti-LLM Agent** – Strips robotic patterns and forbidden words.
+16. **Metaphor Reduction** – Removes excessive, decorative, mixed, and stacked metaphors.
+17. **Vocabulary Scanner** – Pure Python word-boundary regex scan (no LLM call).
+18. **Quality Controller** – Checks reader engagement, tension, pacing, and hook strength.
+19. **Copy Edit** – Final pass for prose repetitions, sentence structure variation, and dash cleanup.
+20. **Summariser** – Produces a continuity summary with structural metadata (rhythm, opening type, resolution approach, emotional arc, dominant scene type).
 
 **After each chapter**:
 - **Character State Updater** – Records definitive character states for the next chapter.
-- **Per-Chapter Compression Check** – Analyses redundancy and provides guidance for the next chapter.
+- **Per-Chapter Compression Check** – Outputs structured ban directives (banned operations, emotional beats, openings, resolutions, plus required contrast) for the next chapter.
 
 **After all chapters are written**, ten post-generation audit agents run:
 
@@ -544,28 +591,26 @@ A Bootstrap progress bar tracks writing progress with an estimated time remainin
 9. **Pacing & Tension Heatmap** – Per-chapter metrics for tension, action, emotion, dialogue, description.
 10. **Character Relationship Map** – Maps character relationships as a Mermaid diagram.
 
-### Step 4 – Export & Revision
+### Step 4 – Publish (Export & Revision)
 
-When generation is complete:
+When generation is complete, the Publish step shows a celebratory completion banner with sparkle animation, displaying the novel title in large serif text and a stats line ("25 chapters written · ~85,000 words"). Download Manuscript and Editor's Notes buttons are prominently placed in the banner.
 
-- The novel title, chapter count, and approximate word count are shown.
-- A collapsible **Writing Statistics** panel shows per-chapter word counts, generation times, LLM call counts, and token usage.
-- Any editor's notes from the audit agents are displayed.
-- An expandable **accordion** lets you preview each chapter's content inline.
-- **Revise chapters** – Select a chapter and provide custom revision instructions. The chapter will be re-generated through the full agent pipeline (with timeout protection).
-- **Export Manuscript** – Four export variants:
-  - **Clean Manuscript** – Title + chapter text only
-  - **With Inline Notes** – Includes per-chapter editor annotations from audit data
-  - **Publishing-Ready** – Front matter, TOC, page breaks, about-the-author section
-  - **Critique Copy** – Includes pacing metrics and tension annotations per chapter
-- **Download Editor's Notes** – Exports all diagnostic reports from the 10 post-generation audits.
-- **Generate Illustrations** – Creates a cover image and a chapter scene illustration via the image generation API (requires `IMAGE_API_KEY`).
+Below the banner, six sub-tabs organise all post-generation content:
+
+| Tab | Content |
+|---|---|
+| **Writing Statistics** | Summary cards (total words, avg words/ch, avg time/ch, total gen time, LLM calls, tokens) and a per-chapter table with sparkline word-count bars and longest/slowest badges. |
+| **Character Relationships** | Mermaid diagram mapping all character connections and relationship types. |
+| **Editor's Notes** | Post-generation audit findings with overall assessment and issues list. |
+| **Illustrations** | Generate Cover & Scenes button, flexbox gallery with cover badge and lightbox modal. |
+| **Chapter Previews** | Accordion of all chapters with decorative chapter numbers, serif titles, drop-cap styling, and comfortable reading line-height. |
+| **Revise Chapter** | Select a chapter and provide custom revision instructions. The chapter runs through the full agent pipeline with timeout protection. |
 
 **Session management** (navbar):
 - **Sessions dropdown** – Load any previous session by title
 - **New Session** – Archives current progress and starts fresh
 - **Delete Session** – Permanently removes the current session (cleans up persistence locks)
-- **Dark/Light mode toggle** – Persists via localStorage
+- **Dark/Light mode toggle** – Persists via localStorage with smooth transitions
 
 ---
 
@@ -596,12 +641,12 @@ When generation is complete:
 
 ```json
 {
-  "premise": "A young mage discovers a forbidden library…",
+  "premise": "A young mage discovers a forbidden library...",
   "genre": "Fantasy",
   "chapters": 20,
   "word_count": 85000,
   "special_events": "A dragon attack in chapter 5",
-  "special_instructions": "Avoid clichés, emphasize diversity"
+  "special_instructions": "Avoid cliches, emphasize diversity"
 }
 ```
 
@@ -626,10 +671,10 @@ When generation is complete:
   "total": 20,
   "step": "Complete",
   "chapters_done": [
-    { "number": 1, "title": "The Awakening", "content": "…", "summary": "…",
+    { "number": 1, "title": "The Awakening", "content": "...", "summary": "...",
       "word_count": 4200, "generation_time_seconds": 185.3 }
   ],
-  "consistency": { "issues": [], "overall_assessment": "…" },
+  "consistency": { "issues": [], "overall_assessment": "..." },
   "global_continuity_audit": { "contradictions": [], "overall_integrity": "strong" },
   "narrative_compression_report": {},
   "character_resolution_report": {},
@@ -660,7 +705,7 @@ Status values: `"running"` | `"done"` | `"error"`.
 
 All LLM calls are made by `call_llm()` in `novelforge/llm/client.py` using the `requests` library. The function:
 
-- Tries each provider in the configured fallback chain (primary → `_2` → `_3` → … → `_20`).
+- Tries each provider in the configured fallback chain (primary → `_2` → `_3` → ... → `_20`).
 - For each provider, retries up to `LLM_MAX_RETRIES` times with exponential back-off and jitter on HTTP 429 and 5xx errors.
 - Uses a configurable timeout (`LLM_TIMEOUT`, default 240s) per request.
 - Tracks token usage per-call (prompt tokens, completion tokens) for the writing statistics dashboard.
@@ -675,8 +720,8 @@ All LLM calls are made by `call_llm()` in `novelforge/llm/client.py` using the `
 All prompts are defined in `prompts.yml` as YAML entries with Jinja2 template variables. Each prompt has a two-message structure:
 
 ```
-system  → defines the agent's role and constraints
-user    → provides the task with all relevant context
+system  -> defines the agent's role and constraints
+user    -> provides the task with all relevant context
 ```
 
 JSON mode (`response_format: json_object`) is used wherever structured data is expected (outline, characters, planning agents, audit reports). A fallback structure is applied if JSON decoding fails.
@@ -705,28 +750,29 @@ Each chapter passes through a comprehensive pipeline of specialised agents:
 | Phase | Agent | Purpose |
 |---|---|---|
 | Pre-draft | **Continuity Gatekeeper** | Validates hard constraints before writing |
-| Pre-draft | **Chapter Rhythm Classifier** | Recommends contrasting narrative rhythm |
-| Step 1 | **Draft Agent** | Writes initial chapter with full context and planning guidance |
-| Step 2 | **Prose Refinement** | Refines dialogue and scene momentum |
-| Step 3 | **Voice & Dialogue Differentiation** | Character-specific speech, natural interruptions, prose breathing |
-| Step 4 | **Scene Variety Audit** | Detects intra-chapter repetition (directives only) |
-| Step 5 | **Context Analyser** | Fixes world-building and timeline inconsistencies |
-| Step 6 | **Editing Agent** | Repairs plot holes, pacing, and character issues |
-| Step 7 | **Momentum & Distinctiveness** | Eliminates cross-chapter redundancy, ensures escalation |
-| Step 8 | **Human Oddities** | Injects 1–2 non-plot-serving human moments |
-| Step 9 | **Structure Agent** | Confirms chapter fulfils its architectural role |
-| Step 10 | **Operational Distinctiveness** | Ensures unique operations per chapter |
-| Step 11 | **Character Agent** | Deepens character arcs |
-| Step 12 | **Synthesiser** | Unifies narrative voice and theme |
-| Step 13 | **Polish Agent** | Elevates grammar, style, and language |
-| Step 14 | **Anti-LLM Agent** | Strips robotic patterns and forbidden words |
-| Step 15 | **Metaphor Reduction** | Removes excessive figurative language |
+| Pre-draft | **Chapter Rhythm Classifier** | Recommends contrasting narrative rhythm with cross-chapter history |
+| Step 1 | **Draft Agent** | Writes initial chapter with full context, planning guidance, and structured ban directives |
+| Step 2 | **Rhythm Compliance Verifier** | Verifies draft follows assigned rhythm; restructures if defaulted to generic pattern |
+| Step 3 | **Prose Refinement** | Refines dialogue and scene momentum |
+| Step 4 | **Voice & Dialogue Differentiation** | Character-specific speech, natural interruptions, prose breathing |
+| Step 5 | **Scene Variety Audit** | Detects intra-chapter and cross-chapter repetition (directives only) |
+| Step 6 | **Context Analyser** | Fixes world-building and timeline inconsistencies |
+| Step 7 | **Editing Agent** | Repairs plot holes, pacing, and character issues |
+| Step 8 | **Momentum & Distinctiveness** | Eliminates cross-chapter redundancy, ensures escalation (rhythm-aware) |
+| Step 9 | **Human Oddities** | Injects 1–2 non-plot-serving human moments |
+| Step 10 | **Structure Agent** | Confirms chapter fulfils its architectural role (rhythm-aware) |
+| Step 11 | **Operational Distinctiveness** | Ensures unique operations per chapter (rhythm-aware) |
+| Step 12 | **Character Agent** | Deepens character arcs |
+| Step 13 | **Synthesiser** | Unifies narrative voice and theme |
+| Step 14 | **Polish Agent** | Elevates grammar, style, and language |
+| Step 15 | **Anti-LLM Agent** | Strips robotic patterns and forbidden words |
+| Step 16 | **Metaphor Reduction** | Removes excessive figurative language |
 | — | **Vocabulary Scanner** | Pure Python word-boundary regex scan (no LLM call) |
-| Step 16 | **Quality Controller** | Checks engagement, tension, and pacing |
-| Step 17 | **Copy Edit** | Prose repetitions, sentence variation, dash cleanup |
-| Step 18 | **Summariser** | Produces continuity summary |
+| Step 17 | **Quality Controller** | Checks engagement, tension, and pacing |
+| Step 18 | **Copy Edit** | Prose repetitions, sentence variation, dash cleanup |
+| Step 19 | **Summariser** | Produces continuity summary with structural metadata |
 | Post-ch. | **Character State Updater** | Records definitive character states |
-| Post-ch. | **Compression Check** | Analyses redundancy, provides guidance for next chapter |
+| Post-ch. | **Compression Check** | Outputs structured ban directives for next chapter |
 
 ### Post-Generation Audit Agents
 
@@ -813,7 +859,7 @@ If the browser is closed or the server restarts during generation:
 
 1. On page load, the **Sessions** dropdown in the navbar lists all saved sessions by title.
 2. Clicking a session name loads it and restores all data (Step 1 form, Step 2 outline/characters, Step 4 completed chapters and exports).
-3. If chapters were completed before the interruption, they appear on the Step 4 tab with full export capability.
+3. If chapters were completed before the interruption, they appear on the Publish tab with full export capability.
 4. The **New Session** button archives the current LLM log and starts fresh.
 5. The **Delete Session** button permanently removes the current session file and cleans up per-session persistence locks.
 
@@ -870,7 +916,7 @@ If the browser is closed or the server restarts during generation:
 
 ## Testing
 
-The test suite uses **pytest** and Flask's built-in test client. No live LLM calls are made — the `mock_llm` fixture patches `call_llm` across all modules with smart canned responses.
+The test suite uses **pytest** and Flask's built-in test client. No live LLM calls are made -- the `mock_llm` fixture patches `call_llm` across all modules with smart canned responses.
 
 ```bash
 pytest tests/
@@ -910,7 +956,7 @@ pytest tests/
 | `test_llm_logger_setup.py` | LLM logger setup |
 | `test_session_cleanup.py` | Session cleanup and lock release |
 
-**100% function documentation coverage** — all 263 functions/methods have docstrings.
+**100% function documentation coverage** -- all 263 functions/methods have docstrings.
 
 ---
 
@@ -934,11 +980,11 @@ pytest tests/
 | Cause | What you see | Fix |
 |---|---|---|
 | **LLM rate limiting (429)** | "LLM API is overloaded" error | Wait a few minutes for the rate limit to clear, then restart. Completed chapters are preserved. |
-| **Circuit breaker tripped** | "LLM API is unavailable — 3 consecutive calls failed" | Check your API key and endpoint in `.env`. The circuit breaker resets on next generation. |
+| **Circuit breaker tripped** | "LLM API is unavailable -- 3 consecutive calls failed" | Check your API key and endpoint in `.env`. The circuit breaker resets on next generation. |
 | **Per-chapter timeout** | "Chapter N exceeded the 60-minute time limit" | Increase: `PER_CHAPTER_TIMEOUT=7200` in `.env` (2 hours). |
 | **All providers exhausted** | "All configured LLM providers failed" | Check API keys and endpoints for all configured providers. |
 | **Server crashed / restarted** | Page shows blank after reload | Load the session from the **Sessions** dropdown. Completed chapters are saved after each chapter finishes. |
-| **Network interruption** | "Connection lost — generation may still be running" | The generation thread continues server-side. Refresh and load from the Sessions dropdown. |
+| **Network interruption** | "Connection lost -- generation may still be running" | The generation thread continues server-side. Refresh and load from the Sessions dropdown. |
 | **Content policy rejection** | "AI service rejected chapter content" | Try revising the chapter outline to use less explicit language. Content is automatically sanitised on retry. |
 | **Unparseable LLM response** | "Response could not be parsed" | Transient issue; restart generation. Completed chapters are preserved. |
 
@@ -962,7 +1008,7 @@ PER_CHAPTER_TIMEOUT=7200             # 2 hours per chapter (default: 3600)
 
 ### Logs and debugging
 
-- **LLM logs:** `logs/llm.log` — JSON-formatted records of every API call with correlation IDs
+- **LLM logs:** `logs/llm.log` -- JSON-formatted records of every API call with correlation IDs
 - **Console output:** All log lines include `[token=<uuid>]` during chapter generation
 - **Error codes:** Generation errors include specific `error_code` values (`llm_error`, `json_parse_error`, `internal_error`, `content_rejection`, `chapter_timeout`, `circuit_breaker`, `all_providers_exhausted`)
 
@@ -972,15 +1018,15 @@ PER_CHAPTER_TIMEOUT=7200             # 2 hours per chapter (default: 3600)
 
 ### Typical Generation Times
 
-Each chapter makes ~22 LLM calls through the agent pipeline, plus 2-3 pre/post-chapter calls.
+Each chapter makes ~23 LLM calls through the agent pipeline (including rhythm compliance verification), plus 2-3 pre/post-chapter calls.
 
 | Chapters | Approx. LLM Calls | Typical Time (GPT-4o) |
 |----------|-------------------|-----------------------|
-| 3 | ~75 | 20-40 min |
-| 10 | ~250 | 1.5-4 hours |
-| 15 | ~375 | 3-6 hours |
-| 24 | ~600 | 5-12 hours |
-| 50 | ~1250 | 12-24 hours |
+| 3 | ~80 | 20-40 min |
+| 10 | ~260 | 1.5-4 hours |
+| 15 | ~390 | 3-6 hours |
+| 24 | ~625 | 5-12 hours |
+| 50 | ~1300 | 12-24 hours |
 
 **Planning phase:** 8 agents in 3 parallel groups (~2-4 minutes). On re-approval with no changes, skipped entirely via input hashing.
 
@@ -990,13 +1036,13 @@ Each chapter makes ~22 LLM calls through the agent pipeline, plus 2-3 pre/post-c
 
 **Use a faster LLM model:** Set `LLM_MODEL` to balance quality vs. speed (`gpt-4o-mini` for fast iteration, `gpt-4o` for production).
 
-**Use local models:** Set `LLM_API_URL=http://localhost:11434/v1/chat/completions` for Ollama — no rate limits.
+**Use local models:** Set `LLM_API_URL=http://localhost:11434/v1/chat/completions` for Ollama -- no rate limits.
 
 **Configure fallback providers:** Set `LLM_API_URL_2`, `LLM_API_KEY_2`, `LLM_MODEL_2` for automatic failover.
 
 **Tune for local models:** Reduce timeouts (`LLM_TIMEOUT=60`, `LLM_RETRY_DELAY=2`, `LLM_MAX_RETRIES=3`).
 
-**Planning agent caching:** Make small, incremental edits in Step 2 — only changed agents re-run.
+**Planning agent caching:** Make small, incremental edits in Step 2 -- only changed agents re-run.
 
 ---
 

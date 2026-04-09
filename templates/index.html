@@ -438,97 +438,74 @@
           <div class="row justify-content-center">
             <div class="col-lg-12">
 
-              <!-- Title page treatment — celebratory banner -->
+              <!-- Title banner with export buttons -->
               <div class="nf-completion-banner text-center mb-4">
                 <div class="nf-completion-sparkle"></div>
                 <h2 id="done-title" class="nf-literary nf-completion-title mb-2"></h2>
-                <p class="nf-completion-stats mb-0" id="done-stats"></p>
-                <div class="nf-hero-rule mt-3"><span class="nf-hero-ornament"></span></div>
-              </div>
-
-              <!-- Consistency notes -->
-              <div id="consistency-alert" class="alert alert-info text-start d-none mb-4">
-                <h6 class="fw-semibold"><i class="bi bi-clipboard-check me-2"></i>Editor's Notes</h6>
-                <p id="consistency-assessment" class="mb-1 nf-literary"></p>
-                <ul id="consistency-issues" class="mb-0 ps-3"></ul>
-              </div>
-
-              <!-- Actions row: exports + illustrations -->
-              <div class="row g-4 mb-4">
-                <div class="col-md-6">
-                  <h6 class="fw-semibold mb-3"><i class="bi bi-download me-2"></i>Export</h6>
-                  <div class="d-flex flex-wrap gap-2 mb-3">
-                    <button class="btn btn-success" id="btn-export-manuscript">
-                      <span class="spinner-border spinner-border-sm d-none me-2" id="export-manuscript-spinner"></span>
-                      <i class="bi bi-file-earmark-text me-1"></i>Download Manuscript
-                    </button>
-                    <button class="btn btn-outline-info" id="btn-export-editors-notes">
-                      <span class="spinner-border spinner-border-sm d-none me-2" id="export-editors-notes-spinner"></span>
-                      <i class="bi bi-clipboard-check me-1"></i>Editor's Notes
-                    </button>
-                  </div>
-                  <button class="btn btn-outline-secondary btn-sm" id="btn-start-over">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i>Start Over
+                <p class="nf-completion-stats mb-3" id="done-stats"></p>
+                <div class="d-flex justify-content-center flex-wrap gap-2 mb-2">
+                  <button class="btn btn-success" id="btn-export-manuscript">
+                    <span class="spinner-border spinner-border-sm d-none me-2" id="export-manuscript-spinner"></span>
+                    <i class="bi bi-file-earmark-text me-1"></i>Download Manuscript
+                  </button>
+                  <button class="btn btn-outline-info" id="btn-export-editors-notes">
+                    <span class="spinner-border spinner-border-sm d-none me-2" id="export-editors-notes-spinner"></span>
+                    <i class="bi bi-clipboard-check me-1"></i>Editor's Notes
                   </button>
                 </div>
-                <div class="col-md-6">
-                  <h6 class="fw-semibold mb-3"><i class="bi bi-palette me-2"></i>Illustrations</h6>
-                  <button class="btn btn-outline-primary" id="btn-generate-illustrations">
-                    <span class="spinner-border spinner-border-sm d-none me-2" id="illustrations-spinner"></span>
-                    <span id="illustrations-spinner-label" class="d-none me-1"></span>
-                    <i class="bi bi-palette me-1"></i>Generate Cover &amp; Scenes
-                  </button>
-                  <small class="text-muted d-block mt-1">5–10 images from key scenes (requires IMAGE_API_KEY)</small>
-                  <!-- Illustration gallery -->
-                  <div class="row g-3 mt-2 d-none" id="illustrations-gallery" aria-label="Generated illustrations">
-                    <!-- Populated by JS -->
-                  </div>
-                </div>
               </div>
 
-              <!-- Revision panel -->
-              <hr class="divider-ornament">
-              <div class="mb-4">
-                <h6 class="fw-semibold mb-3"><i class="bi bi-pencil-square me-2"></i>Revise Individual Chapter</h6>
-                <div class="row g-3">
-                  <div class="col-md-4">
-                    <label for="revise-chapter-select" class="form-label mb-1">Chapter</label>
-                    <select id="revise-chapter-select" class="form-select"></select>
-                  </div>
-                  <div class="col-md-8">
-                    <label for="revise-instructions" class="form-label mb-1">Revision Instructions</label>
-                    <textarea id="revise-instructions" class="form-control" rows="3" maxlength="4000"
-                      placeholder="Example: Increase tension in the final scene and foreshadow chapter 9's betrayal."></textarea>
-                  </div>
-                </div>
-                <button class="btn btn-primary mt-3" id="btn-revise-chapter">
-                  <span class="spinner-border spinner-border-sm d-none me-2" id="revise-chapter-spinner"></span>
-                  <i class="bi bi-arrow-repeat me-2"></i>Apply Instructions to Chapter
-                </button>
-              </div>
-
-              <!-- Insights: Writing Statistics + Character Relationships (tabbed) -->
-              <hr class="divider-ornament">
-              <ul class="nav nav-tabs mb-3" id="insights-tabs" role="tablist">
+              <!-- Sub-tabs for all publish sections -->
+              <ul class="nav nav-tabs mb-3" id="publish-tabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                  <button class="nav-link active" id="tab-writing-stats" data-bs-toggle="tab"
-                    data-bs-target="#panel-writing-stats" type="button" role="tab"
-                    aria-controls="panel-writing-stats" aria-selected="true">
+                  <button class="nav-link active" id="pub-tab-stats" data-bs-toggle="tab"
+                    data-bs-target="#pub-panel-stats" type="button" role="tab"
+                    aria-controls="pub-panel-stats" aria-selected="true">
                     <i class="bi bi-bar-chart me-1"></i>Writing Statistics
                   </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                  <button class="nav-link" id="tab-relationship-map" data-bs-toggle="tab"
-                    data-bs-target="#panel-relationship-map" type="button" role="tab"
-                    aria-controls="panel-relationship-map" aria-selected="false">
+                  <button class="nav-link" id="pub-tab-relationships" data-bs-toggle="tab"
+                    data-bs-target="#pub-panel-relationships" type="button" role="tab"
+                    aria-controls="pub-panel-relationships" aria-selected="false">
                     <i class="bi bi-diagram-3 me-1"></i>Character Relationships
                   </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="pub-tab-editors-notes" data-bs-toggle="tab"
+                    data-bs-target="#pub-panel-editors-notes" type="button" role="tab"
+                    aria-controls="pub-panel-editors-notes" aria-selected="false">
+                    <i class="bi bi-clipboard-check me-1"></i>Editor's Notes
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="pub-tab-illustrations" data-bs-toggle="tab"
+                    data-bs-target="#pub-panel-illustrations" type="button" role="tab"
+                    aria-controls="pub-panel-illustrations" aria-selected="false">
+                    <i class="bi bi-palette me-1"></i>Illustrations
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="pub-tab-chapters" data-bs-toggle="tab"
+                    data-bs-target="#pub-panel-chapters" type="button" role="tab"
+                    aria-controls="pub-panel-chapters" aria-selected="false">
+                    <i class="bi bi-book me-1"></i>Chapter Previews
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="pub-tab-revise" data-bs-toggle="tab"
+                    data-bs-target="#pub-panel-revise" type="button" role="tab"
+                    aria-controls="pub-panel-revise" aria-selected="false">
+                    <i class="bi bi-pencil-square me-1"></i>Revise Chapter
+                  </button>
+                </li>
               </ul>
-              <div class="tab-content mb-4" id="insights-tab-content">
-                <!-- Writing Statistics tab -->
-                <div class="tab-pane fade show active" id="panel-writing-stats" role="tabpanel"
-                  aria-labelledby="tab-writing-stats" tabindex="0">
+
+              <div class="tab-content" id="publish-tab-content">
+
+                <!-- Writing Statistics -->
+                <div class="tab-pane fade show active" id="pub-panel-stats" role="tabpanel"
+                  aria-labelledby="pub-tab-stats" tabindex="0">
                   <div id="writing-stats-panel" class="d-none">
                     <div class="row g-3 mb-3" id="writing-stats-summary">
                       <!-- Populated by JS -->
@@ -552,26 +529,78 @@
                     </div>
                   </div>
                 </div>
-                <!-- Character Relationships tab -->
-                <div class="tab-pane fade" id="panel-relationship-map" role="tabpanel"
-                  aria-labelledby="tab-relationship-map" tabindex="0">
+
+                <!-- Character Relationships -->
+                <div class="tab-pane fade" id="pub-panel-relationships" role="tabpanel"
+                  aria-labelledby="pub-tab-relationships" tabindex="0">
                   <div id="relationship-map-panel" class="d-none">
                     <div class="text-center">
                       <pre class="mermaid" id="relationship-mermaid"></pre>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Chapter previews -->
-              <hr class="divider-ornament">
-              <h5 class="nf-literary fw-semibold mb-3"><i class="bi bi-book me-2"></i>Chapter Previews</h5>
-              <div class="accordion text-start" id="chapters-preview-accordion">
-                <!-- Empty state — replaced by JS when chapters are available -->
-                <div class="nf-empty-state" id="chapters-preview-empty">
-                  <i class="bi bi-book"></i>
-                  <p>Chapters will appear here once your novel is complete</p>
+                <!-- Editor's Notes -->
+                <div class="tab-pane fade" id="pub-panel-editors-notes" role="tabpanel"
+                  aria-labelledby="pub-tab-editors-notes" tabindex="0">
+                  <div id="consistency-alert" class="alert alert-info text-start d-none mb-0">
+                    <h6 class="fw-semibold"><i class="bi bi-clipboard-check me-2"></i>Editor's Notes</h6>
+                    <p id="consistency-assessment" class="mb-1 nf-literary"></p>
+                    <ul id="consistency-issues" class="mb-0 ps-3"></ul>
+                  </div>
+                  <div class="nf-empty-state" id="editors-notes-empty">
+                    <i class="bi bi-clipboard-check"></i>
+                    <p>Editor's notes will appear here after generation</p>
+                  </div>
                 </div>
+
+                <!-- Illustrations -->
+                <div class="tab-pane fade" id="pub-panel-illustrations" role="tabpanel"
+                  aria-labelledby="pub-tab-illustrations" tabindex="0">
+                  <div class="mb-3">
+                    <button class="btn btn-outline-primary" id="btn-generate-illustrations">
+                      <span class="spinner-border spinner-border-sm d-none me-2" id="illustrations-spinner"></span>
+                      <span id="illustrations-spinner-label" class="d-none me-1"></span>
+                      <i class="bi bi-palette me-1"></i>Generate Cover &amp; Scenes
+                    </button>
+                    <small class="text-muted d-block mt-1">5–10 images from key scenes (requires IMAGE_API_KEY)</small>
+                  </div>
+                  <div class="d-none" id="illustrations-gallery" aria-label="Generated illustrations">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+
+                <!-- Chapter Previews -->
+                <div class="tab-pane fade" id="pub-panel-chapters" role="tabpanel"
+                  aria-labelledby="pub-tab-chapters" tabindex="0">
+                  <div class="accordion text-start" id="chapters-preview-accordion">
+                    <div class="nf-empty-state" id="chapters-preview-empty">
+                      <i class="bi bi-book"></i>
+                      <p>Chapters will appear here once your novel is complete</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Revise Individual Chapter -->
+                <div class="tab-pane fade" id="pub-panel-revise" role="tabpanel"
+                  aria-labelledby="pub-tab-revise" tabindex="0">
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label for="revise-chapter-select" class="form-label mb-1">Chapter</label>
+                      <select id="revise-chapter-select" class="form-select"></select>
+                    </div>
+                    <div class="col-md-8">
+                      <label for="revise-instructions" class="form-label mb-1">Revision Instructions</label>
+                      <textarea id="revise-instructions" class="form-control" rows="3" maxlength="4000"
+                        placeholder="Example: Increase tension in the final scene and foreshadow chapter 9's betrayal."></textarea>
+                    </div>
+                  </div>
+                  <button class="btn btn-primary mt-3" id="btn-revise-chapter">
+                    <span class="spinner-border spinner-border-sm d-none me-2" id="revise-chapter-spinner"></span>
+                    <i class="bi bi-arrow-repeat me-2"></i>Apply Instructions to Chapter
+                  </button>
+                </div>
+
               </div>
 
             </div>

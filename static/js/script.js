@@ -1588,6 +1588,7 @@ $(function () {
     var consistency = data.consistency || {};
     if (consistency.overall_assessment || (consistency.issues && consistency.issues.length)) {
       $("#consistency-alert").removeClass("d-none");
+      $("#editors-notes-empty").addClass("d-none");
       $("#consistency-assessment").text(consistency.overall_assessment || "");
       var $ul = $("#consistency-issues").empty();
       $.each(consistency.issues || [], function (_, issue) {
@@ -1595,6 +1596,7 @@ $(function () {
       });
     } else {
       $("#consistency-alert").addClass("d-none");
+      $("#editors-notes-empty").removeClass("d-none");
       $("#consistency-assessment").text("");
       $("#consistency-issues").empty();
     }
@@ -1647,7 +1649,7 @@ $(function () {
 
   // Render Mermaid when the relationship-map tab becomes visible,
   // since Mermaid cannot measure layout inside a hidden tab pane.
-  $(document).on("shown.bs.tab", "#tab-relationship-map", function () {
+  $(document).on("shown.bs.tab", "#pub-tab-relationships", function () {
     var $pre = $("#relationship-mermaid");
     var code = $pre.attr("data-mermaid-src");
     if (!code) return;
@@ -1756,10 +1758,14 @@ $(function () {
 
     // Summary cards
     var avgWords = chapters.length > 0 ? Math.round(totalWords / chapters.length) : 0;
+    var avgTimeSec = (chapters.length > 0 && totalTime > 0) ? Math.round(totalTime / chapters.length) : 0;
     var summaryItems = [
       { label: "Total Words", value: totalWords.toLocaleString(), icon: "bi-file-text" },
       { label: "Avg Words/Ch", value: avgWords.toLocaleString(), icon: "bi-calculator" },
     ];
+    if (avgTimeSec > 0) {
+      summaryItems.push({ label: "Avg Time/Ch", value: _formatDuration(avgTimeSec), icon: "bi-stopwatch" });
+    }
     if (totalTime > 0) {
       summaryItems.push({ label: "Total Gen Time", value: _formatDuration(totalTime), icon: "bi-clock" });
     }
