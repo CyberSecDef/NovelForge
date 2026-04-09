@@ -79,35 +79,40 @@
       <div class="nf-step-track">
         <button class="nf-step active" id="step1-novel-setup-btn" data-bs-toggle="tab"
           data-bs-target="#step1-novel-setup-tab" type="button" role="tab"
-          aria-controls="step1-novel-setup-tab" aria-selected="true">
+          aria-controls="step1-novel-setup-tab" aria-selected="true"
+          aria-label="Step 1: Imagine — Novel Setup">
           <span class="nf-step-circle">1</span>
           <span class="nf-step-label">Imagine</span>
         </button>
-        <div class="nf-step-line"></div>
+        <div class="nf-step-line" role="presentation"></div>
         <button class="nf-step" id="step2-chapter-outline-btn" data-bs-toggle="tab"
           data-bs-target="#step2-plan-tab" type="button" role="tab"
-          aria-controls="step2-plan-tab" aria-selected="false">
+          aria-controls="step2-plan-tab" aria-selected="false"
+          aria-label="Step 2: Plan — Review Outline &amp; Characters">
           <span class="nf-step-circle">2</span>
           <span class="nf-step-label">Plan</span>
         </button>
-        <div class="nf-step-line"></div>
+        <div class="nf-step-line" role="presentation"></div>
         <button class="nf-step" id="step3-chapter-writing-btn" data-bs-toggle="tab"
           data-bs-target="#step3-chapter-writing-tab" type="button" role="tab"
-          aria-controls="step3-chapter-writing-tab" aria-selected="false">
+          aria-controls="step3-chapter-writing-tab" aria-selected="false"
+          aria-label="Step 3: Write — Chapter Generation">
           <span class="nf-step-circle">3</span>
           <span class="nf-step-label">Write</span>
         </button>
-        <div class="nf-step-line"></div>
+        <div class="nf-step-line" role="presentation"></div>
         <button class="nf-step" id="step4-complete-export-btn" data-bs-toggle="tab"
           data-bs-target="#step4-complete-export-tab" type="button" role="tab"
-          aria-controls="step4-complete-export-tab" aria-selected="false">
+          aria-controls="step4-complete-export-tab" aria-selected="false"
+          aria-label="Step 4: Publish — Export &amp; Review">
           <span class="nf-step-circle">4</span>
           <span class="nf-step-label">Publish</span>
         </button>
       </div>
       <button class="nf-step-log-btn" id="log-btn" data-bs-toggle="tab"
         data-bs-target="#log-tab" type="button" role="tab"
-        aria-controls="log-tab" aria-selected="false" title="LLM Log">
+        aria-controls="log-tab" aria-selected="false" title="LLM Log"
+        aria-label="LLM Conversation Log">
         <i class="bi bi-chat-dots"></i>
       </button>
     </div>
@@ -225,9 +230,11 @@
                       </div>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-lg w-100" id="btn-generate-outline">
+                    <hr class="divider-ornament">
+
+                    <button type="submit" class="btn btn-primary btn-lg w-100 nf-btn-generate" id="btn-generate-outline">
                       <span class="spinner-border spinner-border-sm d-none me-2" id="outline-spinner"></span>
-                      <i class="bi bi-magic me-2"></i>Generate Outline
+                      <i class="bi bi-magic me-2" id="outline-btn-icon"></i><span id="outline-btn-text">Generate Outline</span>
                     </button>
                   </form>
                 </div>
@@ -372,25 +379,53 @@
                 <div class="card-header bg-nf-ink">
                   <h4 class="mb-0"><i class="bi bi-pen me-2"></i>Step 3 – Writing Chapters<span class="nf-writing-indicator"></span></h4>
                 </div>
-                <div class="card-body">
+                <div class="card-body nf-writing-atmosphere">
                   <p class="text-muted mb-3">
                     The AI is writing and refining each chapter. This will take several hours.
                     Please keep this window open.
                   </p>
+
+                  <!-- Live status callout -->
+                  <div class="nf-writing-callout d-none" id="writing-callout">
+                    <div class="nf-writing-callout-label">Currently writing</div>
+                    <div class="nf-writing-callout-title nf-literary" id="writing-callout-title"></div>
+                  </div>
+
                   <div class="d-flex justify-content-between mb-1">
                     <span id="progress-label" aria-live="polite">Preparing…</span>
                     <span id="progress-percent">0%</span>
                   </div>
-                  <div class="progress nf-progress mb-4">
+                  <div class="progress nf-progress mb-3">
                     <div class="progress-bar nf-progress-bar" id="progress-bar"
                       role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
                     </div>
                   </div>
 
-                  <p class="text-muted small mb-3 d-none" id="progress-time-estimate" aria-live="polite"></p>
+                  <!-- Stats bar: word counter, elapsed, ETA -->
+                  <div class="nf-stats-bar mb-4" id="writing-stats-bar">
+                    <div class="nf-stats-bar-item d-none" id="writing-word-counter">
+                      <i class="bi bi-file-text"></i>
+                      <span><span id="writing-word-count">0</span> words</span>
+                    </div>
+                    <div class="nf-stats-bar-item d-none" id="writing-elapsed">
+                      <i class="bi bi-clock"></i>
+                      <span id="writing-elapsed-text">0m</span>
+                    </div>
+                    <div class="nf-stats-bar-item d-none" id="writing-eta">
+                      <i class="bi bi-clock-history"></i>
+                      <span id="writing-eta-text"></span>
+                    </div>
+                  </div>
+                  <!-- Hidden element kept for backward compat with _updateTimeEstimate -->
+                  <span class="d-none" id="progress-time-estimate"></span>
 
-                  <!-- Live chapter list -->
-                  <ul class="list-group" id="chapter-progress-list" aria-live="polite" aria-label="Completed chapters"></ul>
+                  <!-- Live chapter timeline -->
+                  <div class="nf-timeline" id="chapter-progress-list" aria-live="polite" aria-label="Chapter progress">
+                    <div class="nf-empty-state" id="progress-empty">
+                      <i class="bi bi-pen"></i>
+                      <p>Chapters will appear as they're written</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -403,10 +438,11 @@
           <div class="row justify-content-center">
             <div class="col-lg-12">
 
-              <!-- Title page treatment -->
-              <div class="nf-title-page text-center mb-4">
-                <h2 id="done-title" class="nf-literary nf-title mb-2"></h2>
-                <p class="text-muted mb-0" id="done-stats"></p>
+              <!-- Title page treatment — celebratory banner -->
+              <div class="nf-completion-banner text-center mb-4">
+                <div class="nf-completion-sparkle"></div>
+                <h2 id="done-title" class="nf-literary nf-completion-title mb-2"></h2>
+                <p class="nf-completion-stats mb-0" id="done-stats"></p>
                 <div class="nf-hero-rule mt-3"><span class="nf-hero-ornament"></span></div>
               </div>
 
@@ -451,7 +487,7 @@
               </div>
 
               <!-- Revision panel -->
-              <div class="nf-section-divider mb-4"></div>
+              <hr class="divider-ornament">
               <div class="mb-4">
                 <h6 class="fw-semibold mb-3"><i class="bi bi-pencil-square me-2"></i>Revise Individual Chapter</h6>
                 <div class="row g-3">
@@ -472,7 +508,7 @@
               </div>
 
               <!-- Insights: Writing Statistics + Character Relationships (tabbed) -->
-              <div class="nf-section-divider mb-4"></div>
+              <hr class="divider-ornament">
               <ul class="nav nav-tabs mb-3" id="insights-tabs" role="tablist">
                 <li class="nav-item" role="presentation">
                   <button class="nav-link active" id="tab-writing-stats" data-bs-toggle="tab"
@@ -528,10 +564,14 @@
               </div>
 
               <!-- Chapter previews -->
-              <div class="nf-section-divider mb-4"></div>
+              <hr class="divider-ornament">
               <h5 class="nf-literary fw-semibold mb-3"><i class="bi bi-book me-2"></i>Chapter Previews</h5>
               <div class="accordion text-start" id="chapters-preview-accordion">
-                <!-- Populated by JS -->
+                <!-- Empty state — replaced by JS when chapters are available -->
+                <div class="nf-empty-state" id="chapters-preview-empty">
+                  <i class="bi bi-book"></i>
+                  <p>Chapters will appear here once your novel is complete</p>
+                </div>
               </div>
 
             </div>
@@ -555,12 +595,20 @@
               <div class="card shadow-sm">
                 
                 <div class="card-header bg-nf-ink d-flex justify-content-between align-items-center">
-                  <h4 class="mb-0"><i class="bi bi-chat-dots me-2"></i>LLM Conversation Log</h4>
+                  <h4 class="mb-0">
+                    <i class="bi bi-chat-dots me-2"></i>LLM Conversation Log
+                    <span class="badge rounded-pill bg-light text-dark ms-2 small" id="log-count-badge" style="font-size:0.65rem">0</span>
+                  </h4>
                   <button class="btn btn-sm btn-outline-light" id="btn-clear-log" title="Clear log display">
                     <i class="bi bi-trash"></i>
                   </button>
                 </div>
                 <div class="card-body p-0">
+                  <!-- Search/filter bar -->
+                  <div class="p-2 border-bottom" style="border-color: var(--nf-border) !important">
+                    <input type="text" class="form-control form-control-sm" id="log-search"
+                      placeholder="Filter by chapter, agent, or keyword..." aria-label="Filter log entries">
+                  </div>
                   <div id="llm-chat-window" class="llm-chat-window">
                     <div id="llm-chat-messages" class="llm-chat-messages">
                       <div class="text-center text-muted small py-3">
@@ -591,6 +639,20 @@
       window._savedSessionData = {{ session_data | tojson }};
     </script>
     {% endif %}
+
+    <!-- Illustration lightbox modal -->
+    <div class="modal fade" id="nf-lightbox" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content nf-lightbox-content">
+          <button type="button" class="btn-close btn-close-white nf-lightbox-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <img id="nf-lightbox-img" src="" alt="" class="nf-lightbox-img">
+          <div class="nf-lightbox-caption">
+            <strong id="nf-lightbox-label"></strong>
+            <span id="nf-lightbox-desc" class="text-muted"></span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Mermaid.js for character relationship diagrams -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@11.14.0/dist/mermaid.min.js"

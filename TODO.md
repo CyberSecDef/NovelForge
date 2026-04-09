@@ -226,7 +226,7 @@ Replace the character table with character cards:
 
 ## 6. Progress & Writing Experience (Step 3)
 
-### 6.1 — Redesign the chapter progress list
+### 6.1 — Redesign the chapter progress list ✅
 
 **Files:** `static/css/style.css`, `templates/index.html`
 
@@ -238,7 +238,7 @@ Replace the character table with character cards:
 
 ---
 
-### 6.2 — Add a live writing atmosphere to Step 3
+### 6.2 — Add a live writing atmosphere to Step 3 ✅
 
 **Files:** `static/css/style.css`, `templates/index.html`
 
@@ -250,7 +250,7 @@ While chapters are being written, the page should feel alive:
 
 ---
 
-### 6.3 — Add elapsed time and ETA display
+### 6.3 — Add elapsed time and ETA display ✅
 
 **Files:** `static/css/style.css`, `templates/index.html`
 
@@ -264,7 +264,7 @@ The time estimate element exists but is visually hidden. Enhance it:
 
 ## 7. Micro-Interactions & Polish
 
-### 7.1 — Animate the "Generate Outline" button
+### 7.1 — Animate the "Generate Outline" button ✅
 
 **Files:** `static/css/style.css`
 
@@ -274,7 +274,7 @@ The time estimate element exists but is visually hidden. Enhance it:
 
 ---
 
-### 7.2 — Add hover effects to all interactive cards
+### 7.2 — Add hover effects to all interactive cards ✅
 
 **Files:** `static/css/style.css`
 
@@ -283,7 +283,7 @@ The time estimate element exists but is visually hidden. Enhance it:
 
 ---
 
-### 7.3 — Improve toast/alert styling
+### 7.3 — Improve toast/alert styling ✅
 
 **Files:** `static/css/style.css`
 
@@ -295,7 +295,7 @@ The time estimate element exists but is visually hidden. Enhance it:
 
 ---
 
-### 7.4 — Add loading skeleton screens
+### 7.4 — Add loading skeleton screens ✅
 
 **Files:** `static/css/style.css`, `static/js/script.js`
 
@@ -308,7 +308,7 @@ When waiting for the outline to generate, show skeleton placeholders instead of 
 
 ## 8. Decorative & Atmospheric Elements
 
-### 8.1 — Add section dividers with ornamental flourishes
+### 8.1 — Add section dividers with ornamental flourishes ✅
 
 **Files:** `static/css/style.css`
 
@@ -345,7 +345,7 @@ Create a reusable `.divider-ornament` class:
 
 ---
 
-### 8.2 — Style the "Your Novel is Ready!" completion state
+### 8.2 — Style the "Your Novel is Ready!" completion state ✅
 
 **Files:** `templates/index.html`, `static/css/style.css`
 
@@ -358,7 +358,7 @@ This is the payoff moment — make it feel celebratory:
 
 ---
 
-### 8.3 — Add a subtle page background texture
+### 8.3 — Add a subtle page background texture ✅
 
 **Files:** `static/css/style.css`
 
@@ -378,7 +378,7 @@ This is the payoff moment — make it feel celebratory:
 
 ## 9. Responsive & Mobile Experience
 
-### 9.1 — Improve mobile layout for Step 1 form
+### 9.1 — Improve mobile layout for Step 1 form ✅
 
 **Files:** `static/css/style.css`
 
@@ -387,7 +387,7 @@ This is the payoff moment — make it feel celebratory:
 
 ---
 
-### 9.2 — Mobile-friendly chapter and character editing
+### 9.2 — Mobile-friendly chapter and character editing ✅
 
 **Files:** `static/css/style.css`
 
@@ -397,7 +397,7 @@ This is the payoff moment — make it feel celebratory:
 
 ---
 
-### 9.3 — Responsive step indicator
+### 9.3 — Responsive step indicator ✅
 
 **Files:** `static/css/style.css`
 
@@ -408,7 +408,7 @@ This is the payoff moment — make it feel celebratory:
 
 ## 10. Dark Mode Refinement
 
-### 10.1 — Warm up the dark mode palette
+### 10.1 — Warm up the dark mode palette ✅
 
 **Files:** `static/css/style.css`
 
@@ -422,7 +422,7 @@ Current dark mode uses cold Bootstrap greys. Shift to warmer tones:
 
 ---
 
-### 10.2 — Add a smooth dark/light mode transition
+### 10.2 — Add a smooth dark/light mode transition ✅
 
 **Files:** `static/css/style.css`
 
@@ -433,7 +433,7 @@ Current dark mode uses cold Bootstrap greys. Shift to warmer tones:
 
 ## 11. Empty States & Onboarding
 
-### 11.1 — Design meaningful empty states
+### 11.1 — Design meaningful empty states ✅
 
 **Files:** `templates/index.html`, `static/css/style.css`
 
@@ -446,7 +446,7 @@ For panels that start empty (chapter list, character list, session dropdown, ill
 
 ---
 
-### 11.2 — Add a first-run tooltip tour
+### 11.2 — Add a first-run tooltip tour ✅
 
 **Files:** `static/js/script.js`, `static/css/style.css`
 
@@ -461,7 +461,7 @@ On first visit (check localStorage), show subtle tooltip popovers pointing to ke
 
 ## 12. Illustration Gallery Enhancement
 
-### 12.1 — Redesign the illustration gallery
+### 12.1 — Redesign the illustration gallery ✅
 
 **Files:** `static/css/style.css`, `templates/index.html`
 
@@ -474,7 +474,7 @@ On first visit (check localStorage), show subtle tooltip popovers pointing to ke
 
 ## 13. LLM Log Refinement
 
-### 13.1 — Clean up the Log tab for non-developers
+### 13.1 — Clean up the Log tab for non-developers ✅
 
 **Files:** `templates/index.html`, `static/css/style.css`
 
@@ -489,7 +489,7 @@ The chat-bubble log is a nice idea but shows raw JSON. Improve:
 
 ## 14. Accessibility & Interaction Quality
 
-### 14.1 — Improve focus states for keyboard navigation
+### 14.1 — Improve focus states for keyboard navigation ✅
 
 **Files:** `static/css/style.css`
 
@@ -504,7 +504,7 @@ The chat-bubble log is a nice idea but shows raw JSON. Improve:
 
 ---
 
-### 14.2 — Add meaningful aria labels and live regions
+### 14.2 — Add meaningful aria labels and live regions ✅
 
 **Files:** `templates/index.html`
 
@@ -516,7 +516,7 @@ The chat-bubble log is a nice idea but shows raw JSON. Improve:
 
 ## 15. Font Loading & Performance
 
-### 15.1 — Add Google Fonts with proper loading strategy
+### 15.1 — Add Google Fonts with proper loading strategy ✅
 
 **Files:** `templates/index.html`
 

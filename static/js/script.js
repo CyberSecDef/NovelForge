@@ -95,15 +95,16 @@ $(function () {
     var activeIdx = STEP_INDEX[activeId];
     if (activeIdx === undefined) {
       // Log tab or unknown — just dim all steps, highlight log
-      $(".nf-step").removeClass("active completed");
+      $(".nf-step").removeClass("active completed").attr("aria-selected", "false");
       $(".nf-step-line").removeClass("completed");
-      $(".nf-step-log-btn").addClass("active");
+      $(".nf-step-log-btn").addClass("active").attr("aria-selected", "true");
       return;
     }
-    $(".nf-step-log-btn").removeClass("active");
+    $(".nf-step-log-btn").removeClass("active").attr("aria-selected", "false");
     $(".nf-step").each(function (i) {
       var $step = $(this);
       $step.removeClass("active completed");
+      $step.attr("aria-selected", i === activeIdx ? "true" : "false");
       if (i < activeIdx) {
         $step.addClass("completed");
         // Replace number with checkmark for completed steps
@@ -158,16 +159,33 @@ $(function () {
   // -------------------------------------------------------------------
   function showAlert(message, type) {
     type = type || "danger";
+    var icons = {
+      danger: "bi-exclamation-triangle-fill",
+      warning: "bi-exclamation-circle-fill",
+      info: "bi-info-circle-fill",
+      success: "bi-check-circle-fill",
+    };
+    var icon = icons[type] || icons.danger;
     var html =
-      '<div class="alert alert-' +
-      type +
+      '<div class="nf-toast nf-toast-' + type + ' alert alert-' + type +
       ' alert-dismissible fade show" role="alert">' +
-      '<i class="bi bi-exclamation-triangle-fill me-2"></i>' +
+      '<i class="bi ' + icon + ' me-2"></i>' +
       escapeHtml(message) +
-      '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>' +
+      '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>' +
+      '<div class="nf-toast-progress"></div>' +
       "</div>";
-    $("#global-alert-area").html(html);
+    var $area = $("#global-alert-area").html(html);
     $("html, body").animate({ scrollTop: 0 }, 200);
+
+    // Auto-dismiss after 8 seconds
+    var $toast = $area.find(".nf-toast");
+    var timer = setTimeout(function () {
+      $toast.alert("close");
+    }, 8000);
+    // Cancel auto-dismiss if user closes manually
+    $toast.on("close.bs.alert", function () {
+      clearTimeout(timer);
+    });
   }
 
   function clearAlerts() {
@@ -352,7 +370,7 @@ $(function () {
 
       var sessions = data.sessions || [];
       if (sessions.length === 0) {
-        $menu.append('<li><span class="dropdown-item text-muted">No saved sessions</span></li>');
+        $menu.append('<li><span class="dropdown-item text-muted"><i class="bi bi-journal me-2"></i>No saved stories yet</span></li>');
         return;
       }
 
@@ -505,9 +523,15 @@ $(function () {
       return;
     }
 
-    // Show spinner
+    // Show spinner and update button text
     $("#outline-spinner").removeClass("d-none");
+    $("#outline-btn-icon").removeClass("bi-magic").addClass("bi-stars");
+    $("#outline-btn-text").text("Conjuring your story\u2026");
     $("#btn-generate-outline").prop("disabled", true);
+
+    // Show skeleton placeholders in Step 2 and switch to it immediately
+    _showOutlineSkeletons(chapters);
+    showStep("#step-outline");
 
     var payload = {
       premise: premise,
@@ -524,21 +548,70 @@ $(function () {
       contentType: "application/json",
       data: JSON.stringify(payload),
       success: function (resp) {
+        _hideOutlineSkeletons();
         renderOutline(resp);
-        showStep("#step-outline");
       },
       error: function (xhr) {
+        _hideOutlineSkeletons();
         var msg =
           (xhr.responseJSON && xhr.responseJSON.error) ||
           "Failed to generate outline. Check your LLM API configuration.";
         showAlert(msg);
+        showStep("#step-input");
       },
       complete: function () {
         $("#outline-spinner").addClass("d-none");
+        $("#outline-btn-icon").removeClass("bi-stars bi-check-lg").addClass("bi-magic");
+        $("#outline-btn-text").text("Generate Outline");
         $("#btn-generate-outline").prop("disabled", false);
       },
     });
   });
+
+  // -------------------------------------------------------------------
+  // Skeleton loading screens for outline generation
+  // -------------------------------------------------------------------
+  function _showOutlineSkeletons(chapterCount) {
+    // Chapter skeletons in card view
+    var $cards = $("#chapter-cards").empty();
+    for (var i = 0; i < chapterCount; i++) {
+      $cards.append(
+        '<div class="nf-chapter-card nf-skeleton-card">' +
+        '<div class="nf-chapter-card-header">' +
+        '<span class="nf-chapter-badge nf-skeleton-pulse">&nbsp;</span>' +
+        '<div class="nf-skeleton-bar nf-skeleton-pulse" style="width:40%;height:1.1rem"></div>' +
+        '</div>' +
+        '<div class="nf-skeleton-bar nf-skeleton-pulse" style="width:90%;height:0.85rem;margin-top:0.5rem"></div>' +
+        '<div class="nf-skeleton-bar nf-skeleton-pulse" style="width:70%;height:0.85rem;margin-top:0.4rem"></div>' +
+        '</div>'
+      );
+    }
+
+    // Character skeletons in card grid
+    var $charCards = $("#character-cards");
+    $charCards.find(".col-md-6:not(#add-character-card-col)").remove();
+    for (var j = 0; j < 4; j++) {
+      var colorClass = "nf-char-color-" + (j % 8);
+      $(
+        '<div class="col-md-6">' +
+        '<div class="nf-char-card ' + colorClass + ' nf-skeleton-card">' +
+        '<div class="nf-skeleton-bar nf-skeleton-pulse" style="width:50%;height:1.2rem;margin-bottom:0.5rem"></div>' +
+        '<div class="nf-skeleton-bar nf-skeleton-pulse" style="width:30%;height:0.9rem;margin-bottom:0.75rem;border-radius:1rem"></div>' +
+        '<div class="nf-skeleton-bar nf-skeleton-pulse" style="width:80%;height:0.75rem;margin-bottom:0.3rem"></div>' +
+        '<div class="nf-skeleton-bar nf-skeleton-pulse" style="width:60%;height:0.75rem"></div>' +
+        '</div>' +
+        '</div>'
+      ).insertBefore("#add-character-card-col");
+    }
+
+    // Disable the approve button while loading
+    $("#btn-approve-outline").prop("disabled", true);
+  }
+
+  function _hideOutlineSkeletons() {
+    $(".nf-skeleton-card").remove();
+    $("#btn-approve-outline").prop("disabled", false);
+  }
 
   // -------------------------------------------------------------------
   // Render outline into the review table
@@ -1166,6 +1239,8 @@ $(function () {
         _latestFullData = {};
         _lastFullFetchTime = 0;
         $("#progress-time-estimate").addClass("d-none").text("");
+        _rebuildTimeline([], _totalChapters);
+        _startElapsedTimer();
         _schedulePoll();
       },
       error: function (xhr) {
@@ -1229,17 +1304,8 @@ $(function () {
         _latestFullData = fullData || {};
         _lastFullFetchTime = Date.now();
 
-        // Refresh the chapter list with authoritative data
-        var $list = $("#chapter-progress-list");
-        $list.empty();
-        $.each(_latestFullData.chapters_done || [], function (_, ch) {
-          $list.append(
-            '<li class="list-group-item done-chapter">' +
-            '<i class="bi bi-check-circle-fill text-success me-2"></i>' +
-            "Chapter " + escapeHtml(ch.number) + ": " + escapeHtml(ch.title) +
-            "</li>"
-          );
-        });
+        // Refresh the chapter timeline with authoritative data
+        _rebuildTimeline(_latestFullData.chapters_done || [], _latestFullData.total || _totalChapters);
 
         if (typeof onComplete === "function") {
           onComplete(_latestFullData);
@@ -1274,6 +1340,7 @@ $(function () {
         var step = data.step || "";
 
         updateProgressBar(current, total, step || null);
+        _updateTimelineStep(step);
 
         // Track chapter completion times for ETA estimation
         var chapterJustCompleted = current > _lastCompletedCount && current <= total;
@@ -1352,13 +1419,130 @@ $(function () {
     }
   }
 
+  // Build the chapter progress timeline from completed chapters + upcoming slots
+  function _rebuildTimeline(chaptersDone, total) {
+    var $list = $("#chapter-progress-list").empty();
+    var doneCount = chaptersDone.length;
+
+    // Completed chapters
+    $.each(chaptersDone, function (_, ch) {
+      var uid = "tl-preview-" + ch.number;
+      var node =
+        '<div class="nf-timeline-node done">' +
+        '<div class="nf-timeline-dot"><i class="bi bi-check"></i></div>' +
+        '<div class="nf-timeline-title">Chapter ' + escapeHtml(ch.number) + ': ' + escapeHtml(ch.title) + '</div>' +
+        '<button class="nf-timeline-expand" data-bs-toggle="collapse" data-bs-target="#' + uid + '" aria-expanded="false">' +
+        '<i class="bi bi-chevron-right me-1"></i>Preview</button>' +
+        '<div class="collapse" id="' + uid + '"><div class="nf-timeline-preview"></div></div>' +
+        '</div>';
+      var $node = $(node);
+      // Safely set content text (preserves newlines via pre-wrap CSS)
+      $node.find(".nf-timeline-preview").text(ch.content || "");
+      $list.append($node);
+    });
+
+    // Update word counter
+    var totalWords = 0;
+    $.each(chaptersDone, function (_, ch) {
+      totalWords += ch.word_count || (ch.content ? ch.content.split(/\s+/).length : 0);
+    });
+    if (totalWords > 0) {
+      $("#writing-word-count").text(totalWords.toLocaleString());
+      $("#writing-word-counter").removeClass("d-none");
+    }
+
+    // In-progress chapter (if generation is still running)
+    if (doneCount < total) {
+      var inProgressNum = doneCount + 1;
+      // Find chapter title from outline if available
+      var inProgressTitle = "";
+      var $outlineCards = $("#chapter-cards .nf-chapter-card");
+      if ($outlineCards.length >= inProgressNum) {
+        inProgressTitle = $outlineCards.eq(inProgressNum - 1).find("[data-field='title']").text().trim();
+      }
+      var titleDisplay = inProgressTitle ? "Chapter " + inProgressNum + ": " + escapeHtml(inProgressTitle) : "Chapter " + inProgressNum;
+
+      // Update callout
+      $("#writing-callout-title").text(inProgressTitle || ("Chapter " + inProgressNum));
+      $("#writing-callout").removeClass("d-none");
+
+      $list.append(
+        '<div class="nf-timeline-node in-progress" id="tl-in-progress">' +
+        '<div class="nf-timeline-dot"><i class="bi bi-pen"></i></div>' +
+        '<div class="nf-timeline-title">' + titleDisplay + '</div>' +
+        '<div class="nf-timeline-step" id="tl-step-label"></div>' +
+        '</div>'
+      );
+
+      // Upcoming chapters
+      for (var i = inProgressNum + 1; i <= total; i++) {
+        var upTitle = "";
+        if ($outlineCards.length >= i) {
+          upTitle = $outlineCards.eq(i - 1).find("[data-field='title']").text().trim();
+        }
+        var upDisplay = upTitle ? "Chapter " + i + ": " + escapeHtml(upTitle) : "Chapter " + i;
+        $list.append(
+          '<div class="nf-timeline-node upcoming">' +
+          '<div class="nf-timeline-dot"></div>' +
+          '<div class="nf-timeline-title">' + upDisplay + '</div>' +
+          '</div>'
+        );
+      }
+    } else {
+      // Generation complete — hide callout
+      $("#writing-callout").addClass("d-none");
+    }
+  }
+
+  // Update the in-progress node's step label (called from lightweight poll)
+  function _updateTimelineStep(step) {
+    var $label = $("#tl-step-label");
+    if ($label.length && step) {
+      $label.text(step);
+    }
+  }
+
+  var _elapsedTimer = null;
+
+  function _startElapsedTimer() {
+    if (_elapsedTimer) return;
+    _updateElapsed();
+    _elapsedTimer = setInterval(_updateElapsed, 30000); // every 30s
+  }
+
+  function _stopElapsedTimer() {
+    if (_elapsedTimer) {
+      clearInterval(_elapsedTimer);
+      _elapsedTimer = null;
+    }
+  }
+
+  function _updateElapsed() {
+    if (!_generationStartTime) return;
+    var elapsedMs = Date.now() - _generationStartTime;
+    var elapsedSec = Math.floor(elapsedMs / 1000);
+    $("#writing-elapsed-text").text(_formatDurationShort(elapsedSec));
+    $("#writing-elapsed").removeClass("d-none");
+  }
+
+  function _formatDurationShort(seconds) {
+    if (seconds < 60) return "<1m";
+    var m = Math.floor(seconds / 60);
+    if (m < 60) return m + "m";
+    var h = Math.floor(m / 60);
+    var rm = m % 60;
+    return h + "h " + rm + "m";
+  }
+
   function _updateTimeEstimate(current, total) {
-    var $el = $("#progress-time-estimate");
     var remaining = total - current;
+
+    // Update elapsed timer
+    _updateElapsed();
 
     // Need at least 1 completed chapter to estimate
     if (_chapterCompletionTimes.length < 1 || remaining <= 0) {
-      $el.addClass("d-none").text("");
+      $("#writing-eta").addClass("d-none");
       return;
     }
 
@@ -1370,28 +1554,18 @@ $(function () {
     var avgMs = elapsed / completed;
 
     var estRemainingMs = avgMs * remaining;
-    var estMinutes = Math.round(estRemainingMs / 60000);
+    var estSec = Math.round(estRemainingMs / 1000);
 
-    var text;
-    if (estMinutes < 1) {
-      text = "Less than a minute remaining";
-    } else if (estMinutes === 1) {
-      text = "~1 minute remaining";
-    } else if (estMinutes < 60) {
-      text = "~" + estMinutes + " minutes remaining";
-    } else {
-      var hrs = Math.floor(estMinutes / 60);
-      var mins = estMinutes % 60;
-      text = "~" + hrs + "h " + mins + "m remaining";
-    }
+    var text = "~" + _formatDurationShort(estSec) + " remaining";
 
     // Also show avg time per chapter
     var avgMin = Math.round(avgMs / 60000);
     if (avgMin >= 1) {
-      text += " (avg ~" + avgMin + " min/chapter)";
+      text += " (~" + avgMin + " min/ch)";
     }
 
-    $el.text(text).removeClass("d-none");
+    $("#writing-eta-text").text(text);
+    $("#writing-eta").removeClass("d-none");
   }
 
   // -------------------------------------------------------------------
@@ -1399,6 +1573,7 @@ $(function () {
   // -------------------------------------------------------------------
   function showDoneStep(data) {
     _doneData = data || {};
+    _stopElapsedTimer();
 
     var title = $("#outline-title").val() || "Your Novel";
     var chaptersCount = (data.chapters_done || []).length;
@@ -1708,37 +1883,52 @@ $(function () {
 
     if (!illustrations || illustrations.length === 0) {
       $gallery.append(
-        '<div class="col-12"><p class="text-muted">No illustrations were generated.</p></div>'
+        '<div class="nf-empty-state"><i class="bi bi-palette"></i><p>Your illustrations will appear here</p></div>'
       );
     } else {
-      $.each(illustrations, function (i, illust) {
-        var label =
-          illust.type === "cover"
-            ? "Cover"
-            : "Chapter " + (illust.chapter || "?");
+      // Sort: cover first, then by chapter number
+      var sorted = illustrations.slice().sort(function (a, b) {
+        if (a.type === "cover") return -1;
+        if (b.type === "cover") return 1;
+        return (a.chapter || 0) - (b.chapter || 0);
+      });
+
+      $.each(sorted, function (i, illust) {
+        var isCover = illust.type === "cover";
+        var label = isCover ? "Cover" : "Chapter " + (illust.chapter || "?");
         var safeUrl = escapeHtml(illust.image_url || "");
+        var badgeHtml = isCover ? '<span class="nf-illust-badge">Cover</span>' : "";
+        var coverClass = isCover ? " nf-illust-cover" : "";
+        var desc = illust.scene_description || "";
+
         var $card = $(
-          '<div class="col-6 col-md-4 col-lg-3">' +
-            '<div class="card h-100 shadow-sm">' +
-              '<a href="' + safeUrl + '" target="_blank" rel="noopener">' +
-                '<img src="' + safeUrl + '" class="card-img-top" ' +
-                  'alt="' + escapeHtml(label) + '" style="cursor:zoom-in;" loading="lazy">' +
-              "</a>" +
-              '<div class="card-body p-2">' +
-                '<p class="card-title fw-bold mb-1 small"></p>' +
-                '<p class="card-text text-muted small mb-0"></p>' +
-              "</div>" +
-            "</div>" +
-          "</div>"
+          '<div class="nf-illust-card' + coverClass + '" data-illust-idx="' + i + '">' +
+          '<img src="' + safeUrl + '" class="nf-illust-img" alt="' + escapeHtml(label) + '" loading="lazy">' +
+          '<div class="nf-illust-info">' +
+          '<div class="nf-illust-label"></div>' +
+          '<p class="nf-illust-desc"></p>' +
+          '</div></div>'
         );
-        $card.find(".card-title").text(label);
-        $card.find(".card-text").text(illust.scene_description || "");
+        $card.find(".nf-illust-label").html(escapeHtml(label) + badgeHtml);
+        $card.find(".nf-illust-desc").text(desc);
+        // Store data for lightbox
+        $card.data("lightbox", { url: illust.image_url || "", label: label, desc: desc });
         $gallery.append($card);
       });
     }
 
     $gallery.removeClass("d-none");
   }
+
+  // Illustration lightbox
+  $(document).on("click", ".nf-illust-card", function () {
+    var data = $(this).data("lightbox");
+    if (!data || !data.url) return;
+    $("#nf-lightbox-img").attr("src", data.url).attr("alt", data.label);
+    $("#nf-lightbox-label").text(data.label);
+    $("#nf-lightbox-desc").text(data.desc);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("nf-lightbox")).show();
+  });
 
   // Poll the illustration job token until it reaches a terminal state,
   // then fetch the full payload and render the images.
@@ -1925,26 +2115,34 @@ $(function () {
   }
 
   function formatLogEntry(entry) {
+    // Extract a human-readable label from the action field or infer from content
+    var label = entry.action || inferStatusFromRequestEntry(entry);
+
     if (entry.type === "request") {
-      // Format request with messages
+      // Extract the user prompt text (skip system messages for display)
       var content = "";
       if (entry.payload && entry.payload.messages) {
         entry.payload.messages.forEach(function(msg) {
-          if (msg.role === "system") {
-            content += "[System] " + truncateText(msg.content, 500) + "\n\n";
-          } else if (msg.role === "user") {
+          if (msg.role === "user") {
             content += truncateText(msg.content, 2500);
+          }
+        });
+      }
+      // Fallback: if no user message, show system message
+      if (!content && entry.payload && entry.payload.messages) {
+        entry.payload.messages.forEach(function(msg) {
+          if (msg.role === "system") {
+            content += truncateText(msg.content, 500);
           }
         });
       }
       return {
         type: "request",
-        header: "Request to LLM",
+        header: label || "Request to LLM",
         content: content,
         timestamp: entry.timestamp
       };
     } else if (entry.type === "response") {
-      // Format response
       var content = "";
       if (entry.response && entry.response.choices && entry.response.choices[0]) {
         var message = entry.response.choices[0].message;
@@ -1954,7 +2152,7 @@ $(function () {
       }
       return {
         type: "response",
-        header: "LLM Response",
+        header: label ? label + " — Response" : "LLM Response",
         content: content,
         timestamp: entry.timestamp
       };
@@ -1962,21 +2160,26 @@ $(function () {
     return null;
   }
 
+  var _logMessageCount = 0;
+
   function addLogMessage(formatted) {
     if (!formatted || !formatted.content) return;
 
     var messageClass = formatted.type === "request" ? "request" : "response";
-    var html = 
-      '<div class="llm-message ' + messageClass + '">' +
+    var searchText = (formatted.header + " " + formatted.content).toLowerCase();
+    var html =
+      '<div class="llm-message ' + messageClass + '" data-search="' + escapeHtml(searchText) + '">' +
         '<div class="llm-bubble">' +
           '<div class="llm-bubble-header">' + escapeHtml(formatted.header) + '</div>' +
           '<div class="llm-bubble-content">' + escapeHtml(formatted.content) + '</div>' +
           '<div class="llm-bubble-timestamp">' + escapeHtml(formatted.timestamp) + '</div>' +
         '</div>' +
       '</div>';
-    
+
     $("#llm-chat-messages").append(html);
-    
+    _logMessageCount++;
+    $("#log-count-badge").text(_logMessageCount);
+
     // Auto-scroll to bottom
     var chatWindow = document.getElementById("llm-chat-window");
     if (chatWindow) {
@@ -2075,12 +2278,28 @@ $(function () {
     _activeLLMRequests = 0;
     _hasInitializedLogSnapshot = false;
     _logPollSameCount = 0;
+    _logMessageCount = 0;
+    $("#log-count-badge").text("0");
+    $("#log-search").val("");
     _scheduleLogPoll();
     setStickyStatus(DEFAULT_STICKY_STATUS, { force: true });
 
     // Clear the server-side log file
     $.post("/clear_log").fail(function () {
       // Non-fatal — display was already cleared
+    });
+  });
+
+  // Log search/filter
+  $("#log-search").on("input", function () {
+    var query = $(this).val().toLowerCase().trim();
+    if (!query) {
+      $("#llm-chat-messages .llm-message").show();
+      return;
+    }
+    $("#llm-chat-messages .llm-message").each(function () {
+      var searchData = $(this).attr("data-search") || "";
+      $(this).toggle(searchData.indexOf(query) !== -1);
     });
   });
 
@@ -2163,6 +2382,7 @@ $(function () {
           _lastCompletedCount = pd.current || 0;
           _chapterCompletionTimes = [];
           _generationStartTime = Date.now();
+          _startElapsedTimer();
           _schedulePoll();
           pollProgress();
         } else if (pd.chapters_done && pd.chapters_done.length) {
@@ -2194,5 +2414,70 @@ $(function () {
 
       delete window._savedSessionData;
     })();
+  }
+
+  // -------------------------------------------------------------------
+  // First-run tooltip tour (only on first visit, no restored session)
+  // -------------------------------------------------------------------
+  if (!window._savedSessionData && !localStorage.getItem("nf_tour_done")) {
+    var tourSteps = [
+      {
+        target: "#premise",
+        title: "Start here",
+        content: "Describe the story you want to write — a premise, a mood, a world.",
+        placement: "top",
+      },
+      {
+        target: "#genre",
+        title: "Set the tone",
+        content: "Choose your genre to shape the style and feel of your novel.",
+        placement: "top",
+      },
+    ];
+
+    var _tourPopovers = [];
+
+    function _showTourStep(idx) {
+      if (idx >= tourSteps.length) {
+        localStorage.setItem("nf_tour_done", "1");
+        return;
+      }
+      var step = tourSteps[idx];
+      var el = document.querySelector(step.target);
+      if (!el) { _showTourStep(idx + 1); return; }
+
+      var popover = new bootstrap.Popover(el, {
+        title: step.title,
+        content: step.content + '<div class="text-end mt-2"><button class="btn btn-sm btn-outline-secondary nf-tour-btn" data-tour-idx="' + idx + '">' +
+          (idx < tourSteps.length - 1 ? "Next" : "Got it") + "</button></div>",
+        placement: step.placement,
+        trigger: "manual",
+        html: true,
+        customClass: "nf-tour-popover",
+      });
+      _tourPopovers.push(popover);
+      popover.show();
+    }
+
+    $(document).on("click", ".nf-tour-btn", function () {
+      var idx = parseInt($(this).attr("data-tour-idx"), 10);
+      // Dispose current popover
+      if (_tourPopovers[idx]) {
+        _tourPopovers[idx].dispose();
+      }
+      _showTourStep(idx + 1);
+    });
+
+    // Dismiss all on any click outside a popover
+    $(document).on("click", function (e) {
+      if (!$(e.target).closest(".popover, .nf-tour-btn").length && _tourPopovers.length) {
+        $.each(_tourPopovers, function (_, p) { try { p.dispose(); } catch (ex) {} });
+        _tourPopovers = [];
+        localStorage.setItem("nf_tour_done", "1");
+      }
+    });
+
+    // Start tour after a short delay
+    setTimeout(function () { _showTourStep(0); }, 800);
   }
 });
