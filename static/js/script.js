@@ -546,14 +546,19 @@ $(function () {
   function renderOutline(data) {
     $("#outline-title").val(data.title || "");
 
-    // Chapters table
+    // Chapters — build both card and table views
     var $tbody = $("#chapter-tbody").empty();
+    var $cards = $("#chapter-cards").empty();
+    // Re-add the "add character" card placeholder (it was emptied above only for chapters)
+    _charColorIdx = 0;
     $.each(data.chapters || [], function (_, ch) {
       addChapterRow(ch.number || "", ch.title || "", ch.summary || "");
     });
 
-    // Characters table
+    // Characters — clear cards (except add button) and hidden table
+    $("#character-cards .col-md-6:not(#add-character-card-col)").remove();
     var $ctbody = $("#characters-tbody").empty();
+    _charColorIdx = 0;
     $.each(data.characters || [], function (_, c) {
       addCharacterRow(c.name || "", c.age || "", c.role || "", c.background || "", c.arc || "");
     });
@@ -568,20 +573,69 @@ $(function () {
   // -------------------------------------------------------------------
   // Add/Delete Character Functions
   // -------------------------------------------------------------------
+  var _charColorIdx = 0;
+
   function addCharacterRow(name, age, role, background, arc) {
     var safeName = escapeHtml(name);
+    var colorClass = "nf-char-color-" + (_charColorIdx++ % 8);
+
+    // Hidden table row (used for data collection on approve)
     var row =
       "<tr>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='name' role='textbox' aria-label='Character name'>" + safeName + "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='age' role='textbox' aria-label='Age for " + safeName + "'>" + escapeHtml(age) + "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='role' role='textbox' aria-label='Role for " + safeName + "'>" + escapeHtml(role) + "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='background' role='textbox' aria-label='Background for " + safeName + "'>" + escapeHtml(background) + "</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='arc' role='textbox' aria-label='Arc for " + safeName + "'>" + escapeHtml(arc) + "</div></td>" +
-      "<td class='text-center'>" +
-      "<button class='btn btn-sm btn-outline-danger btn-delete-character' title='Delete Character' aria-label='Delete " + safeName + "'><i class='bi bi-trash'></i></button>" +
-      "</td>" +
+      "<td><div class='editable-cell' data-field='name'>" + safeName + "</div></td>" +
+      "<td><div class='editable-cell' data-field='age'>" + escapeHtml(age) + "</div></td>" +
+      "<td><div class='editable-cell' data-field='role'>" + escapeHtml(role) + "</div></td>" +
+      "<td><div class='editable-cell' data-field='background'>" + escapeHtml(background) + "</div></td>" +
+      "<td><div class='editable-cell' data-field='arc'>" + escapeHtml(arc) + "</div></td>" +
       "</tr>";
     $("#characters-tbody").append(row);
+
+    // Unique IDs for collapse sections
+    var uid = "char-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5);
+
+    // Card
+    var card =
+      '<div class="col-md-6">' +
+      '<div class="nf-char-card ' + colorClass + '">' +
+      '<button class="btn btn-sm btn-outline-danger nf-char-card-delete" title="Delete Character" aria-label="Delete ' + safeName + '"><i class="bi bi-trash"></i></button>' +
+      '<div class="nf-char-card-name editable-cell" contenteditable="true" data-field="name" role="textbox" aria-label="Character name">' + safeName + '</div>' +
+      '<div class="d-flex align-items-center gap-2 mb-2">' +
+      '<span class="nf-char-card-role editable-cell" contenteditable="true" data-field="role" role="textbox" aria-label="Role">' + escapeHtml(role) + '</span>' +
+      '<span class="nf-char-card-age">Age: <span class="editable-cell" contenteditable="true" data-field="age" role="textbox" aria-label="Age">' + escapeHtml(age) + '</span></span>' +
+      '</div>' +
+      '<div class="mb-2">' +
+      '<div class="nf-char-card-section-label" data-bs-toggle="collapse" data-bs-target="#bg-' + uid + '" aria-expanded="false"><i class="bi bi-chevron-right me-1"></i>Background</div>' +
+      '<div class="collapse" id="bg-' + uid + '">' +
+      '<div class="nf-char-card-body editable-cell mt-1" contenteditable="true" data-field="background" role="textbox" aria-label="Background">' + escapeHtml(background) + '</div>' +
+      '</div>' +
+      '</div>' +
+      '<div>' +
+      '<div class="nf-char-card-section-label" data-bs-toggle="collapse" data-bs-target="#arc-' + uid + '" aria-expanded="false"><i class="bi bi-chevron-right me-1"></i>Arc</div>' +
+      '<div class="collapse" id="arc-' + uid + '">' +
+      '<div class="nf-char-card-body editable-cell mt-1" contenteditable="true" data-field="arc" role="textbox" aria-label="Arc">' + escapeHtml(arc) + '</div>' +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+    // Insert before the add-character card
+    $(card).insertBefore("#add-character-card-col");
+  }
+
+  // Sync hidden table from character cards (called before approve)
+  function _syncCharTableFromCards() {
+    var $tbody = $("#characters-tbody").empty();
+    $("#character-cards .nf-char-card:not(.nf-char-card-add)").each(function () {
+      var $card = $(this);
+      var row =
+        "<tr>" +
+        "<td><div class='editable-cell' data-field='name'>" + escapeHtml($card.find("[data-field='name']").text().trim()) + "</div></td>" +
+        "<td><div class='editable-cell' data-field='age'>" + escapeHtml($card.find("[data-field='age']").text().trim()) + "</div></td>" +
+        "<td><div class='editable-cell' data-field='role'>" + escapeHtml($card.find("[data-field='role']").text().trim()) + "</div></td>" +
+        "<td><div class='editable-cell' data-field='background'>" + escapeHtml($card.find("[data-field='background']").text().trim()) + "</div></td>" +
+        "<td><div class='editable-cell' data-field='arc'>" + escapeHtml($card.find("[data-field='arc']").text().trim()) + "</div></td>" +
+        "</tr>";
+      $tbody.append(row);
+    });
   }
 
   // Sync the Narrative Perspective dropdown with current character names
@@ -590,8 +644,8 @@ $(function () {
     var currentVal = $select.val();
     // Remove all first-person options (keep third_person)
     $select.find("option[value!='third_person']").remove();
-    // Add an option for each character
-    $("#characters-tbody tr").each(function () {
+    // Add an option for each character from cards
+    $("#character-cards .nf-char-card:not(.nf-char-card-add)").each(function () {
       var name = $(this).find("[data-field='name']").text().trim();
       if (name) {
         $select.append(
@@ -612,35 +666,41 @@ $(function () {
     markOutlineDirty();
   });
 
-  // Add Character button
-  $("#btn-add-character").on("click", function () {
+  // Add Character button (card-based)
+  $(document).on("click", "#btn-add-character", function () {
     addCharacterRow("New Character", "", "Protagonist/Antagonist/Supporting", "Enter background...", "Enter character arc...");
     markOutlineDirty();
     syncPerspectiveDropdown();
   });
 
-  // Delete Character button (delegated event)
-  $("#characters-tbody").on("click", ".btn-delete-character", function () {
-    var $row = $(this).closest("tr");
-    var characterName = $row.find("[data-field='name']").text().trim();
-    
-    if ($("#characters-tbody tr").length <= 1) {
+  // Delete Character button from card
+  $("#character-cards").on("click", ".nf-char-card-delete", function () {
+    var $col = $(this).closest(".col-md-6");
+    var characterName = $col.find("[data-field='name']").text().trim();
+
+    if ($("#character-cards .nf-char-card:not(.nf-char-card-add)").length <= 1) {
       showAlert("Cannot delete the last character. At least one character is required.", "warning");
       return;
     }
-    
+
     if (confirm("Delete character '" + characterName + "'?")) {
-      $row.remove();
+      $col.remove();
+      _syncCharTableFromCards();
       markOutlineDirty();
       syncPerspectiveDropdown();
     }
   });
+
+  // Mark dirty on character card edits
+  $(document).on("input", "#character-cards .editable-cell", markOutlineDirty);
 
   // -------------------------------------------------------------------
   // Add/Delete Chapter Functions
   // -------------------------------------------------------------------
   function addChapterRow(number, title, summary) {
     var chLabel = "Chapter " + escapeHtml(number);
+
+    // Table row
     var row =
       "<tr>" +
       "<td class='chapter-number'>" + escapeHtml(number) + "</td>" +
@@ -663,11 +723,38 @@ $(function () {
       "</td>" +
       "</tr>";
     $("#chapter-tbody").append(row);
+
+    // Card
+    var card =
+      '<div class="nf-chapter-card" draggable="true">' +
+      '<div class="nf-chapter-kebab dropdown">' +
+      '<button class="btn btn-sm btn-link text-muted" data-bs-toggle="dropdown" aria-expanded="false" title="Actions"><i class="bi bi-three-dots-vertical"></i></button>' +
+      '<ul class="dropdown-menu dropdown-menu-end">' +
+      '<li><button class="dropdown-item btn-card-move-up"><i class="bi bi-arrow-up me-2"></i>Move Up</button></li>' +
+      '<li><button class="dropdown-item btn-card-move-down"><i class="bi bi-arrow-down me-2"></i>Move Down</button></li>' +
+      '<li><hr class="dropdown-divider"></li>' +
+      '<li><button class="dropdown-item btn-card-add-before"><i class="bi bi-plus-circle me-2"></i>Add Before</button></li>' +
+      '<li><button class="dropdown-item btn-card-add-after"><i class="bi bi-plus-circle me-2"></i>Add After</button></li>' +
+      '<li><hr class="dropdown-divider"></li>' +
+      '<li><button class="dropdown-item text-danger btn-card-delete"><i class="bi bi-trash me-2"></i>Delete</button></li>' +
+      '</ul>' +
+      '</div>' +
+      '<div class="nf-chapter-card-header">' +
+      '<span class="nf-chapter-badge chapter-number">' + escapeHtml(number) + '</span>' +
+      '<div class="nf-chapter-card-title editable-cell" contenteditable="true" data-field="title" role="textbox" aria-label="' + chLabel + ' title">' + escapeHtml(title) + '</div>' +
+      '</div>' +
+      '<div class="nf-chapter-card-summary editable-cell" contenteditable="true" data-field="summary" role="textbox" aria-label="' + chLabel + ' summary">' + escapeHtml(summary) + '</div>' +
+      '</div>';
+    $("#chapter-cards").append(card);
+
     renumberChapters();
   }
 
   function renumberChapters() {
     $("#chapter-tbody tr").each(function (idx) {
+      $(this).find(".chapter-number").text(idx + 1);
+    });
+    $("#chapter-cards .nf-chapter-card").each(function (idx) {
       $(this).find(".chapter-number").text(idx + 1);
     });
   }
@@ -749,6 +836,227 @@ $(function () {
   });
 
   // -------------------------------------------------------------------
+  // Card view helpers and event handlers
+  // -------------------------------------------------------------------
+  function buildNewChapterCardHtml() {
+    return (
+      '<div class="nf-chapter-card" draggable="true">' +
+      '<div class="nf-chapter-kebab dropdown">' +
+      '<button class="btn btn-sm btn-link text-muted" data-bs-toggle="dropdown" aria-expanded="false" title="Actions"><i class="bi bi-three-dots-vertical"></i></button>' +
+      '<ul class="dropdown-menu dropdown-menu-end">' +
+      '<li><button class="dropdown-item btn-card-move-up"><i class="bi bi-arrow-up me-2"></i>Move Up</button></li>' +
+      '<li><button class="dropdown-item btn-card-move-down"><i class="bi bi-arrow-down me-2"></i>Move Down</button></li>' +
+      '<li><hr class="dropdown-divider"></li>' +
+      '<li><button class="dropdown-item btn-card-add-before"><i class="bi bi-plus-circle me-2"></i>Add Before</button></li>' +
+      '<li><button class="dropdown-item btn-card-add-after"><i class="bi bi-plus-circle me-2"></i>Add After</button></li>' +
+      '<li><hr class="dropdown-divider"></li>' +
+      '<li><button class="dropdown-item text-danger btn-card-delete"><i class="bi bi-trash me-2"></i>Delete</button></li>' +
+      '</ul>' +
+      '</div>' +
+      '<div class="nf-chapter-card-header">' +
+      '<span class="nf-chapter-badge chapter-number"></span>' +
+      '<div class="nf-chapter-card-title editable-cell" contenteditable="true" data-field="title" role="textbox" aria-label="Chapter title">New Chapter</div>' +
+      '</div>' +
+      '<div class="nf-chapter-card-summary editable-cell" contenteditable="true" data-field="summary" role="textbox" aria-label="Chapter summary">Enter chapter summary...</div>' +
+      '</div>'
+    );
+  }
+
+  // Sync: rebuild table rows from cards (called when switching to table view or on approve)
+  function _syncTableFromCards() {
+    var $tbody = $("#chapter-tbody").empty();
+    $("#chapter-cards .nf-chapter-card").each(function (idx) {
+      var $card = $(this);
+      var title = $card.find("[data-field='title']").text().trim();
+      var summary = $card.find("[data-field='summary']").text().trim();
+      // Build table row without re-calling addChapterRow (avoids recursion)
+      var chLabel = "Chapter " + (idx + 1);
+      var row =
+        "<tr>" +
+        "<td class='chapter-number'>" + (idx + 1) + "</td>" +
+        "<td><div class='editable-cell' contenteditable='true' data-field='title' role='textbox' aria-label='" + chLabel + " title'>" +
+        escapeHtml(title) + "</div></td>" +
+        "<td><div class='editable-cell' contenteditable='true' data-field='summary' role='textbox' aria-label='" + chLabel + " summary'>" +
+        escapeHtml(summary) + "</div></td>" +
+        "<td class='text-center'>" +
+        "<div class='btn-group btn-group-sm me-1' role='group'>" +
+        "<button class='btn btn-outline-secondary btn-move-up' title='Move Up'><i class='bi bi-arrow-up'></i></button>" +
+        "<button class='btn btn-outline-secondary btn-move-down' title='Move Down'><i class='bi bi-arrow-down'></i></button>" +
+        "</div>" +
+        "<div class='btn-group btn-group-sm me-1' role='group'>" +
+        "<button class='btn btn-outline-success btn-add-before' title='Add Before'><i class='bi bi-plus-circle'></i></button>" +
+        "<button class='btn btn-outline-success btn-add-after' title='Add After'><i class='bi bi-plus-circle'></i></button>" +
+        "</div>" +
+        "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter'><i class='bi bi-trash'></i></button>" +
+        "</td></tr>";
+      $tbody.append(row);
+    });
+  }
+
+  // Sync: rebuild cards from table rows (called when switching to card view)
+  function _syncCardsFromTable() {
+    var $cards = $("#chapter-cards").empty();
+    $("#chapter-tbody tr").each(function (idx) {
+      var $row = $(this);
+      var title = $row.find("[data-field='title']").text().trim();
+      var summary = $row.find("[data-field='summary']").text().trim();
+      var num = idx + 1;
+      var chLabel = "Chapter " + num;
+      var card =
+        '<div class="nf-chapter-card" draggable="true">' +
+        '<div class="nf-chapter-kebab dropdown">' +
+        '<button class="btn btn-sm btn-link text-muted" data-bs-toggle="dropdown" aria-expanded="false" title="Actions"><i class="bi bi-three-dots-vertical"></i></button>' +
+        '<ul class="dropdown-menu dropdown-menu-end">' +
+        '<li><button class="dropdown-item btn-card-move-up"><i class="bi bi-arrow-up me-2"></i>Move Up</button></li>' +
+        '<li><button class="dropdown-item btn-card-move-down"><i class="bi bi-arrow-down me-2"></i>Move Down</button></li>' +
+        '<li><hr class="dropdown-divider"></li>' +
+        '<li><button class="dropdown-item btn-card-add-before"><i class="bi bi-plus-circle me-2"></i>Add Before</button></li>' +
+        '<li><button class="dropdown-item btn-card-add-after"><i class="bi bi-plus-circle me-2"></i>Add After</button></li>' +
+        '<li><hr class="dropdown-divider"></li>' +
+        '<li><button class="dropdown-item text-danger btn-card-delete"><i class="bi bi-trash me-2"></i>Delete</button></li>' +
+        '</ul></div>' +
+        '<div class="nf-chapter-card-header">' +
+        '<span class="nf-chapter-badge chapter-number">' + num + '</span>' +
+        '<div class="nf-chapter-card-title editable-cell" contenteditable="true" data-field="title" role="textbox" aria-label="' + chLabel + ' title">' + escapeHtml(title) + '</div>' +
+        '</div>' +
+        '<div class="nf-chapter-card-summary editable-cell" contenteditable="true" data-field="summary" role="textbox" aria-label="' + chLabel + ' summary">' + escapeHtml(summary) + '</div>' +
+        '</div>';
+      $cards.append(card);
+    });
+  }
+
+  // Card view: move up
+  $("#chapter-cards").on("click", ".btn-card-move-up", function () {
+    var $card = $(this).closest(".nf-chapter-card");
+    var $prev = $card.prev(".nf-chapter-card");
+    if ($prev.length) {
+      $card.insertBefore($prev);
+      renumberChapters();
+      _syncTableFromCards();
+      markOutlineDirty();
+    }
+  });
+
+  // Card view: move down
+  $("#chapter-cards").on("click", ".btn-card-move-down", function () {
+    var $card = $(this).closest(".nf-chapter-card");
+    var $next = $card.next(".nf-chapter-card");
+    if ($next.length) {
+      $card.insertAfter($next);
+      renumberChapters();
+      _syncTableFromCards();
+      markOutlineDirty();
+    }
+  });
+
+  // Card view: add before
+  $("#chapter-cards").on("click", ".btn-card-add-before", function () {
+    var $card = $(this).closest(".nf-chapter-card");
+    $card.before(buildNewChapterCardHtml());
+    renumberChapters();
+    _syncTableFromCards();
+    markOutlineDirty();
+  });
+
+  // Card view: add after
+  $("#chapter-cards").on("click", ".btn-card-add-after", function () {
+    var $card = $(this).closest(".nf-chapter-card");
+    $card.after(buildNewChapterCardHtml());
+    renumberChapters();
+    _syncTableFromCards();
+    markOutlineDirty();
+  });
+
+  // Card view: delete
+  $("#chapter-cards").on("click", ".btn-card-delete", function () {
+    var $card = $(this).closest(".nf-chapter-card");
+    var chapterNum = $card.find(".chapter-number").text();
+    if ($("#chapter-cards .nf-chapter-card").length <= 1) {
+      showAlert("Cannot delete the last chapter. At least one chapter is required.", "warning");
+      return;
+    }
+    if (confirm("Delete Chapter " + chapterNum + "?")) {
+      $card.remove();
+      renumberChapters();
+      _syncTableFromCards();
+      markOutlineDirty();
+    }
+  });
+
+  // Card view: mark dirty on edit
+  $(document).on("input", "#chapter-cards .editable-cell", markOutlineDirty);
+
+  // -------------------------------------------------------------------
+  // View toggle (Card / Table)
+  // -------------------------------------------------------------------
+  $("#btn-view-cards").on("click", function () {
+    if ($(this).hasClass("active")) return;
+    $(this).addClass("active");
+    $("#btn-view-table").removeClass("active");
+    _syncCardsFromTable();
+    $("#chapter-cards").removeClass("d-none");
+    $("#chapter-table-wrap").addClass("d-none");
+  });
+
+  $("#btn-view-table").on("click", function () {
+    if ($(this).hasClass("active")) return;
+    $(this).addClass("active");
+    $("#btn-view-cards").removeClass("active");
+    _syncTableFromCards();
+    $("#chapter-table-wrap").removeClass("d-none");
+    $("#chapter-cards").addClass("d-none");
+  });
+
+  // -------------------------------------------------------------------
+  // Drag and drop for chapter cards
+  // -------------------------------------------------------------------
+  var _draggedCard = null;
+
+  $("#chapter-cards").on("dragstart", ".nf-chapter-card", function (e) {
+    _draggedCard = this;
+    $(this).addClass("dragging");
+    e.originalEvent.dataTransfer.effectAllowed = "move";
+  });
+
+  $("#chapter-cards").on("dragend", ".nf-chapter-card", function () {
+    $(this).removeClass("dragging");
+    $(".nf-chapter-card").removeClass("drag-over");
+    _draggedCard = null;
+  });
+
+  $("#chapter-cards").on("dragover", ".nf-chapter-card", function (e) {
+    e.preventDefault();
+    e.originalEvent.dataTransfer.dropEffect = "move";
+    if (this !== _draggedCard) {
+      $(this).addClass("drag-over");
+    }
+  });
+
+  $("#chapter-cards").on("dragleave", ".nf-chapter-card", function () {
+    $(this).removeClass("drag-over");
+  });
+
+  $("#chapter-cards").on("drop", ".nf-chapter-card", function (e) {
+    e.preventDefault();
+    $(this).removeClass("drag-over");
+    if (_draggedCard && this !== _draggedCard) {
+      var $dragged = $(_draggedCard);
+      var $target = $(this);
+      // Determine if we should insert before or after based on position
+      var targetRect = this.getBoundingClientRect();
+      var midY = targetRect.top + targetRect.height / 2;
+      if (e.originalEvent.clientY < midY) {
+        $dragged.insertBefore($target);
+      } else {
+        $dragged.insertAfter($target);
+      }
+      renumberChapters();
+      _syncTableFromCards();
+      markOutlineDirty();
+    }
+  });
+
+  // -------------------------------------------------------------------
   // Back button on outline step
   // -------------------------------------------------------------------
   $("#btn-back-to-input").on("click", function () {
@@ -767,6 +1075,11 @@ $(function () {
       return;
     }
 
+    // Sync table from cards if card view is active
+    if (!$("#chapter-cards").hasClass("d-none")) {
+      _syncTableFromCards();
+    }
+
     // Collect edited chapters from table
     var chapters = [];
     $("#chapter-tbody tr").each(function (idx) {
@@ -777,6 +1090,9 @@ $(function () {
         summary: $row.find("[data-field='summary']").text().trim(),
       });
     });
+
+    // Sync character table from cards
+    _syncCharTableFromCards();
 
     // Collect edited characters
     var characters = [];
@@ -1227,33 +1543,36 @@ $(function () {
       return;
     }
 
-    // Compute per-chapter stats and totals
-    var totalWords = 0;
-    var totalTime = 0;
-    var totalCalls = 0;
-    var totalTokens = 0;
+    // Pre-compute per-chapter data and find max values
+    var totalWords = 0, totalTime = 0, totalCalls = 0, totalTokens = 0;
+    var maxWords = 0, maxTime = 0;
+    var rows = [];
 
     $.each(chapters, function (_, ch) {
       var words = ch.word_count || (ch.content ? ch.content.split(/\s+/).length : 0);
       var timeSec = ch.generation_time_seconds || 0;
       var calls = ch.llm_calls || 0;
       var tokens = ch.total_tokens || 0;
+      totalWords += words; totalTime += timeSec; totalCalls += calls; totalTokens += tokens;
+      if (words > maxWords) maxWords = words;
+      if (timeSec > maxTime) maxTime = timeSec;
+      rows.push({ ch: ch, words: words, timeSec: timeSec, calls: calls, tokens: tokens });
+    });
 
-      totalWords += words;
-      totalTime += timeSec;
-      totalCalls += calls;
-      totalTokens += tokens;
-
-      var timeStr = timeSec > 0 ? _formatDuration(timeSec) : "-";
-      var tokensStr = tokens > 0 ? tokens.toLocaleString() : "-";
-      var callsStr = calls > 0 ? calls.toLocaleString() : "-";
+    $.each(rows, function (_, r) {
+      var timeStr = r.timeSec > 0 ? _formatDuration(r.timeSec) : "-";
+      var tokensStr = r.tokens > 0 ? r.tokens.toLocaleString() : "-";
+      var callsStr = r.calls > 0 ? r.calls.toLocaleString() : "-";
+      var wordsPct = maxWords > 0 ? Math.round((r.words / maxWords) * 100) : 0;
+      var wordsBadge = (r.words === maxWords && chapters.length > 1) ? ' <span class="nf-stat-badge nf-stat-badge-words">longest</span>' : "";
+      var timeBadge = (r.timeSec === maxTime && maxTime > 0 && chapters.length > 1) ? ' <span class="nf-stat-badge nf-stat-badge-time">slowest</span>' : "";
 
       $tbody.append(
         "<tr>" +
-        "<td>" + escapeHtml(ch.number) + "</td>" +
-        "<td>" + escapeHtml(ch.title || "") + "</td>" +
-        '<td class="text-end">' + words.toLocaleString() + "</td>" +
-        '<td class="text-end">' + timeStr + "</td>" +
+        "<td>" + escapeHtml(r.ch.number) + "</td>" +
+        "<td>" + escapeHtml(r.ch.title || "") + "</td>" +
+        '<td class="text-end nf-sparkline" style="background-size: ' + wordsPct + '% 60%">' + r.words.toLocaleString() + wordsBadge + "</td>" +
+        '<td class="text-end">' + timeStr + timeBadge + "</td>" +
         '<td class="text-end">' + callsStr + "</td>" +
         '<td class="text-end">' + tokensStr + "</td>" +
         "</tr>"

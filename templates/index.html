@@ -277,8 +277,25 @@
                 </div>
 
                 <!-- Chapter Outline -->
-                <h5 class="fw-semibold mb-2">Chapter Outline</h5>
-                <div class="table-responsive mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h5 class="fw-semibold mb-0">Chapter Outline</h5>
+                  <div class="btn-group btn-group-sm" role="group" aria-label="View toggle">
+                    <button class="btn btn-outline-secondary active" id="btn-view-cards" title="Card view">
+                      <i class="bi bi-grid"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary" id="btn-view-table" title="Table view">
+                      <i class="bi bi-table"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Card view (default) -->
+                <div id="chapter-cards" class="mb-4" aria-label="Chapter outline cards">
+                  <!-- Populated by JS -->
+                </div>
+
+                <!-- Table view (hidden by default) -->
+                <div class="table-responsive mb-4 d-none" id="chapter-table-wrap">
                   <table class="table table-bordered table-hover align-top" id="chapter-table" aria-label="Chapter outline">
                     <thead class="table-dark">
                       <tr>
@@ -314,27 +331,25 @@
                 </div>
 
                 <!-- Characters -->
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <h5 class="fw-semibold mb-0">Main Characters</h5>
-                  <button class="btn btn-sm btn-outline-primary" id="btn-add-character">
-                    <i class="bi bi-plus-circle me-1"></i>Add Character
-                  </button>
+                <h5 class="fw-semibold mb-3">Main Characters</h5>
+
+                <!-- Card grid (default) -->
+                <div class="row g-3 mb-4" id="character-cards">
+                  <!-- Populated by JS -->
+                  <!-- Add character card -->
+                  <div class="col-md-6" id="add-character-card-col">
+                    <div class="nf-char-card nf-char-card-add" id="btn-add-character" role="button" tabindex="0"
+                      aria-label="Add a new character">
+                      <i class="bi bi-plus-lg"></i>
+                      <span>Add Character</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="table-responsive mb-4">
-                  <table class="table table-bordered table-hover align-top" id="characters-table" aria-label="Character development">
-                    <thead class="table-dark">
-                      <tr>
-                        <th scope="col">Name</th>
-                        <th scope="col">Age</th>
-                        <th scope="col">Role</th>
-                        <th scope="col">Background</th>
-                        <th scope="col">Arc</th>
-                        <th scope="col" style="width:80px">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="characters-tbody">
-                      <!-- Populated by JS -->
-                    </tbody>
+
+                <!-- Hidden table for data collection -->
+                <div class="d-none">
+                  <table id="characters-table">
+                    <tbody id="characters-tbody"></tbody>
                   </table>
                 </div>
               </div>
@@ -484,7 +499,7 @@
                     </div>
                     <div class="table-responsive">
                       <table class="table table-sm table-bordered align-middle mb-0" aria-label="Per-chapter writing statistics">
-                        <thead class="table-dark">
+                        <thead>
                           <tr>
                             <th scope="col">#</th>
                             <th scope="col">Title</th>

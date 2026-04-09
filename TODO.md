@@ -187,7 +187,7 @@ The plain Bootstrap nav-tabs look generic. Replace with a horizontal step indica
 
 ## 5. Tables → Editorial Cards
 
-### 5.1 — Rethink the chapter outline table (Step 2a)
+### 5.1 — Rethink the chapter outline table (Step 2a) ✅
 
 **Files:** `templates/index.html`, `static/css/style.css`, `static/js/script.js`
 
@@ -200,7 +200,7 @@ The dense table layout makes editing feel like data entry. Replace with a card-l
 
 ---
 
-### 5.2 — Rethink the character table (Step 2b)
+### 5.2 — Rethink the character table (Step 2b) ✅
 
 **Files:** `templates/index.html`, `static/css/style.css`, `static/js/script.js`
 
@@ -213,7 +213,7 @@ Replace the character table with character cards:
 
 ---
 
-### 5.3 — Style the writing statistics table (Step 4)
+### 5.3 — Style the writing statistics table (Step 4) ✅
 
 **Files:** `static/css/style.css`
 

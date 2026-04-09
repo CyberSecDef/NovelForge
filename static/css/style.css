@@ -167,6 +167,234 @@ input.nf-title {
   transform: rotate(90deg);
 }
 
+/* Chapter outline cards */
+.nf-chapter-card {
+  position: relative;
+  border: 1px solid var(--nf-border);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+  background: var(--nf-parchment);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  cursor: grab;
+}
+
+.nf-chapter-card:hover {
+  border-color: var(--nf-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.nf-chapter-card.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.nf-chapter-card.drag-over {
+  border-color: var(--nf-gold);
+  box-shadow: 0 0 0 2px rgba(196, 150, 12, 0.25);
+}
+
+.nf-chapter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--nf-ink);
+  color: #fff;
+  font-size: var(--nf-scale-caption);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.nf-chapter-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.nf-chapter-card-title {
+  font-family: var(--nf-font-literary);
+  font-size: 1.05rem;
+  font-weight: 600;
+  flex: 1;
+  min-height: 1.4em;
+}
+
+.nf-chapter-card-summary {
+  font-family: var(--nf-font-literary);
+  font-size: 0.93rem;
+  line-height: 1.65;
+  color: var(--nf-text-muted);
+  min-height: 1.4em;
+}
+
+.nf-chapter-card-summary:focus,
+.nf-chapter-card-title:focus {
+  outline: none;
+  color: var(--nf-text);
+}
+
+/* Kebab menu — visible on hover */
+.nf-chapter-kebab {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.nf-chapter-card:hover .nf-chapter-kebab,
+.nf-chapter-kebab.show {
+  opacity: 1;
+}
+
+.nf-chapter-kebab .btn {
+  padding: 0.15rem 0.4rem;
+  line-height: 1;
+}
+
+/* Dark mode chapter cards */
+[data-bs-theme="dark"] .nf-chapter-card {
+  background: #212529;
+  border-color: var(--nf-border);
+}
+
+[data-bs-theme="dark"] .nf-chapter-card:hover {
+  border-color: var(--nf-gold);
+}
+
+/* Character cards */
+.nf-char-card {
+  border: 1px solid var(--nf-border);
+  border-left: 4px solid var(--nf-border);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  background: var(--nf-parchment);
+  height: 100%;
+  position: relative;
+  transition: box-shadow 0.2s ease;
+}
+
+.nf-char-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.nf-char-card-name {
+  font-family: var(--nf-font-literary);
+  font-size: 1.1rem;
+  font-weight: 700;
+  min-height: 1.4em;
+}
+
+.nf-char-card-role {
+  display: inline-block;
+  font-size: var(--nf-scale-caption);
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 1rem;
+  background: rgba(27, 42, 74, 0.08);
+  color: var(--nf-ink);
+  min-height: 1.2em;
+}
+
+.nf-char-card-age {
+  font-size: var(--nf-scale-caption);
+  color: var(--nf-text-muted);
+}
+
+.nf-char-card-section-label {
+  font-size: var(--nf-scale-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--nf-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.nf-char-card-section-label .bi {
+  transition: transform 0.2s ease;
+}
+
+.nf-char-card-section-label[aria-expanded="true"] .bi {
+  transform: rotate(90deg);
+}
+
+.nf-char-card-body {
+  font-family: var(--nf-font-literary);
+  font-size: 0.93rem;
+  line-height: 1.6;
+  min-height: 1.4em;
+}
+
+.nf-char-card-body:focus {
+  outline: none;
+  color: var(--nf-text);
+}
+
+.nf-char-card-delete {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.nf-char-card:hover .nf-char-card-delete {
+  opacity: 1;
+}
+
+/* Add character card */
+.nf-char-card-add {
+  border-style: dashed;
+  border-left-width: 1px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 120px;
+  color: var(--nf-text-muted);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.nf-char-card-add:hover {
+  color: var(--nf-ink);
+  border-color: var(--nf-ink);
+}
+
+.nf-char-card-add i {
+  font-size: 1.5rem;
+}
+
+/* Character color palette for left borders */
+.nf-char-color-0 { border-left-color: #4A90D9; }
+.nf-char-color-1 { border-left-color: #D94A6B; }
+.nf-char-color-2 { border-left-color: #5CB85C; }
+.nf-char-color-3 { border-left-color: #F0AD4E; }
+.nf-char-color-4 { border-left-color: #9B59B6; }
+.nf-char-color-5 { border-left-color: #1ABC9C; }
+.nf-char-color-6 { border-left-color: #E67E22; }
+.nf-char-color-7 { border-left-color: #3498DB; }
+
+/* Dark mode */
+[data-bs-theme="dark"] .nf-char-card {
+  background: #212529;
+}
+
+[data-bs-theme="dark"] .nf-char-card-role {
+  background: rgba(164, 184, 217, 0.15);
+}
+
+[data-bs-theme="dark"] .nf-char-card-add:hover {
+  color: var(--nf-gold);
+  border-color: var(--nf-gold);
+}
+
 /* Chapter summary cells in outline table — serif for readability */
 #chapter-tbody .editable-cell,
 #characters-tbody .editable-cell {
@@ -566,6 +794,58 @@ h6 { font-size: var(--nf-scale-body); }
   background-color: rgba(255, 107, 107, 0.1);
 }
 
+/* Writing statistics table */
+#writing-stats-tbody tr:nth-child(even) {
+  background-color: rgba(27, 42, 74, 0.03);
+}
+
+#writing-stats-tbody tr:hover {
+  background-color: rgba(27, 42, 74, 0.06);
+}
+
+#writing-stats-panel .table thead {
+  background: linear-gradient(135deg, var(--nf-ink), var(--nf-ink-light));
+  color: #fff;
+}
+
+#writing-stats-panel .table thead th {
+  border-color: rgba(255, 255, 255, 0.15);
+  font-weight: 600;
+  font-size: var(--nf-scale-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Word count sparkline bar */
+.nf-sparkline {
+  background-repeat: no-repeat;
+  background-position: left center;
+  background-size: 0% 60%;
+  background-image: linear-gradient(90deg, rgba(196, 150, 12, 0.18), rgba(196, 150, 12, 0.08));
+  transition: background-size 0.4s ease;
+}
+
+/* Highlight badges for max values */
+.nf-stat-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.75rem;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+.nf-stat-badge-words {
+  background: rgba(196, 150, 12, 0.15);
+  color: #8B6914;
+}
+
+.nf-stat-badge-time {
+  background: rgba(27, 42, 74, 0.1);
+  color: var(--nf-ink);
+}
+
 /* Make tables more readable */
 #chapter-table td,
 #characters-table td {
@@ -909,6 +1189,24 @@ h6 { font-size: var(--nf-scale-body); }
 [data-bs-theme="dark"] #writing-stats-summary .card {
   background-color: #2b3035;
   border-color: #495057;
+}
+
+[data-bs-theme="dark"] #writing-stats-tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-bs-theme="dark"] #writing-stats-tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-bs-theme="dark"] .nf-stat-badge-words {
+  background: rgba(212, 166, 28, 0.2);
+  color: #d4a61c;
+}
+
+[data-bs-theme="dark"] .nf-stat-badge-time {
+  background: rgba(255, 255, 255, 0.1);
+  color: #a3b8d9;
 }
 
 /* Modal (if any remain) */
