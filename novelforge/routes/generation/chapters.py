@@ -193,6 +193,7 @@ def _run_chapter_generation_internal(
     character_state_log = list(character_state_log) if character_state_log else []
     compression_guidance: str = ""
     degraded_passes: list[dict] = []
+    rhythm_log: list[dict] = []
 
     # Format voice seed for prompt injection
     from novelforge.voice import format_voice_prompt
@@ -295,10 +296,12 @@ def _run_chapter_generation_internal(
                 chapter_summary=chapter_outline_summary,
                 previous_summaries=previous_summaries,
                 title=title, chapter_architecture_context=chapter_architecture_context,
+                rhythm_log=rhythm_log,
                 degraded_passes=degraded_passes,
             )
             chapter_rhythm_shape = str(rhythm_result.get("recommended_shape_for_this_chapter", "")).strip()
             chapter_rhythm_reason = str(rhythm_result.get("recommendation_reason", "")).strip()
+            chapter_detected_patterns = rhythm_result.get("detected_patterns", [])
 
             # 1. Draft (with content-rejection retry)
             _set_step(f"Chapter {chapter_num}: drafting")
@@ -340,6 +343,8 @@ def _run_chapter_generation_internal(
                 previous_summaries=previous_summaries,
                 ctx=ch_ctx, step_callback=_set_step, deadline=chapter_deadline,
                 degraded_passes=degraded_passes,
+                chapter_rhythm_shape=chapter_rhythm_shape,
+                chapter_rhythm_reason=chapter_rhythm_reason,
             )
             summaries.append(summary)
 
@@ -358,6 +363,12 @@ def _run_chapter_generation_internal(
                 previous_summaries=previous_summaries, title=title,
                 degraded_passes=degraded_passes,
             )
+
+            rhythm_log.append({
+                "chapter": chapter_num,
+                "recommended": chapter_rhythm_shape,
+                "detected_patterns": chapter_detected_patterns,
+            })
 
             chapter_elapsed = round(time.monotonic() - chapter_start_time, 1)
             chapter_usage = get_llm_usage()

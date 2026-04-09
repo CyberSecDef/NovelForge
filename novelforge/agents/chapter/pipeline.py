@@ -30,6 +30,7 @@ from novelforge.agents.chapter.prompts import (
     build_per_chapter_compression_check_prompt,
     build_polish_agent_prompt,
     build_prose_refinement_agent_prompt,
+    build_rhythm_compliance_verifier_prompt,
     build_quality_controller_prompt,
     build_scene_variety_compression_auditor_prompt,
     build_structure_agent_prompt,
@@ -46,6 +47,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def run_scene_variety_compression_auditor(chapter_text: str, chapter_summary: str, chapter_num: int, title: str,
+                                           previous_summaries: str = "",
                                            degraded_passes: list[dict] | None = None) -> str:
     """Run the scene variety audit, returning directives or empty string on failure."""
     try:
@@ -53,6 +55,7 @@ def run_scene_variety_compression_auditor(chapter_text: str, chapter_summary: st
             build_scene_variety_compression_auditor_prompt(
                 chapter_text=chapter_text, chapter_summary=chapter_summary,
                 chapter_num=chapter_num, title=title,
+                previous_summaries=previous_summaries,
             ),
             action=f"Chapter {chapter_num}: scene variety & compression audit",
         )
@@ -158,6 +161,7 @@ def run_continuity_gatekeeper(
 def run_chapter_rhythm_classifier(
     chapter_num: int, chapter_title: str, chapter_summary: str, previous_summaries: str, title: str,
     chapter_architecture_context: str = "",
+    rhythm_log: list[dict] | None = None,
     degraded_passes: list[dict] | None = None,
 ) -> dict:
     """Run the chapter rhythm classifier, returning a dict with shape recommendation or PASS_FAILURE_KEY on failure."""
@@ -167,6 +171,7 @@ def run_chapter_rhythm_classifier(
                 chapter_num=chapter_num, chapter_title=chapter_title,
                 chapter_summary=chapter_summary, previous_summaries=previous_summaries,
                 title=title, chapter_architecture_context=chapter_architecture_context,
+                rhythm_log=rhythm_log or [],
             ),
             action=f"Classifying chapter rhythm for Chapter {chapter_num}",
             json_mode=True,
@@ -210,6 +215,8 @@ def _run_all_chapter_agents(
     step_callback: Callable[[str], None] | None = None,
     deadline: float = 0,
     degraded_passes: list[dict] | None = None,
+    chapter_rhythm_shape: str = "",
+    chapter_rhythm_reason: str = "",
 ) -> tuple[str, str]:
     """
     Run all chapter refinement agents (post-draft) and return:
@@ -241,6 +248,18 @@ def _run_all_chapter_agents(
             chapter_num=chapter_num, title=title, json_mode=json_mode,
         )
 
+    # Rhythm compliance verifier — ensure draft follows assigned rhythm
+    if chapter_rhythm_shape:
+        _check_deadline()
+        if step_callback:
+            step_callback(f"Chapter {chapter_num}: verifying rhythm compliance")
+        text = _safe(
+            lambda t: build_rhythm_compliance_verifier_prompt(
+                t, chapter_num, title, chapter_rhythm_shape, chapter_rhythm_reason,
+            ),
+            text, action=f"Chapter {chapter_num}: rhythm compliance",
+        )
+
     _check_deadline()
     if step_callback:
         step_callback(f"Chapter {chapter_num}: prose refinement (dialogue + scenes)")
@@ -265,6 +284,7 @@ def _run_all_chapter_agents(
     scene_audit_directives = run_scene_variety_compression_auditor(
         chapter_text=text, chapter_summary=chapter_outline_summary,
         chapter_num=chapter_num, title=title,
+        previous_summaries=previous_summaries,
         degraded_passes=degraded_passes,
     )
 
@@ -293,6 +313,7 @@ def _run_all_chapter_agents(
     text = _safe(
         lambda t: build_narrative_momentum_distinctiveness_prompt(
             t, previous_summaries, chapter_outline_summary, chapter_num, title, total_chapters,
+            chapter_rhythm_shape=chapter_rhythm_shape,
         ),
         text, action=f"Chapter {chapter_num}: momentum & distinctiveness",
     )
@@ -313,6 +334,7 @@ def _run_all_chapter_agents(
     text = _safe(
         lambda t: build_structure_agent_prompt(
             t, chapter_num, total_chapters, chapter_outline_summary, ctx.architecture,
+            chapter_rhythm_shape=chapter_rhythm_shape,
         ),
         text, action=f"Chapter {chapter_num}: checking structure",
     )
@@ -323,6 +345,7 @@ def _run_all_chapter_agents(
     text = _safe(
         lambda t: build_operational_distinctiveness_prompt(
             t, previous_summaries, chapter_outline_summary, chapter_num, title,
+            chapter_rhythm_shape=chapter_rhythm_shape,
         ),
         text, action=f"Chapter {chapter_num}: verifying operational distinctiveness",
     )

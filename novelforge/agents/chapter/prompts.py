@@ -120,21 +120,28 @@ def build_voice_dialogue_differentiation_prompt(
     )
 
 
-def build_scene_variety_compression_auditor_prompt(chapter_text: str, chapter_summary: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+def build_scene_variety_compression_auditor_prompt(
+    chapter_text: str, chapter_summary: str, chapter_num: int, title: str,
+    previous_summaries: str = "",
+) -> list[dict[str, str]]:
     """Build the scene variety and compression audit prompt."""
     return render_prompt("scene_variety_compression_auditor", title=title, chapter_num=chapter_num,
-                         chapter_summary=chapter_summary, chapter_text=chapter_text)
+                         chapter_summary=chapter_summary, previous_summaries=previous_summaries or "",
+                         chapter_text=chapter_text)
 
 
 def build_structure_agent_prompt(chapter_text: str, chapter_num: int, total_chapters: int, outline_summary: str,
-                                  chapter_architecture_context: str = "") -> list[dict[str, str]]:
+                                  chapter_architecture_context: str = "",
+                                  chapter_rhythm_shape: str = "") -> list[dict[str, str]]:
     """Build the structure validation prompt with phase hints from ChapterPosition."""
     from novelforge.chapter_position import ChapterPosition
     phase_hint = ChapterPosition(chapter_num, total_chapters).get_structure_phase_hint()
     return render_prompt(
         "structure_agent", chapter_num=chapter_num, total_chapters=total_chapters,
         phase_hint=phase_hint, outline_summary=outline_summary,
-        chapter_architecture_context=chapter_architecture_context or "", chapter_text=chapter_text,
+        chapter_architecture_context=chapter_architecture_context or "",
+        chapter_rhythm_shape=chapter_rhythm_shape or "",
+        chapter_text=chapter_text,
     )
 
 
@@ -194,6 +201,7 @@ def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_
 
 def build_narrative_momentum_distinctiveness_prompt(
     chapter_text: str, previous_summaries: str, chapter_summary: str, chapter_num: int, title: str, total_chapters: int,
+    chapter_rhythm_shape: str = "",
 ) -> list[dict[str, str]]:
     """Build the cross-chapter redundancy and escalation prompt."""
     from novelforge.chapter_position import ChapterPosition
@@ -202,6 +210,7 @@ def build_narrative_momentum_distinctiveness_prompt(
         "narrative_momentum_distinctiveness", title=title, chapter_num=chapter_num,
         total_chapters=total_chapters, escalation_target=escalation_target,
         chapter_summary=chapter_summary, previous_summaries=previous_summaries or "",
+        chapter_rhythm_shape=chapter_rhythm_shape or "",
         chapter_text=chapter_text,
     )
 
@@ -221,11 +230,13 @@ def build_human_oddities_prompt(
 
 
 def build_operational_distinctiveness_prompt(chapter_text: str, previous_summaries: str, chapter_summary: str,
-                                              chapter_num: int, title: str) -> list[dict[str, str]]:
+                                              chapter_num: int, title: str,
+                                              chapter_rhythm_shape: str = "") -> list[dict[str, str]]:
     """Build the operational distinctiveness prompt for strategy variation."""
     return render_prompt(
         "operational_distinctiveness", title=title, chapter_num=chapter_num,
         chapter_summary=chapter_summary, previous_summaries=previous_summaries or "",
+        chapter_rhythm_shape=chapter_rhythm_shape or "",
         chapter_text=chapter_text,
     )
 
@@ -312,16 +323,37 @@ def build_continuity_gatekeeper_prompt(
     )
 
 
+def build_rhythm_compliance_verifier_prompt(
+    chapter_text: str, chapter_num: int, title: str,
+    chapter_rhythm_shape: str, chapter_rhythm_reason: str,
+) -> list[dict[str, str]]:
+    """Build the rhythm compliance verification prompt."""
+    return render_prompt(
+        "rhythm_compliance_verifier", title=title, chapter_num=chapter_num,
+        chapter_rhythm_shape=chapter_rhythm_shape,
+        chapter_rhythm_reason=chapter_rhythm_reason,
+        chapter_text=chapter_text,
+    )
+
+
 def build_chapter_rhythm_classifier_prompt(
     chapter_num: int, chapter_title: str, chapter_summary: str, previous_summaries: str, title: str,
     chapter_architecture_context: str = "",
+    rhythm_log: list[dict] | None = None,
 ) -> list[dict[str, str]]:
     """Build the chapter rhythm classification prompt."""
+    formatted_rhythm_log = ""
+    if rhythm_log:
+        lines = []
+        for entry in rhythm_log:
+            lines.append(f"Chapter {entry['chapter']}: rhythm = {entry['recommended']}")
+        formatted_rhythm_log = "\n".join(lines)
     return render_prompt(
         "chapter_rhythm_classifier", title=title, chapter_num=chapter_num,
         chapter_title=chapter_title, chapter_summary=chapter_summary,
         previous_summaries=previous_summaries or "",
         chapter_architecture_context=chapter_architecture_context or "",
+        rhythm_log=formatted_rhythm_log,
     )
 
 

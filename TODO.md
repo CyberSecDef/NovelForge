@@ -552,7 +552,7 @@ despite receiving variety directives. These fixes close those gaps.
 
 ---
 
-## Fix 1 — Track rhythm classifications across chapters and feed history to the classifier
+## Fix 1 — Track rhythm classifications across chapters and feed history to the classifier ✅
 
 ### Problem
 The rhythm classifier recommends a rhythm (e.g. `cat-and-mouse`) for each chapter, but the
@@ -658,7 +658,7 @@ Add this block after the `previous_summaries` section (around line 460):
 
 ---
 
-## Fix 2 — Add a post-draft rhythm compliance verifier
+## Fix 2 — Add a post-draft rhythm compliance verifier ✅
 
 ### Problem
 The draft prompt tells the LLM to use a specific rhythm (e.g. `cat-and-mouse`), but no
@@ -822,7 +822,7 @@ text, summary = _run_all_chapter_agents(
 
 ---
 
-## Fix 3 — Enrich chapter summaries with structural metadata
+## Fix 3 — Enrich chapter summaries with structural metadata ✅
 
 ### Problem
 All anti-repetition agents that compare across chapters (`momentum & distinctiveness`,
@@ -899,7 +899,7 @@ signature is unchanged.
 
 ---
 
-## Fix 4 — Upgrade the Scene Variety Auditor to cross-chapter awareness
+## Fix 4 — Upgrade the Scene Variety Auditor to cross-chapter awareness ✅
 
 ### Problem
 The Scene Variety Auditor (`prompts.yml:878-935`) only checks for repetition *within* a
@@ -990,7 +990,7 @@ Add to the user prompt (after line 921):
 
 ---
 
-## Fix 5 — Restructure compression guidance as a structured directive block
+## Fix 5 — Restructure compression guidance as a structured directive block ✅
 
 ### Problem
 The per-chapter compression check outputs 3-5 bullet points of freeform prose, which the
@@ -1046,7 +1046,7 @@ advisory suggestions.
 
 ---
 
-## Fix 6 — Pass rhythm context to downstream post-draft agents
+## Fix 6 — Pass rhythm context to downstream post-draft agents ✅
 
 ### Problem
 Post-draft agents (Momentum & Distinctiveness, Structure, Operational Distinctiveness) receive

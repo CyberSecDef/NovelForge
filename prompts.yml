@@ -458,6 +458,13 @@ prompts:
       This is Chapter 1 – no prior chapters exist.
 
       {%- endif %}
+      {%- if rhythm_log.strip() %}
+
+      STRUCTURAL RHYTHM HISTORY (rhythms assigned to previous chapters — do NOT repeat recent entries):
+      {{ rhythm_log }}
+
+      You MUST choose a rhythm that does NOT appear in the last 3 entries above.
+      {%- endif %}
 
       Analyze the structural rhythm of the recent chapters listed above.
       Identify which named rhythms they used (or approximate), then recommend
@@ -477,6 +484,73 @@ prompts:
         "recommended_shape_for_this_chapter": "one of the 10 named rhythms",
         "recommendation_reason": "one sentence explaining why this rhythm creates good contrast"
       }
+
+  - name: "rhythm_compliance_verifier"
+    description: "Verifies a chapter draft actually follows the assigned narrative rhythm and rewrites structural elements if it defaults to a generic pattern."
+    stage: "Chapter Generation"
+    system: |
+      You are a Narrative Rhythm Compliance Verifier. You receive a chapter draft
+      and the rhythm it was supposed to follow. Your job is to determine whether
+      the draft actually exhibits the assigned rhythm or has defaulted to a
+      generic "event → solution → description" pattern.
+
+      The 10 named rhythms and their structural signatures:
+
+      1. cat-and-mouse – Shifting advantage between opposing sides. Multiple
+         reversals of who holds power. NOT just "hero chases villain."
+      2. mirror-scene – Deliberately echoes an earlier chapter's structure with
+         an inverted outcome. Must have a clear parallel-then-divergence.
+      3. false-victory-into-disaster – First half reads as success; second half
+         collapses into a worse position. The PIVOT is essential.
+      4. ensemble-convergence – Multiple character threads running in parallel
+         that collide. Must have at least 2 distinct threads before convergence.
+      5. lyrical-interlude – Reflective, slower pace. Internal landscape, memory,
+         sensory detail. Minimal external plot advancement.
+      6. action-crescendo – Escalating physical/operational tempo to a peak.
+         Minimal reflection. Momentum carries everything.
+      7. revelation-dump-then-reaction – Major information disclosed early.
+         Remainder tracks emotional and strategic fallout.
+      8. emotional-valley-then-climb – Character hits bottom, then finds resolve.
+         Must have a clear nadir before the turn.
+      9. ticking-clock – Compressed timeline with deadline pressure throughout.
+         The deadline must be present and felt in the prose.
+      10. quiet-before-storm – Deceptive calm with mounting dread. Small details
+          accumulate tension while characters prepare or wait.
+
+      THE DEFAULT FAILURE MODE: "discover problem → characters discuss/plan →
+      execute solution → reflect on outcome." This is the pattern you must
+      detect and eliminate. It is NOT any of the 10 rhythms above.
+
+      If the draft matches the assigned rhythm: return it unchanged.
+      If the draft has defaulted to a generic pattern: restructure the chapter
+      to match the assigned rhythm while preserving all plot events, character
+      actions, and continuity. Change the ORDER, PACING, and PROBLEM-RESOLUTION
+      APPROACH — not the events themselves.
+
+      Return only the complete chapter text.
+    user: |
+      Novel: '{{ title }}' – Chapter {{ chapter_num }}
+
+      ASSIGNED RHYTHM: {{ chapter_rhythm_shape }}
+      REASON: {{ chapter_rhythm_reason }}
+
+      Does this chapter actually follow the "{{ chapter_rhythm_shape }}" rhythm?
+
+      Check specifically:
+      - Does the chapter's macro-structure match the rhythm's signature?
+      - Or has it defaulted to "discover problem → plan → execute → reflect"?
+      - Does the pacing shape match? (e.g., a "false-victory-into-disaster" MUST
+        have a clear pivot point where success collapses)
+      - Does the problem-resolution approach match? (e.g., "ticking-clock" must
+        feel time-pressured throughout, not just mention a deadline once)
+
+      If the chapter already follows the rhythm, return it unchanged.
+      If not, restructure it to match "{{ chapter_rhythm_shape }}" while preserving
+      all plot events and continuity.
+
+      ***CRITICAL: Return ONLY the complete chapter text with NO introduction, NO explanation, NO markdown.***
+
+      {{ chapter_text }}
 
   - name: "continuity_gatekeeper"
     description: "Validates the upcoming chapter against the master timeline and character state registry, producing a brief of forbidden scenarios and locked events."
@@ -720,8 +794,14 @@ prompts:
       {%- endif %}
       {%- if compression_guidance.strip() %}
 
-      Narrative Compression Guidance (avoid these patterns from previous chapters):
+      *** HARD CONSTRAINT — STRUCTURAL BANS FROM PREVIOUS CHAPTERS ***
+      The following patterns have been used in recent chapters and MUST NOT
+      appear in this chapter. Violating these bans will result in the chapter
+      being flagged for rewrite.
+
       {{ compression_guidance }}
+
+      *** END STRUCTURAL BANS ***
       {%- endif %}
       {%- if special_instructions.strip() %}
 
@@ -911,6 +991,15 @@ prompts:
          multiple dialogue scenes). Flag the repeated rhythm and suggest how
          to vary it.
 
+      6. CROSS-CHAPTER STRUCTURAL REPETITION – Compare this chapter's macro
+         structure against previous chapters. Flag if:
+         - This chapter opens the same way as the previous chapter
+         - The problem-resolution approach matches recent chapters
+           (especially "discover problem → plan → execute")
+         - The emotional arc shape repeats the last 2-3 chapters
+         - Scene types cluster (e.g., 3 consecutive dialogue-heavy chapters)
+         Flag the repetition and suggest a specific structural alternative.
+
       Be specific. Reference scene locations by quoting a short phrase or
       describing the scene's subject. Keep directives brief and actionable.
       If the chapter has no significant repetition, say so in one line.
@@ -920,10 +1009,20 @@ prompts:
       Chapter summary (for context):
       {{ chapter_summary }}
 
-      Audit this chapter for intra-chapter repetition across all five
-      categories: scene macro repetition, emotional beat repetition, sensory
-      palette repetition, scene opening/closing patterns, and dialogue rhythm
-      repetition.
+      {%- if previous_summaries.strip() %}
+
+      Previous chapter summaries (for cross-chapter comparison):
+      {{ previous_summaries }}
+
+      In addition to intra-chapter checks, compare this chapter's structure
+      against the previous chapters. Flag any cross-chapter repetition in
+      openings, resolutions, emotional arcs, or dominant scene types.
+      {%- endif %}
+
+      Audit this chapter for repetition across all six categories: scene macro
+      repetition, emotional beat repetition, sensory palette repetition, scene
+      opening/closing patterns, dialogue rhythm repetition, and cross-chapter
+      structural repetition.
 
       For each issue found, provide a specific rewrite directive in this format:
       - [CATEGORY] Location: "brief quote or scene description" → Directive: what to change and why
@@ -951,6 +1050,12 @@ prompts:
 
       Story Architecture Planner guidance:
       {{ chapter_architecture_context }}
+      {%- endif %}
+
+      {%- if chapter_rhythm_shape.strip() %}
+      This chapter has been assigned the "{{ chapter_rhythm_shape }}" narrative rhythm.
+      Ensure structural edits preserve this rhythm's shape. Do not restructure the chapter
+      into a generic pattern.
       {%- endif %}
 
       Ensure this chapter delivers the tension, revelations, and story movement appropriate for a {{ phase_hint }} chapter. Follow the Story Architecture Planner guidance exactly when it is provided, including the chapter purpose, escalation target, turning point, and operation limit. Adjust pacing, scene order, or emphasis as needed.
@@ -1083,12 +1188,25 @@ prompts:
       prior chapter, revise to raise urgency, deepen the cost of failure, or
       sharpen the emotional stakes.
 
+      RHYTHM AWARENESS: If a rhythm has been assigned to this chapter, respect
+      its structural intent. A "lyrical-interlude" is SUPPOSED to have lower
+      action stakes. An "emotional-valley-then-climb" is SUPPOSED to start at
+      a low point. Do not flag rhythm-appropriate characteristics as problems.
+      Only flag genuine redundancy or escalation failures WITHIN the rhythm's
+      expected shape.
+
       Do not invent entirely new plot directions or major new events.
       Preserve plot continuity, character logic, and required story events.
       Return only the revised chapter text.
     user: |
       Novel: '{{ title }}' – Chapter {{ chapter_num }} of {{ total_chapters }}
       Escalation target for this position: {{ escalation_target }}
+      {%- if chapter_rhythm_shape.strip() %}
+      Assigned rhythm for this chapter: {{ chapter_rhythm_shape }}
+      Respect this rhythm's structural intent — do not rewrite rhythm-appropriate pacing
+      or tension levels. Focus only on redundancy with prior chapters and escalation within
+      the rhythm's expected shape.
+      {%- endif %}
 
       Chapter summary (must remain aligned):
       {{ chapter_summary }}
@@ -1206,6 +1324,13 @@ prompts:
 
       This is Chapter 1, so there are no prior chapters to compare.
 
+      {%- endif %}
+
+      {%- if chapter_rhythm_shape.strip() %}
+      This chapter is using the "{{ chapter_rhythm_shape }}" narrative rhythm. Some rhythms
+      (lyrical-interlude, quiet-before-storm, emotional-valley-then-climb) may intentionally
+      have fewer or no major operations. Do not force operational variety where the rhythm
+      calls for restraint.
       {%- endif %}
 
       Review this chapter for operational repetition. Specifically look for:
@@ -1436,14 +1561,45 @@ prompts:
       {{ chapter_text }}
 
   - name: "chapter_summary"
-    description: "Writes a 100-200 word continuity summary of a completed chapter."
+    description: "Writes a 100-200 word continuity summary of a completed chapter with structural metadata."
     stage: "Chapter Generation"
     system: |
-      You are a precise summariser of fiction.
+      You are a precise summariser of fiction. You write both a PLOT SUMMARY
+      and a STRUCTURAL ANNOTATION for each chapter.
     user: |
-      Write a 100-200 word summary of Chapter {{ chapter_num }} for continuity tracking.
+      Write a continuity summary for Chapter {{ chapter_num }} in two clearly labelled sections:
 
-      ***CRITICAL: Return ONLY the summary text with NO introduction, NO chapter number header, NO explanation.***
+      PLOT SUMMARY (100-200 words):
+      Summarise the key events, character actions, revelations, and emotional shifts.
+
+      STRUCTURE (3-5 short tags):
+      Classify the chapter's structure using these dimensions:
+      - RHYTHM: Which of these best describes the chapter's macro-structure?
+        cat-and-mouse | mirror-scene | false-victory-into-disaster |
+        ensemble-convergence | lyrical-interlude | action-crescendo |
+        revelation-dump-then-reaction | emotional-valley-then-climb |
+        ticking-clock | quiet-before-storm | generic-linear
+      - OPENING: How does the chapter open? (e.g., "in-medias-res action",
+        "quiet dialogue", "internal monologue", "scene-setting description",
+        "time-skip transition")
+      - RESOLUTION: How are problems resolved? (e.g., "planned-execution",
+        "improvisation", "failure-and-retreat", "external-intervention",
+        "emotional-shift", "revelation", "no-resolution-cliffhanger")
+      - EMOTIONAL-ARC: What is the emotional shape? (e.g., "steady-build",
+        "valley-then-climb", "high-to-low", "flat-tension", "multiple-peaks",
+        "slow-burn")
+      - DOMINANT-SCENE-TYPE: What type of scene dominates? (e.g., "dialogue-heavy",
+        "action-sequence", "introspection", "ensemble-interaction",
+        "investigation", "confrontation")
+
+      Example STRUCTURE section:
+      RHYTHM: false-victory-into-disaster
+      OPENING: quiet dialogue
+      RESOLUTION: failure-and-retreat
+      EMOTIONAL-ARC: high-to-low
+      DOMINANT-SCENE-TYPE: confrontation
+
+      ***CRITICAL: Return ONLY the summary with both sections. NO introduction, NO chapter number header, NO explanation.***
 
       {{ chapter_text }}
 
@@ -1473,11 +1629,20 @@ prompts:
       5. Problem-solving rhythms already overused (e.g., repeated "find problem → plan → execute" or "direct confrontation" patterns) and what alternative approach the next chapter should take instead
       6. Chapter shape and emotional curve used recently (e.g., steady build to climax, multiple small peaks, slow burn, sudden reversal) — recommend a contrasting curve for the next chapter
 
-      Return a brief (3-5 bullet points) guidance note for the NEXT chapter writer. Each bullet should state what to AVOID repeating and suggest what to do INSTEAD.
+      Return your guidance as a structured directive block in this exact format:
+
+      BANNED OPERATIONS: [list operations from prior chapters that must NOT appear in the next chapter, or "none"]
+      BANNED EMOTIONAL BEATS: [list emotional beats already delivered that must NOT repeat, or "none"]
+      BANNED OPENINGS: [list chapter opening types used in the last 2-3 chapters, or "none"]
+      BANNED RESOLUTIONS: [list problem-resolution approaches used recently, or "none"]
+      REQUIRED CONTRAST: [one sentence describing what structural shape the next chapter MUST use to create contrast]
+
+      Each BANNED line should be specific and concise. The REQUIRED CONTRAST line should
+      name a concrete alternative, not just "do something different."
 
       If no significant redundancy risks exist, return: 'No compression concerns for next chapter.'
 
-      ***CRITICAL: Return ONLY the guidance text with NO introduction, NO JSON, NO explanation.***
+      ***CRITICAL: Return ONLY the directive block with NO introduction, NO JSON, NO explanation.***
 
   - name: "character_state_updater"
     description: "Records the definitive state of every named character at the end of a chapter."
