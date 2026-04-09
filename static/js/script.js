@@ -626,27 +626,31 @@ $(function () {
     }
   });
 
+  function buildNewChapterRowHtml() {
+    return (
+      "<tr>" +
+      "<td class='chapter-number'></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='title' role='textbox' aria-label='Chapter title'>New Chapter</div></td>" +
+      "<td><div class='editable-cell' contenteditable='true' data-field='summary' role='textbox' aria-label='Chapter summary'>Enter chapter summary...</div></td>" +
+      "<td class='text-center'>" +
+      "<div class='btn-group btn-group-sm me-1' role='group' aria-label='Reorder chapter'>" +
+      "<button class='btn btn-outline-secondary btn-move-up' title='Move Up' aria-label='Move chapter up'><i class='bi bi-arrow-up'></i></button>" +
+      "<button class='btn btn-outline-secondary btn-move-down' title='Move Down' aria-label='Move chapter down'><i class='bi bi-arrow-down'></i></button>" +
+      "</div>" +
+      "<div class='btn-group btn-group-sm me-1' role='group' aria-label='Insert around chapter'>" +
+      "<button class='btn btn-outline-success btn-add-before' title='Add Before' aria-label='Add chapter before'><i class='bi bi-plus-circle'></i></button>" +
+      "<button class='btn btn-outline-success btn-add-after' title='Add After' aria-label='Add chapter after'><i class='bi bi-plus-circle'></i></button>" +
+      "</div>" +
+      "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter' aria-label='Delete chapter'><i class='bi bi-trash'></i></button>" +
+      "</td>" +
+      "</tr>"
+    );
+  }
+
   // Add chapter before
   $("#chapter-tbody").on("click", ".btn-add-before", function () {
     var $row = $(this).closest("tr");
-    var newRow =
-      "<tr>" +
-      "<td class='chapter-number'></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='title'>New Chapter</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='summary'>Enter chapter summary...</div></td>" +
-      "<td class='text-center'>" +
-      "<div class='btn-group btn-group-sm me-1' role='group'>" +
-      "<button class='btn btn-outline-secondary btn-move-up' title='Move Up'><i class='bi bi-arrow-up'></i></button>" +
-      "<button class='btn btn-outline-secondary btn-move-down' title='Move Down'><i class='bi bi-arrow-down'></i></button>" +
-      "</div>" +
-      "<div class='btn-group btn-group-sm me-1' role='group'>" +
-      "<button class='btn btn-outline-success btn-add-before' title='Add Before'><i class='bi bi-plus-circle'></i></button>" +
-      "<button class='btn btn-outline-success btn-add-after' title='Add After'><i class='bi bi-plus-circle'></i></button>" +
-      "</div>" +
-      "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter'><i class='bi bi-trash'></i></button>" +
-      "</td>" +
-      "</tr>";
-    $row.before(newRow);
+    $row.before(buildNewChapterRowHtml());
     renumberChapters();
     markOutlineDirty();
   });
@@ -654,24 +658,7 @@ $(function () {
   // Add chapter after
   $("#chapter-tbody").on("click", ".btn-add-after", function () {
     var $row = $(this).closest("tr");
-    var newRow =
-      "<tr>" +
-      "<td class='chapter-number'></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='title'>New Chapter</div></td>" +
-      "<td><div class='editable-cell' contenteditable='true' data-field='summary'>Enter chapter summary...</div></td>" +
-      "<td class='text-center'>" +
-      "<div class='btn-group btn-group-sm me-1' role='group'>" +
-      "<button class='btn btn-outline-secondary btn-move-up' title='Move Up'><i class='bi bi-arrow-up'></i></button>" +
-      "<button class='btn btn-outline-secondary btn-move-down' title='Move Down'><i class='bi bi-arrow-down'></i></button>" +
-      "</div>" +
-      "<div class='btn-group btn-group-sm me-1' role='group'>" +
-      "<button class='btn btn-outline-success btn-add-before' title='Add Before'><i class='bi bi-plus-circle'></i></button>" +
-      "<button class='btn btn-outline-success btn-add-after' title='Add After'><i class='bi bi-plus-circle'></i></button>" +
-      "</div>" +
-      "<button class='btn btn-sm btn-outline-danger btn-delete-chapter' title='Delete Chapter'><i class='bi bi-trash'></i></button>" +
-      "</td>" +
-      "</tr>";
-    $row.after(newRow);
+    $row.after(buildNewChapterRowHtml());
     renumberChapters();
     markOutlineDirty();
   });
