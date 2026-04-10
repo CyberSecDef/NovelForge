@@ -332,7 +332,7 @@ class TestRoutes:
 
         def fake_call_llm(messages, json_mode=False, **kwargs):
             user_content = messages[-1]["content"]
-            if "Write a 100-200 word summary" in user_content:
+            if "Write a continuity summary" in user_content:
                 return "Updated summary"
             if "Required structure" in user_content and '"issues"' in user_content:
                 return '{"issues": ["Issue after revision"], "overall_assessment": "Revised consistency"}'
@@ -416,7 +416,7 @@ class TestRoutes:
         def fake_call_llm(messages, json_mode=False, **kwargs):
             user_content = messages[-1]["content"]
             captured_prompts.append(user_content)
-            if "Write a 100-200 word summary" in user_content:
+            if "Write a continuity summary" in user_content:
                 return "Revised summary"
             if "Required structure" in user_content and '"issues"' in user_content:
                 return '{"issues": [], "overall_assessment": "ok"}'

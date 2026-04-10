@@ -680,8 +680,9 @@ class TestRestoreSessionRebuildsBrokenProgress:
         finally:
             progress_manager.delete(token)
 
-    def test_restore_preserves_live_running_progress(self, app):
-        """Running progress with _live=True is stored as-is (active generation)."""
+    def test_restore_strips_live_flag_and_rebuilds_stale_running(self, app):
+        """Running progress with _live=True on disk is stale — _live is stripped
+        and progress is rebuilt to 'done' when completed chapters exist."""
         from novelforge.session.persistence import restore_session_from_state
 
         token = "restore-live-running"
@@ -713,8 +714,10 @@ class TestRestoreSessionRebuildsBrokenProgress:
 
         try:
             assert stored is not None
-            assert stored["status"] == "running"
-            assert stored.get("_live") is True
+            # _live is an in-memory flag; on restore from disk it is stripped
+            # and stale "running" with completed chapters is rebuilt to "done"
+            assert stored["status"] == "done"
+            assert stored.get("_live") is None
         finally:
             progress_manager.delete(token)
 
