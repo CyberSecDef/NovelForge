@@ -242,6 +242,13 @@ Review and refine the AI-generated character list displayed as colour-coded card
 
 ![Step 2 – Character Development](docs/plan-3.jpg)
 
+### Step 3 – Write (Chapter Generation)
+
+The Write tab shows live generation progress with a "Currently Writing" callout, a warm-gold progress bar with shimmer animation, and a vertical timeline of all chapters. The currently-generating chapter pulses gold with the live agent step (e.g. "verifying rhythm compliance") shown beneath its title. Completed chapters get green checkmarks and an expandable Preview to read the finished prose inline. Upcoming chapters appear as outlined nodes. A stats bar shows live word count, elapsed time, and estimated time remaining.
+
+![Step 3 – Write (early generation)](docs/write-1.jpg)
+![Step 3 – Write (chapters in progress with live preview)](docs/write-2.jpg)
+
 ### Step 4 – Publish (Writing Statistics)
 
 The completion banner shows the novel title, chapter count, and word count with Download Manuscript and Editor's Notes buttons. The Writing Statistics tab displays per-chapter metrics with sparkline word-count bars, longest/slowest badges, and summary cards.
@@ -602,9 +609,11 @@ Below the banner, six sub-tabs organise all post-generation content:
 | **Writing Statistics** | Summary cards (total words, avg words/ch, avg time/ch, total gen time, LLM calls, tokens) and a per-chapter table with sparkline word-count bars and longest/slowest badges. |
 | **Character Relationships** | Mermaid diagram mapping all character connections and relationship types. |
 | **Editor's Notes** | Post-generation audit findings with overall assessment and issues list. |
-| **Illustrations** | Generate Cover & Scenes button, flexbox gallery with cover badge and lightbox modal. |
+| **Illustrations** | Generate Cover & Scenes button, flexbox gallery with cover badge and lightbox modal. Generated illustrations are persisted to the on-disk session JSON so they survive server restarts. |
 | **Chapter Previews** | Accordion of all chapters with decorative chapter numbers, serif titles, drop-cap styling, and comfortable reading line-height. |
 | **Revise Chapter** | Select a chapter and provide custom revision instructions. The chapter runs through the full agent pipeline with timeout protection. |
+
+The completion banner also includes a **Rewrite Session State** button that force-writes the full current session (chapters, audits, character relationships, illustrations, planning agent outputs) to disk atomically. Useful when in-memory state has been updated but you want to make sure the on-disk file is fully in sync.
 
 **Session management** (navbar):
 - **Sessions dropdown** – Load any previous session by title
@@ -634,6 +643,7 @@ Below the banner, six sub-tabs organise all post-generation content:
 | `POST` | `/load_session` | Loads a specific session by ID, restoring all state. |
 | `POST` | `/delete_session` | Deletes the current session's JSON file, cleans up locks, and clears session data. |
 | `POST` | `/new_session` | Archives LLM log and starts a fresh session. |
+| `POST` | `/save_session_state` | Force-writes the full current session state (chapters, audits, illustrations, planning agent outputs) to disk atomically. |
 | `GET` | `/llm_log` | Returns recent LLM log entries (debug mode only). |
 | `POST` | `/clear_log` | Clears the LLM log file (debug mode only). |
 

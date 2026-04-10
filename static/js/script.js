@@ -92,19 +92,22 @@ $(function () {
   };
 
   function _updateStepIndicator(activeId) {
+    // NOTE: We deliberately do NOT touch aria-selected here. Bootstrap Tab
+    // uses aria-selected to find the previously active tab when deactivating
+    // it; if we strip it preemptively, Bootstrap fails to deactivate the old
+    // tab-pane and both panes end up visible at once.
     var activeIdx = STEP_INDEX[activeId];
     if (activeIdx === undefined) {
       // Log tab or unknown — just dim all steps, highlight log
-      $(".nf-step").removeClass("active completed").attr("aria-selected", "false");
+      $(".nf-step").removeClass("active completed");
       $(".nf-step-line").removeClass("completed");
-      $(".nf-step-log-btn").addClass("active").attr("aria-selected", "true");
+      $(".nf-step-log-btn").addClass("active");
       return;
     }
-    $(".nf-step-log-btn").removeClass("active").attr("aria-selected", "false");
+    $(".nf-step-log-btn").removeClass("active");
     $(".nf-step").each(function (i) {
       var $step = $(this);
       $step.removeClass("active completed");
-      $step.attr("aria-selected", i === activeIdx ? "true" : "false");
       if (i < activeIdx) {
         $step.addClass("completed");
         // Replace number with checkmark for completed steps
@@ -1642,6 +1645,16 @@ $(function () {
     // Character relationship map
     _renderRelationshipMap(data.character_relationship_map);
 
+    // Populate the Writing tab timeline + progress bar so it isn't empty
+    // when the user navigates back to it on a completed session.
+    var doneCount = (data.chapters_done || []).length;
+    var totalCh = data.total || doneCount || parseInt($("#chapters").val(), 10) || doneCount;
+    _rebuildTimeline(data.chapters_done || [], totalCh);
+    updateProgressBar(doneCount, totalCh, "Complete");
+    if (doneCount > 0) {
+      $("#writing-word-counter").removeClass("d-none");
+    }
+
     showStep("#step-done");
     // Generation complete — re-enable the approve button for potential future use
     $("#btn-approve-outline").prop("disabled", false);
@@ -1842,6 +1855,29 @@ $(function () {
       complete: function () {
         $("#export-manuscript-spinner").addClass("d-none");
         _enableExportButtons();
+      },
+    });
+  });
+
+  $("#btn-rewrite-session-state").on("click", function () {
+    clearAlerts();
+    $("#rewrite-session-spinner").removeClass("d-none");
+    var $btn = $("#btn-rewrite-session-state").prop("disabled", true);
+    $.ajax({
+      url: "/save_session_state",
+      method: "POST",
+      contentType: "application/json",
+      data: JSON.stringify({}),
+      success: function () {
+        showAlert("Session state saved to disk.", "success");
+      },
+      error: function (xhr) {
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || "Failed to save session state.";
+        showAlert(msg);
+      },
+      complete: function () {
+        $("#rewrite-session-spinner").addClass("d-none");
+        $btn.prop("disabled", false);
       },
     });
   });

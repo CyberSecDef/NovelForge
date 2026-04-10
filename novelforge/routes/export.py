@@ -1,5 +1,6 @@
 """Export, download, and illustration routes."""
 
+import json
 import logging
 import threading
 import time
@@ -7,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, abort, jsonify, request, send_file
+from flask import Blueprint, Response, abort, jsonify, request, send_file, session
 
 from novelforge import limiter
 from novelforge.progress import (
@@ -20,6 +21,11 @@ from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.llm.image import call_image_api
 from novelforge.agents.chapter import build_illustration_prompt_generator_prompt
 from novelforge.routes.generation._shared import _is_valid_token
+from novelforge.session.persistence import (
+    get_session_id,
+    load_session_by_id,
+    persist_illustrations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -547,23 +553,70 @@ def export_editors_notes() -> Response | tuple[Response, int]:
 @export_bp.route("/generate_illustrations", methods=["POST"])
 @limiter.limit("2 per 10 minutes")
 def generate_illustrations() -> Response | tuple[Response, int]:
-    """Start background illustration generation; returns a job token for polling."""
+    """Start background illustration generation; returns a job token for polling.
+
+    Accepts the bare minimum needed to generate illustrations: title, genre,
+    premise, character_list, and chapter summaries (or content). Falls back
+    through three sources in order: in-memory progress_manager, flask.session,
+    and the on-disk session JSON file.
+    """
     data = request.get_json(silent=True) or {}
     token = data.get("token", "")
 
     if not _is_valid_token(token):
         return jsonify({"error": "Invalid progress token."}), 400
 
-    progress_data = progress_manager.get(token)
-
-    if not progress_data or progress_data.get("status") != "done":
-        return jsonify({"error": "Novel generation not complete."}), 400
-
     if not config.IMAGE_API_KEY:
         return jsonify({"error": "IMAGE_API_KEY not configured. Set it in your .env file."}), 400
 
+    # Capture session_id in the request context so the background thread can
+    # persist illustrations to the on-disk session file.
+    session_id_val = get_session_id()
+
+    # --- Resolve snapshot + chapters_done from any available source ---
+    progress_data = progress_manager.get(token) or {}
     snapshot = progress_data.get("snapshot") or {}
-    chapters_done = progress_data.get("chapters_done", [])
+    chapters_done = progress_data.get("chapters_done") or []
+
+    # Fallback 1: build snapshot from flask.session if missing
+    if not snapshot:
+        snapshot = {
+            "title": session.get("title", ""),
+            "genre": session.get("genre", ""),
+            "premise": session.get("premise", ""),
+            "character_list": session.get("character_list", []),
+        }
+
+    # Fallback 2: fetch chapters from flask.session
+    if not chapters_done:
+        chapters_done = session.get("completed_chapters", []) or []
+
+    # Fallback 3: read on-disk session JSON if either is still missing
+    if (not snapshot.get("title") or not chapters_done) and session_id_val:
+        try:
+            on_disk = load_session_by_id(session_id_val)
+            if on_disk:
+                if not snapshot.get("title"):
+                    snapshot = {
+                        "title": on_disk.get("title", ""),
+                        "genre": on_disk.get("genre", ""),
+                        "premise": on_disk.get("premise", ""),
+                        "character_list": on_disk.get("character_list", []),
+                    }
+                if not chapters_done:
+                    chapters_done = (
+                        on_disk.get("completed_chapters")
+                        or (on_disk.get("progress_data") or {}).get("chapters_done")
+                        or []
+                    )
+        except (ValueError, OSError, json.JSONDecodeError) as e:
+            logger.warning("Could not load on-disk session for illustrations: %s", e)
+
+    # --- Validate the bare minimum ---
+    if not snapshot.get("title"):
+        return jsonify({"error": "Novel title is missing — cannot generate illustrations."}), 400
+    if not chapters_done:
+        return jsonify({"error": "No completed chapters available for illustration generation."}), 400
 
     illust_token = str(uuid.uuid4())
     progress_manager.create(illust_token, {
@@ -588,7 +641,7 @@ def generate_illustrations() -> Response | tuple[Response, int]:
 
     thread = threading.Thread(
         target=_run_illustration_generation,
-        args=(token, illust_token, snapshot, chapters_done),
+        args=(token, illust_token, snapshot, chapters_done, session_id_val),
         daemon=True,
     )
     thread.start()
@@ -601,6 +654,7 @@ def _run_illustration_generation(
     illust_token: str,
     snapshot: dict[str, Any],
     chapters_done: list[dict[str, Any]],
+    session_id: str = "",
 ) -> None:
     """Background worker: generate illustration prompts then images.
 
@@ -738,6 +792,16 @@ def _run_illustration_generation(
             progress_manager.update(novel_token, {"illustrations": successful})
         except KeyError:
             pass
+
+        # Persist illustrations to the on-disk session file so they survive
+        # server restarts and session reloads.
+        if session_id:
+            try:
+                persist_illustrations(session_id, successful)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not persist illustrations to session file: %s", exc
+                )
 
     except RuntimeError as exc:
         logger.error("Illustration generation failed: %s", exc)

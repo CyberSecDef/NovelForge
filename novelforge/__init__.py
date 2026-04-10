@@ -159,8 +159,8 @@ def create_app(*, testing: bool = False) -> Flask:
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://code.jquery.com; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "font-src 'self' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+            "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; "
             "img-src 'self' data:; "
             "connect-src 'self' https://cdn.jsdelivr.net"
         )
@@ -192,6 +192,23 @@ def create_app(*, testing: bool = False) -> Flask:
                 if progress:
                     session_data["progress_data"] = progress
 
+            # Fallback: if in-memory progress is missing (e.g. after server
+            # restart), read the on-disk session JSON to recover audit/
+            # relationship/consistency fields. Without this, navigating to /
+            # after a restart loses everything except completed_chapters.
+            if not session_data.get("progress_data"):
+                session_id_val = sess.get("session_id", "")
+                if session_id_val:
+                    try:
+                        from novelforge.session.persistence import load_session_by_id
+                        on_disk_state = load_session_by_id(session_id_val)
+                        if on_disk_state and on_disk_state.get("progress_data"):
+                            disk_pd = dict(on_disk_state["progress_data"])
+                            disk_pd.pop("_live", None)
+                            session_data["progress_data"] = disk_pd
+                    except (ValueError, OSError, json.JSONDecodeError):
+                        pass  # non-fatal, fall through to rebuild logic
+
             completed_chapters = sess.get("completed_chapters", [])
             if not completed_chapters:
                 pd = session_data.get("progress_data") or sess.get("progress_data") or {}
@@ -204,14 +221,19 @@ def create_app(*, testing: bool = False) -> Flask:
                 not existing_pd
                 or (existing_pd.get("status") == "running" and not existing_pd.get("_live"))
             ):
-                rebuilt = {
+                # Preserve all audit/relationship/consistency fields from the
+                # existing snapshot — only overwrite the lifecycle fields so the
+                # snapshot reflects a completed generation.
+                rebuilt = dict(existing_pd) if existing_pd else {}
+                rebuilt.update({
                     "status": "done",
                     "current": len(completed_chapters),
                     "total": sess.get("chapters", len(completed_chapters)),
                     "step": "Complete",
                     "chapters_done": completed_chapters,
                     "error": None,
-                }
+                })
+                rebuilt.pop("_live", None)
                 session_data["progress_data"] = rebuilt
                 # Progress-store recovery is handled in restore_session_from_state(),
                 # not here, so that GET / remains free of write side-effects.

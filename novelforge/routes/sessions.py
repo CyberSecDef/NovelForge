@@ -16,6 +16,7 @@ from novelforge.session.persistence import (
     load_session_by_id,
     release_session_lock,
     restore_session_from_state,
+    save_session_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,3 +110,23 @@ def new_session() -> Response:
     session.clear()
 
     return jsonify({"status": "success", "message": "New session started"})
+
+
+@sessions_bp.route("/save_session_state", methods=["POST"])
+def save_session_state_route() -> Response | tuple[Response, int]:
+    """Force a full rewrite of the current session JSON file to disk.
+
+    Captures everything currently in flask.session and progress_manager
+    (including audit reports, character relationships, illustrations, etc.)
+    and writes it to ``sessions/novels/<session_id>.json`` atomically.
+    """
+    if not session.get("title"):
+        return jsonify({"error": "No active session to save."}), 400
+    try:
+        ok = save_session_state()
+    except Exception as e:  # noqa: BLE001
+        logger.error("Failed to save session state: %s", e, exc_info=True)
+        return jsonify({"error": "Failed to save session state."}), 500
+    if not ok:
+        return jsonify({"error": "Failed to save session state."}), 500
+    return jsonify({"status": "saved"})

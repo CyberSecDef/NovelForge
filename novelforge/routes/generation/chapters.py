@@ -417,13 +417,16 @@ def _run_chapter_generation_internal(
         )
 
         _set_step("Complete")
+
+        # Mark the novel as done in memory FIRST so the subsequent disk
+        # writes capture status="done" rather than the stale "running" value.
+        progress_manager.update(token, {"status": "done"})
+
         _persist_progress(force=True)  # always persist on successful completion
 
         session_id = snap.get("session_id")
         if session_id:
             persist_completed_chapters(session_id, chapters_done, token)
-
-        progress_manager.update(token, {"status": "done"})
 
     except ContentRejectionError as exc:
         logger.error(

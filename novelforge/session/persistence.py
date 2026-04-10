@@ -280,6 +280,22 @@ def save_session_state() -> bool:
             done = progress.get("chapters_done", [])
             if done:
                 state["completed_chapters"] = list(done)
+        else:
+            # In-memory progress is missing (e.g. after server restart).
+            # Preserve any existing on-disk progress_data so we don't blow
+            # away audit reports, character relationships, or the snapshot.
+            if session_file.exists():
+                try:
+                    existing = json.loads(session_file.read_text(encoding="utf-8"))
+                    existing_pd = existing.get("progress_data")
+                    if existing_pd:
+                        existing_pd.pop("_live", None)
+                        state["progress_data"] = existing_pd
+                except (OSError, json.JSONDecodeError) as e:
+                    logger.warning(
+                        "Could not preserve existing progress_data for %s: %s",
+                        session_id, e,
+                    )
 
     # Validate before writing
     state = validate_session_state(state)
@@ -328,6 +344,7 @@ def rebuild_stale_progress(
     completed_chapters: list,
     total_chapters: int,
     progress_token: str,
+    existing_pd: dict | None = None,
 ) -> dict:
     """Rebuild a completed-generation progress snapshot and persist it to the
     in-memory store.
@@ -335,16 +352,23 @@ def rebuild_stale_progress(
     Called from the session-restore path so that recovery happens once, in a
     dedicated lifecycle hook, rather than on every GET /.
 
+    If *existing_pd* is provided, all of its fields (character_relationship_map,
+    consistency, audit reports, etc.) are preserved — only the lifecycle fields
+    (status, current, total, step, error, chapters_done) are overwritten so the
+    snapshot reflects a completed generation.
+
     Returns the rebuilt progress dict.
     """
-    rebuilt = {
+    rebuilt = dict(existing_pd) if existing_pd else {}
+    rebuilt.update({
         "status": "done",
         "current": len(completed_chapters),
         "total": total_chapters or len(completed_chapters),
         "step": "Complete",
         "chapters_done": completed_chapters,
         "error": None,
-    }
+    })
+    rebuilt.pop("_live", None)
     progress_manager.create(progress_token, rebuilt)
     logger.info(
         "Rebuilt stale progress snapshot for token %s (%d chapters)",
@@ -407,7 +431,7 @@ def restore_session_from_state(state: dict) -> None:
             not pd
             or (pd.get("status") == "running" and not pd.get("_live"))
         ):
-            rebuild_stale_progress(completed, state.get("chapters", 0), token)
+            rebuild_stale_progress(completed, state.get("chapters", 0), token, existing_pd=pd)
         elif pd:
             progress_manager.create(token, pd)
 
@@ -516,6 +540,34 @@ def persist_completed_chapters(
     except (OSError, json.JSONDecodeError) as e:
         logger.error(
             "Failed to persist completed chapters for %s: %s",
+            session_id, e, exc_info=True,
+        )
+        return False
+
+
+def persist_illustrations(session_id: str, illustrations: list[dict]) -> bool:
+    """
+    Persist generated illustrations to the session JSON file.
+
+    Called from the background illustration thread (no Flask request context).
+    Updates the ``illustrations`` field on the on-disk session state so that
+    illustrations survive server restarts and session reloads.
+
+    Returns ``True`` on success, ``False`` if the session file does not exist
+    or cannot be read/written.
+    """
+    try:
+        session_file = resolve_session_path(session_id)
+        with _get_session_lock(session_id):
+            if not session_file.exists():
+                return False
+            state = json.loads(session_file.read_text(encoding="utf-8"))
+            state["illustrations"] = list(illustrations)
+            _atomic_write(session_file, json.dumps(state, indent=2))
+        return True
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error(
+            "Failed to persist illustrations for %s: %s",
             session_id, e, exc_info=True,
         )
         return False
