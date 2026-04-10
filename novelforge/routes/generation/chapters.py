@@ -188,7 +188,10 @@ def _run_chapter_generation_internal(
         snap.get("pov_focal_character_plan", {}), character_list, chapter_list,
     )
 
-    target_per_chapter = min(4500, max(2500, word_count // total_chapters))
+    # Bias drafts toward the upper end of the desired final length range
+    # (3,000–4,000 words). Post-processing passes trim prose, so aim high
+    # to leave headroom for the editing/polish/anti-LLM passes.
+    target_per_chapter = min(4500, max(3500, word_count // total_chapters))
     characters_text = _format_characters(character_list)
     character_state_log = list(character_state_log) if character_state_log else []
     compression_guidance: str = ""

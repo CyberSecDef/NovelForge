@@ -809,7 +809,7 @@ prompts:
       {%- endif %}
 
       ***CRITICAL: You are writing CHAPTER {{ chapter_num }}. Keep this chapter number in mind throughout.***
-      Target: approximately {{ target_words }} words. Aim for at least 2,500 words and do NOT exceed 4,500 words. Write immersive, human-sounding prose.
+      Target: approximately {{ target_words }} words. You MUST write at least 3,500 words and SHOULD aim for 4,000–4,500 words. Do NOT exceed 5,000 words. Subsequent editing passes will trim and tighten the prose, so write generously and let the polish passes do the trimming. Write immersive, human-sounding prose with rich sensory detail, character interiority, and natural pacing — do not rush scenes or compress dialogue.
 
       {%- if chapter_rhythm_shape.strip() %}
       CRITICAL RHYTHM DIRECTIVE: You MUST write this chapter using the narrative rhythm: "{{ chapter_rhythm_shape }}".
