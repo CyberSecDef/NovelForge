@@ -136,8 +136,15 @@ class TestGenerateIllustrationsInvalidToken:
         assert r.status_code == 400
         assert r.get_json()["error"] == "Invalid progress token."
 
-    def test_valid_but_unknown_uuid_rejected_when_no_data_available(self, client):
-        """An unknown UUID with no flask.session data should fail validation."""
+    def test_valid_but_unknown_uuid_rejected_when_no_data_available(self, client, monkeypatch):
+        """An unknown UUID with no flask.session data should fail validation.
+
+        IMAGE_API_KEY must be present (otherwise the route returns the
+        config error before reaching data validation), so we monkeypatch it
+        regardless of the local environment.
+        """
+        monkeypatch.setattr("novelforge.config.IMAGE_API_KEY", "test-key", raising=False)
+        monkeypatch.setattr("novelforge.routes.export.config.IMAGE_API_KEY", "test-key", raising=False)
         unknown = str(uuid.uuid4())
         r = client.post(
             "/generate_illustrations",
