@@ -28,7 +28,7 @@ Don’t use the names: Vale, Mercer, Hart, Voss, Quinn, Wren, Cross, Thorne
 
 	* Editors note one at a time
 
-- We are going to switch to a review phase now.  Please read and review this new final version of the novel.  make no changes. Please read the editors notes file.  Many of the items are already marked as done.  Some of them are redudandant because of our changes.  please update each section of the editors notes document based on the current state of the novel.  do not delete any section, we are just updating the sections in place.  for each section, also make sure the content is accurate for this version of the novel.  if things are called out as needing to be fixed and they already are, just mark them as fixed.  dont delete.  It is also important to keep the pacing and tention heatmap, just update it for the current read through.
+- We are going to switch to a review phase now.  Please read and review this new version of the novel.  make no changes. Please read the editors notes file.  Many of the items are already marked as done.  Some of them are redudandant because of our changes.  please update each section of the editors notes document based on the current state of the novel.  do not delete any section, we are just updating the sections in place.  for each section, also make sure the content is accurate for this version of the novel.  if things are called out as needing to be fixed and they already are, just mark them as fixed.  dont delete.  It is also important to keep the pacing and tention heatmap, just update it for the current read through.  Given your new read through of this version of the novel, if there are new items that should be resolved add them to a new section at the bottom of the editors notes document.  we will address them next.  Our target is to make this a 9.5/10 novel.
 
 	* Resolve weaknesses one at a time
 
@@ -37,18 +37,20 @@ Don’t use the names: Vale, Mercer, Hart, Voss, Quinn, Wren, Cross, Thorne
 Each POV character should think in a distinct internal language shaped by their background and expertise. Currently all characters share the same literary-metaphorical register.
 
 - Dialogue Naturalization
-Current dialogue is too clean, too functional, too information-delivery. Characters complete thoughts, speak in well-formed sentences, and rarely interrupt each other or themselves.
+Make sure the current dialogue isnt too clean, too functional, too information-delivery. Characters sometimes have incomplete thoughts, don't always speak in well-formed sentences, and sometimes rarely interrupt each other or themselves.  make sure the dialog in the novel reads this way
 
 - Humor, Strangeness, and the Unexpected
-The novel is relentlessly serious. Every scene is morally weighted. Every observation is significant. Real humans deflect, joke badly, notice irrelevant things, and occasionally do something that doesn't serve the plot.  create a plan to inject these odities throughout the novel.  1-2 oddities per chapter.
+Real characters deflect, joke badly, notice irrelevant things, and occasionally do something that doesn't serve the plot.  create a plan to inject these odities throughout the novel.  1-2 oddities per chapter.
 
 - Prose Texture Variation
-The prose maintains a consistent literary density throughout. It should breathe -- denser in reflective moments, sparser in action, occasionally raw or clumsy when characters are overwhelmed.
+Make sure the  prose has a varying literary density throughout. It should breathe -- denser in reflective moments, sparser in action, occasionally raw or clumsy when characters are overwhelmed.
 
 - metaphors
-The manuscript is metaphor heavy.  make sure the text doesn't go overboard with metaphors.  create a plan to remove uneeded ones.
+Make sure the text doesn't go overboard with metaphors.  create a plan to remove uneeded ones.
 
 - Please do a light copy-edit pass targeting prose repetitions.  Also remove unneeded dashes, em-dashes and hyphens.
+
+- check if there are any gaps or rough scene cuts that are a result from all the edits
 
 - Does this novel read like it has a soul?  or is it more like a flat instruction manual.  is this novel ready for initial publishing?
 
