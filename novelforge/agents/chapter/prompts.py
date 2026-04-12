@@ -7,7 +7,10 @@ out.  No LLM calls, no filesystem I/O, no side effects.
 from novelforge.llm.prompts import render_prompt
 from novelforge.names import format_name_pool_for_prompt
 
-from novelforge.agents.chapter._helpers import _FORBIDDEN_WORDS, _SOFT_LIMITED_WORDS
+from novelforge.agents.chapter._helpers import (
+    get_forbidden_words,
+    get_soft_limited_words,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -90,8 +93,8 @@ def build_chapter_draft_prompt(
         compression_guidance=compression_guidance or "",
         chapter_rhythm_shape=chapter_rhythm_shape or "",
         chapter_rhythm_reason=chapter_rhythm_reason or "",
-        forbidden_words=", ".join(_FORBIDDEN_WORDS),
-        soft_limited_words=", ".join(_SOFT_LIMITED_WORDS),
+        forbidden_words=", ".join(get_forbidden_words(genre)),
+        soft_limited_words=", ".join(get_soft_limited_words(genre)),
         voice_prompt=voice_prompt or "",
         perspective_prompt=perspective_prompt or "",
     )
@@ -246,12 +249,13 @@ def build_polish_agent_prompt(chapter_text: str, chapter_num: int, title: str, g
     return render_prompt("polish_agent", title=title, genre=genre, chapter_num=chapter_num, chapter_text=chapter_text)
 
 
-def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+def build_anti_llm_agent_prompt(chapter_text: str, chapter_num: int, title: str,
+                                genre: str = "") -> list[dict[str, str]]:
     """Build the anti-LLM pattern removal prompt with forbidden word lists."""
     return render_prompt(
         "anti_llm_agent", title=title, chapter_num=chapter_num,
-        chapter_text=chapter_text, forbidden_words=", ".join(_FORBIDDEN_WORDS),
-        soft_limited_words=", ".join(_SOFT_LIMITED_WORDS),
+        chapter_text=chapter_text, forbidden_words=", ".join(get_forbidden_words(genre)),
+        soft_limited_words=", ".join(get_soft_limited_words(genre)),
     )
 
 

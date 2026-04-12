@@ -23,11 +23,16 @@ from novelforge.agents.chapter._helpers import (  # noqa: F401
     _PATTERN_THRESHOLD,
     _SOFT_LIMIT_PER_CHAPTER,
     _SOFT_LIMITED_WORDS,
+    _LEGAL_ADJACENT_GENRES,
+    _LEGAL_TERMS,
     _call_with_content_retry,
     _draft_with_content_retry,
     _format_anti_repetition_rules,
     _log_pass_failure,
     _sanitize_for_content_policy,
+    format_vocabulary_rules,
+    get_forbidden_words,
+    get_soft_limited_words,
     scan_vocabulary_overuse,
 )
 

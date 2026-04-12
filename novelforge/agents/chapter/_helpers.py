@@ -230,7 +230,21 @@ _FORBIDDEN_WORDS = [
     # Bookkeeping / accounting metaphors used as emotional shorthand
     "ledger", "tally", "inventory", "audit", "balance sheet",
     "debit", "dividend",
+    # Institutional / formal register words LLMs overuse
+    "mandate", "decree", "edict",
+    "apparatus", "machinations",
 ]
+
+# Legal terms forbidden in all genres except crime-adjacent ones.
+# When a crime-adjacent genre is detected these become soft-limited instead.
+_LEGAL_TERMS = [
+    "verdict", "indictment", "tribunal", "acquittal", "exonerate",
+    "adjudicate", "clemency", "arbitrate", "testimony", "jurisprudence",
+    "litigate", "prosecution", "prosecute",
+]
+
+# Genres where legal terminology is contextually appropriate (soft-limited, not banned).
+_LEGAL_ADJACENT_GENRES = {"Crime", "Mystery", "Noir", "Thriller"}
 
 # Soft-limited words: OK once or twice per novel, but the LLM wildly overuses them
 _SOFT_LIMITED_WORDS = [
@@ -264,8 +278,38 @@ def _compile_word_pattern(words: list[str]) -> re.Pattern[str]:
 
 # Pre-compiled patterns for the vocabulary scanner (built once at import time)
 _FORBIDDEN_RE = _compile_word_pattern(_FORBIDDEN_WORDS)
+_LEGAL_TERMS_RE = _compile_word_pattern(_LEGAL_TERMS)
 _SOFT_LIMITED_RE = _compile_word_pattern(_SOFT_LIMITED_WORDS)
 _OVERUSED_PATTERN_RE = _compile_word_pattern(_OVERUSED_PATTERNS)
+
+
+def get_forbidden_words(genre: str = "") -> list[str]:
+    """Return the full forbidden-word list, adding legal terms unless the genre is legal-adjacent."""
+    if genre in _LEGAL_ADJACENT_GENRES:
+        return list(_FORBIDDEN_WORDS)
+    return list(_FORBIDDEN_WORDS) + list(_LEGAL_TERMS)
+
+
+def get_soft_limited_words(genre: str = "") -> list[str]:
+    """Return soft-limited words, including legal terms for legal-adjacent genres."""
+    if genre in _LEGAL_ADJACENT_GENRES:
+        return list(_SOFT_LIMITED_WORDS) + list(_LEGAL_TERMS)
+    return list(_SOFT_LIMITED_WORDS)
+
+
+def format_vocabulary_rules(genre: str = "") -> str:
+    """Return a compact vocabulary-constraint block for injection into agent system prompts."""
+    forbidden = get_forbidden_words(genre)
+    soft = get_soft_limited_words(genre)
+    return (
+        "VOCABULARY CONSTRAINTS (strict — apply to every word you write):\n"
+        f"NEVER use these words: {', '.join(forbidden)}.\n"
+        f"Limit these to at most 1 occurrence per chapter: {', '.join(soft)}.\n"
+        "Avoid: accounting/legal metaphors for emotions, "
+        '"small [mercy/victory/repair]" constructions, emotions lodged in '
+        "ribs/sternum/throat, metallic taste as distress, "
+        '"jaw tightened," "the economy of someone who."'
+    )
 
 
 def _format_anti_repetition_rules() -> str:
@@ -295,7 +339,7 @@ def _count_word_matches(pattern: re.Pattern[str], text: str) -> dict[str, int]:
     return counts
 
 
-def scan_vocabulary_overuse(chapter_text: str) -> list[str]:
+def scan_vocabulary_overuse(chapter_text: str, genre: str = "") -> list[str]:
     """
     Scan a chapter for overused vocabulary from the watchlists.
 
@@ -303,8 +347,12 @@ def scan_vocabulary_overuse(chapter_text: str) -> list[str]:
     Pure Python — no LLM call.  Uses pre-compiled word-boundary regexes
     so that ``"audit"`` does **not** match inside ``"auditor"`` or
     ``"ledger"`` inside ``"sledgehammer"``.
+
+    When *genre* is a legal-adjacent genre (Crime, Mystery, Noir, Thriller),
+    legal terms are soft-limited instead of hard-banned.
     """
     warnings: list[str] = []
+    is_legal_adjacent = genre in _LEGAL_ADJACENT_GENRES
 
     # Check hard-banned words
     for word, count in _count_word_matches(_FORBIDDEN_RE, chapter_text).items():
@@ -312,6 +360,22 @@ def scan_vocabulary_overuse(chapter_text: str) -> list[str]:
             warnings.append(
                 f'BANNED WORD "{word}" appears {count}x — must be removed entirely'
             )
+
+    # Check legal terms — hard-banned unless genre is legal-adjacent
+    for word, count in _count_word_matches(_LEGAL_TERMS_RE, chapter_text).items():
+        if is_legal_adjacent:
+            if count > _SOFT_LIMIT_PER_CHAPTER:
+                warnings.append(
+                    f'OVERUSED LEGAL TERM "{word}" appears {count}x in this chapter '
+                    f'(limit: {_SOFT_LIMIT_PER_CHAPTER}) — replace most occurrences '
+                    f'with varied alternatives'
+                )
+        else:
+            if count > _HARD_BAN_THRESHOLD:
+                warnings.append(
+                    f'BANNED LEGAL TERM "{word}" appears {count}x — must be removed '
+                    f'entirely (not a legal-themed novel)'
+                )
 
     # Check soft-limited words
     for word, count in _count_word_matches(_SOFT_LIMITED_RE, chapter_text).items():

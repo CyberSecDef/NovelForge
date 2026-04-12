@@ -10,6 +10,7 @@ from novelforge.agents.chapter._helpers import (
     PASS_FAILURE_KEY,
     _call_with_content_retry,
     _log_pass_failure,
+    format_vocabulary_rules,
     scan_vocabulary_overuse,
 )
 from novelforge.agents.chapter.context import ChapterContext
@@ -233,6 +234,12 @@ def _run_all_chapter_agents(
     """
     if ctx is None:
         ctx = ChapterContext()
+
+    # Build the vocabulary-constraint block once for the whole pipeline.
+    # Every prose-rewriting agent gets this injected into its system prompt
+    # so forbidden words are never introduced by any agent in the chain.
+    vocab_rules = format_vocabulary_rules(genre)
+
     def _check_deadline() -> None:
         """Raise ChapterTimeoutError if the per-chapter deadline has passed."""
         if deadline and time.monotonic() > deadline:
@@ -240,11 +247,19 @@ def _run_all_chapter_agents(
                 f"Chapter {chapter_num} exceeded the {PER_CHAPTER_TIMEOUT // 60}-minute time limit."
             )
 
-    # Local shorthand: every agent call goes through the content-retry wrapper
+    # Local shorthand: every agent call goes through the content-retry wrapper.
+    # The wrapper also injects vocabulary constraints into the system message
+    # so that every prose-rewriting agent is told about forbidden words.
     def _safe(build_msgs: Callable[[str], list[dict]], txt: str, *, action: str, json_mode: bool = False) -> str:
-        """Call the LLM via the content-retry wrapper."""
+        """Call the LLM via the content-retry wrapper with vocabulary rules injected."""
+        def _build_with_vocab_rules(t: str) -> list[dict]:
+            messages = build_msgs(t)
+            if vocab_rules and messages and messages[0].get("role") == "system":
+                messages[0] = dict(messages[0])  # avoid mutating cached prompts
+                messages[0]["content"] += f"\n\n{vocab_rules}"
+            return messages
         return _call_with_content_retry(
-            build_msgs, txt, action=action,
+            _build_with_vocab_rules, txt, action=action,
             chapter_num=chapter_num, title=title, json_mode=json_mode,
         )
 
@@ -381,7 +396,7 @@ def _run_all_chapter_agents(
     if step_callback:
         step_callback(f"Chapter {chapter_num}: anti-LLM pass")
     text = _safe(
-        lambda t: build_anti_llm_agent_prompt(t, chapter_num, title),
+        lambda t: build_anti_llm_agent_prompt(t, chapter_num, title, genre),
         text, action=f"Chapter {chapter_num}: anti-LLM pass",
     )
 
@@ -392,18 +407,6 @@ def _run_all_chapter_agents(
         lambda t: build_metaphor_reduction_prompt(t, chapter_num, title),
         text, action=f"Chapter {chapter_num}: metaphor reduction",
     )
-
-    # Vocabulary diversity scan — pure Python, no LLM call
-    _check_deadline()
-    violations = scan_vocabulary_overuse(text)
-    if violations:
-        if step_callback:
-            step_callback(f"Chapter {chapter_num}: fixing {len(violations)} vocabulary issues")
-        logger.info("Chapter %d: vocabulary scan found %d violations", chapter_num, len(violations))
-        text = _safe(
-            lambda t: build_vocabulary_fix_prompt(t, chapter_num, title, violations),
-            text, action=f"Chapter {chapter_num}: vocabulary fix-up",
-        )
 
     _check_deadline()
     if step_callback:
@@ -420,6 +423,20 @@ def _run_all_chapter_agents(
         lambda t: build_copy_edit_prompt(t, chapter_num, title),
         text, action=f"Chapter {chapter_num}: copy edit",
     )
+
+    # Vocabulary diversity scan — pure Python, no LLM call.
+    # Runs AFTER copy edit (the last prose-rewriting agent) so that no
+    # subsequent agent can reintroduce forbidden words.
+    _check_deadline()
+    violations = scan_vocabulary_overuse(text, genre=genre)
+    if violations:
+        if step_callback:
+            step_callback(f"Chapter {chapter_num}: fixing {len(violations)} vocabulary issues")
+        logger.info("Chapter %d: vocabulary scan found %d violations", chapter_num, len(violations))
+        text = _safe(
+            lambda t: build_vocabulary_fix_prompt(t, chapter_num, title, violations),
+            text, action=f"Chapter {chapter_num}: vocabulary fix-up",
+        )
 
     _check_deadline()
     if step_callback:
