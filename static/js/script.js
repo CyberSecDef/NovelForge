@@ -1737,6 +1737,7 @@ $(function () {
 
     // Pre-compute per-chapter data and find max values
     var totalWords = 0, totalTime = 0, totalCalls = 0, totalTokens = 0;
+    var totalErrors4xx = 0, totalErrors5xx = 0, totalTimeouts = 0;
     var maxWords = 0, maxTime = 0;
     var rows = [];
 
@@ -1745,10 +1746,14 @@ $(function () {
       var timeSec = ch.generation_time_seconds || 0;
       var calls = ch.llm_calls || 0;
       var tokens = ch.total_tokens || 0;
+      var err4 = ch.http_errors_4xx || 0;
+      var err5 = ch.http_errors_5xx || 0;
+      var errT = ch.timeout_errors || 0;
       totalWords += words; totalTime += timeSec; totalCalls += calls; totalTokens += tokens;
+      totalErrors4xx += err4; totalErrors5xx += err5; totalTimeouts += errT;
       if (words > maxWords) maxWords = words;
       if (timeSec > maxTime) maxTime = timeSec;
-      rows.push({ ch: ch, words: words, timeSec: timeSec, calls: calls, tokens: tokens });
+      rows.push({ ch: ch, words: words, timeSec: timeSec, calls: calls, tokens: tokens, errors: err4 + err5 + errT });
     });
 
     $.each(rows, function (_, r) {
@@ -1759,6 +1764,9 @@ $(function () {
       var wordsBadge = (r.words === maxWords && chapters.length > 1) ? ' <span class="nf-stat-badge nf-stat-badge-words">longest</span>' : "";
       var timeBadge = (r.timeSec === maxTime && maxTime > 0 && chapters.length > 1) ? ' <span class="nf-stat-badge nf-stat-badge-time">slowest</span>' : "";
 
+      var errorsStr = r.errors > 0 ? r.errors.toLocaleString() : "-";
+      var errorsCls = r.errors > 0 ? ' class="text-end text-danger"' : ' class="text-end"';
+
       $tbody.append(
         "<tr>" +
         "<td>" + escapeHtml(r.ch.number) + "</td>" +
@@ -1767,6 +1775,7 @@ $(function () {
         '<td class="text-end">' + timeStr + timeBadge + "</td>" +
         '<td class="text-end">' + callsStr + "</td>" +
         '<td class="text-end">' + tokensStr + "</td>" +
+        "<td" + errorsCls + ">" + errorsStr + "</td>" +
         "</tr>"
       );
     });
@@ -1790,17 +1799,30 @@ $(function () {
     if (totalTokens > 0) {
       summaryItems.push({ label: "Total Tokens", value: totalTokens.toLocaleString(), icon: "bi-cpu" });
     }
+    var totalLLMErrors = totalErrors4xx + totalErrors5xx + totalTimeouts;
+    if (totalLLMErrors > 0) {
+      var breakdown = [];
+      if (totalErrors4xx > 0) breakdown.push(totalErrors4xx + " 4xx");
+      if (totalErrors5xx > 0) breakdown.push(totalErrors5xx + " 5xx");
+      if (totalTimeouts > 0) breakdown.push(totalTimeouts + " timeout");
+      summaryItems.push({ label: "LLM Errors", value: totalLLMErrors.toLocaleString(), icon: "bi-exclamation-triangle", cls: "text-danger", tooltip: breakdown.join(", ") });
+    }
 
     $.each(summaryItems, function (_, item) {
+      var iconCls = item.cls || "text-primary";
+      var tooltipAttr = item.tooltip ? ' data-bs-toggle="tooltip" title="' + escapeHtml(item.tooltip) + '"' : "";
       $summary.append(
         '<div class="col-6 col-md-4 col-lg-2">' +
-        '<div class="card text-center h-100">' +
+        '<div class="card text-center h-100"' + tooltipAttr + '>' +
         '<div class="card-body py-2 px-1">' +
-        '<i class="bi ' + item.icon + ' text-primary mb-1 d-block"></i>' +
-        '<div class="fw-bold">' + item.value + "</div>" +
+        '<i class="bi ' + item.icon + ' ' + iconCls + ' mb-1 d-block"></i>' +
+        '<div class="fw-bold ' + iconCls + '">' + item.value + "</div>" +
         '<small class="text-muted">' + item.label + "</small>" +
         "</div></div></div>"
       );
+    });
+    $summary.find('[data-bs-toggle="tooltip"]').each(function () {
+      new bootstrap.Tooltip(this);
     });
 
     $panel.removeClass("d-none");

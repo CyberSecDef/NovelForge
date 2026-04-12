@@ -503,6 +503,10 @@ def _call_single_provider(
 
             # Retryable server errors
             if resp.status_code == 429 or resp.status_code >= 500:
+                if resp.status_code >= 500:
+                    _llm_usage.http_errors_5xx = getattr(_llm_usage, "http_errors_5xx", 0) + 1
+                else:
+                    _llm_usage.http_errors_4xx = getattr(_llm_usage, "http_errors_4xx", 0) + 1
                 wait = _retry_delay(attempt)
                 logger.warning(
                     "LLM API [%s] returned %s – retry %d/%d in %.1fs",
@@ -532,6 +536,7 @@ def _call_single_provider(
             return content
 
         except requests.exceptions.Timeout:
+            _llm_usage.timeout_errors = getattr(_llm_usage, "timeout_errors", 0) + 1
             logger.warning(
                 "LLM request timed out [%s] (attempt %d/%d)",
                 provider.label, attempt, MAX_RETRIES,
@@ -555,6 +560,12 @@ def _call_single_provider(
             time.sleep(_retry_delay(attempt))
 
         except requests.exceptions.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status is not None:
+                if status >= 500:
+                    _llm_usage.http_errors_5xx = getattr(_llm_usage, "http_errors_5xx", 0) + 1
+                elif status >= 400:
+                    _llm_usage.http_errors_4xx = getattr(_llm_usage, "http_errors_4xx", 0) + 1
             typed_error = _classify_request_error(
                 exc, provider,
                 action=action, attempt=attempt,
@@ -629,6 +640,9 @@ def reset_llm_usage() -> None:
     _llm_usage.prompt_tokens = 0
     _llm_usage.completion_tokens = 0
     _llm_usage.call_count = 0
+    _llm_usage.http_errors_4xx = 0
+    _llm_usage.http_errors_5xx = 0
+    _llm_usage.timeout_errors = 0
 
 
 def get_llm_usage() -> dict:
@@ -638,6 +652,9 @@ def get_llm_usage() -> dict:
         "completion_tokens": getattr(_llm_usage, "completion_tokens", 0),
         "total_tokens": getattr(_llm_usage, "prompt_tokens", 0) + getattr(_llm_usage, "completion_tokens", 0),
         "call_count": getattr(_llm_usage, "call_count", 0),
+        "http_errors_4xx": getattr(_llm_usage, "http_errors_4xx", 0),
+        "http_errors_5xx": getattr(_llm_usage, "http_errors_5xx", 0),
+        "timeout_errors": getattr(_llm_usage, "timeout_errors", 0),
     }
     reset_llm_usage()
     return usage

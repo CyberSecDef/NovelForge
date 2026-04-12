@@ -388,6 +388,9 @@ def _run_chapter_generation_internal(
                 "prompt_tokens": chapter_usage["prompt_tokens"],
                 "completion_tokens": chapter_usage["completion_tokens"],
                 "total_tokens": chapter_usage["total_tokens"],
+                "http_errors_4xx": chapter_usage["http_errors_4xx"],
+                "http_errors_5xx": chapter_usage["http_errors_5xx"],
+                "timeout_errors": chapter_usage["timeout_errors"],
             })
 
             progress_manager.update(token, {
