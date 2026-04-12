@@ -98,8 +98,10 @@ $(function () {
     // tab-pane and both panes end up visible at once.
     var activeIdx = STEP_INDEX[activeId];
     if (activeIdx === undefined) {
-      // Log tab or unknown — just dim all steps, highlight log
-      $(".nf-step").removeClass("active completed");
+      // Log tab or unknown — visually dim step circles but preserve the
+      // Bootstrap-managed .active class so Tab.show() can still find
+      // and deactivate the previous pane.
+      $(".nf-step").removeClass("completed").addClass("text-muted");
       $(".nf-step-line").removeClass("completed");
       $(".nf-step-log-btn").addClass("active");
       return;
@@ -107,7 +109,7 @@ $(function () {
     $(".nf-step-log-btn").removeClass("active");
     $(".nf-step").each(function (i) {
       var $step = $(this);
-      $step.removeClass("active completed");
+      $step.removeClass("active completed text-muted");
       if (i < activeIdx) {
         $step.addClass("completed");
         // Replace number with checkmark for completed steps
@@ -1189,7 +1191,7 @@ $(function () {
     $("#btn-approve-outline").prop("disabled", true);
 
     // Show the step 3 - chapter writing tab
-    showStep("#step3-chapter-writing-tab");
+    showStep("#step-progress");
 
     $.ajax({
       url: "/approve_outline",
