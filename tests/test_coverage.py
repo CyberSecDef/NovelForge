@@ -276,7 +276,7 @@ class TestChapterPosition:
         assert ChapterPosition.inciting_chapter(20) == 2
         assert ChapterPosition.inciting_chapter(3) == 1
         assert ChapterPosition.midpoint_chapter(20) == 10
-        assert ChapterPosition.climax_chapter(20) == 19
+        assert ChapterPosition.climax_chapter(20) == 15
         assert ChapterPosition.climax_chapter(1) == 1
         assert ChapterPosition.resolution_chapter(20) == 20
 
@@ -284,9 +284,9 @@ class TestChapterPosition:
         from novelforge.chapter_position import ChapterPosition
         assert "Hook" in ChapterPosition(1, 20).get_phase()
         assert "Rising" in ChapterPosition(8, 20).get_phase()
-        # climax_chapter(20) == 19; chapter 18 falls in the pre-climax Crisis zone
-        assert "Crisis" in ChapterPosition(18, 20).get_phase()
-        assert "Climax" in ChapterPosition(19, 20).get_phase()
+        # climax_chapter(20) == 15; chapter 14 falls in the pre-climax Crisis zone
+        assert "Crisis" in ChapterPosition(14, 20).get_phase()
+        assert "Climax" in ChapterPosition(15, 20).get_phase()
         assert "Resolution" in ChapterPosition(20, 20).get_phase()
 
     def test_acts_three(self):
@@ -313,9 +313,9 @@ class TestChapterPosition:
         assert cp_mid.is_midpoint()
         assert not cp_mid.is_opening()
 
-        cp_end = ChapterPosition(19, 20)
-        assert cp_end.is_climax_zone()
-        assert not cp_end.is_before_midpoint()
+        cp_climax = ChapterPosition(15, 20)  # 75% → in climax zone (70-80%)
+        assert cp_climax.is_climax_zone()
+        assert not cp_climax.is_before_midpoint()
 
     def test_structure_phase_hint(self):
         from novelforge.chapter_position import ChapterPosition
@@ -328,7 +328,7 @@ class TestChapterPosition:
         assert "foundational" in ChapterPosition(1, 20).get_escalation_target()
         assert "cost of failure" in ChapterPosition(7, 20).get_escalation_target()
         assert "irreversible" in ChapterPosition(13, 20).get_escalation_target()
-        assert "maximum" in ChapterPosition(19, 20).get_escalation_target()
+        assert "resolve" in ChapterPosition(19, 20).get_escalation_target()
 
 
 # ---------------------------------------------------------------------------

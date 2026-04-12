@@ -123,6 +123,8 @@ thread orchestrates all steps, with a 60-minute per-chapter timeout.
               |                             |
               |  A. Character State Updater |  Record definitive states
               |  B. Compression Check       |  Structured ban directives for next ch.
+              |  C. Pattern Extractor       |  Track procedural types, opening styles,
+              |                             |  consequences, exposition ratio, themes
               +--------------+--------------+
                              |
                              v
@@ -181,26 +183,38 @@ Post-Manuscript Audits (after all chapters):
 
 ## Features
 
-- **Full Novel Generation** – Produces complete fiction novels (default 80,000–90,000 words) chapter by chapter using a configurable LLM API.
+- **Full Novel Generation** – Produces complete fiction novels (targeting 75,000–95,000 words) chapter by chapter using a configurable LLM API.
 - **Multi-Step Guided Workflow** – Four-step single-page application with a visual step-progress indicator: Imagine → Plan → Write → Publish.
 - **Brand-Designed UI** – Custom literary theme with dual-font typography (Lora serif for literary content, system sans-serif for UI), ink-blue and warm-gold colour palette, warm parchment backgrounds, and smooth dark/light mode transitions.
 - **Editable Outline** – AI-generated title, chapter-by-chapter outline, and character list are all fully editable before writing begins. Chapters displayed as draggable cards with a table-view fallback. Characters displayed as colour-coded cards with expandable Background and Arc sections.
 - **21 Genre Options** – Adventure, Contemporary Fiction, Crime, Dystopian, Fantasy, Gothic Fiction, Historical Fiction, Horror, Literary Fiction, Magical Realism, Mystery, Noir, Paranormal, Romance, Satire Humor, Science Fiction, Speculative Fiction, Thriller, Urban Fantasy, Western, Young Adult.
 - **Narrative Perspective** – Choose third-person omniscient or first-person narration from any character's perspective.
-- **Structured Story Architecture** – Outline generation follows a nine-phase narrative model (Hook → Setup → Inciting Incident → Rising Action → Midpoint Shift → Complications → Crisis → Climax → Resolution) with correct structural proportions.
+- **Structured Story Architecture** – Outline generation follows a nine-phase narrative model (Hook → Setup → Inciting Incident → Rising Action → Midpoint Shift → Complications → Crisis → Climax → Resolution) with mandatory beat placement: inciting incident by ~15%, midpoint reversal at ~50%, climax at ~75%, resolution filling the final ~25%.
 - **Voice Seed System** – Each novel is assigned a unique prose voice (lyrical, sparse, gothic, kinetic, etc.) to prevent the uniform style LLMs default to.
-- **Eight Planning Agents** – Before chapter generation, specialised agents create comprehensive constraints: Story Architecture, Master Timeline, Character Fate Registry, Character Arcs, Antagonist Motivations, Technology Rules, Theme Reinforcement, and POV & Focal Character.
-- **20+ Per-Chapter Agents** – Each chapter passes through continuity gatekeeper, rhythm classification, drafting, rhythm compliance verification, prose refinement, voice & dialogue differentiation, scene variety audit (intra- and cross-chapter), context analysis, editing, momentum & distinctiveness (rhythm-aware), human oddities injection, structure validation (rhythm-aware), operational distinctiveness (rhythm-aware), character deepening, synthesis, polishing, anti-LLM pass, metaphor reduction, vocabulary scanning, quality control, copy editing, and summarisation with structural metadata.
-- **Anti-Repetition Pipeline** – Six-layer system prevents structural repetition: rhythm history tracking across chapters, rhythm compliance verification, enriched chapter summaries with structural metadata, cross-chapter scene variety auditing, structured compression ban directives, and rhythm-aware downstream agents.
-- **Voice & Dialogue Differentiation** – Dedicated pass rewrites dialogue so each character speaks in a voice shaped by their age, background, and emotional state. Breaks the "clean, functional" dialogue pattern with natural interruptions, deflections, and incomplete thoughts.
+- **Eight Planning Agents** – Before chapter generation, specialised agents create comprehensive constraints: Story Architecture (with plot reversals), Master Timeline, Character Fate Registry, Character Arcs (flaw-driven with vulnerability scenes), Antagonist Motivations (early presence required), Technology Rules, Theme Reinforcement (through consequence), and POV & Focal Character (multi-perspective).
+- **20+ Per-Chapter Agents** – Each chapter passes through continuity gatekeeper, rhythm classification, drafting (with anti-recap, dramatisation, dialogue, and consequence rules), rhythm compliance verification, prose refinement (with exposition and dialogue checks), voice & dialogue differentiation (with multi-perspective), scene variety audit (8 categories), context analysis, editing (with exposition conversion and consequence checks), momentum & distinctiveness (rhythm-aware), human oddities injection, structure validation (rhythm-aware, anti-summation), operational distinctiveness (rhythm-aware), character deepening (flaw-driven, vulnerability scenes), synthesis (genre tone), polishing (publication-ready), anti-LLM pass (thematic restatement), metaphor reduction, vocabulary scanning, quality control (genre promise, commercial hooks, final-chapter detection), copy editing (publication-ready), and summarisation with structural metadata. Post-chapter: character state updater, compression check, and pattern extractor.
+- **Anti-Repetition Pipeline** – Multi-layer system prevents structural repetition: rhythm history tracking across chapters, rhythm compliance verification, enriched chapter summaries with structural metadata, cross-chapter scene variety auditing (8 categories including exposition density and procedural inventory), structured compression ban directives, thematic phrase tracking with banned restatements, and rhythm-aware downstream agents.
+- **Voice & Dialogue Differentiation** – Dedicated pass rewrites dialogue so each character speaks in a voice shaped by their age, background, and emotional state. Breaks the "clean, functional" dialogue pattern with natural interruptions, deflections, and incomplete thoughts. Includes multi-character perspective enforcement and expository speech removal.
 - **Human Oddities Injection** – Injects 1–2 small, non-plot-serving human moments per chapter (bad jokes, stray thoughts, irrelevant observations) to break relentless moral seriousness.
 - **Metaphor Reduction** – Identifies and removes excessive, decorative, mixed, or stacked metaphors, keeping only those that earn their place.
-- **Copy Edit Pass** – Final prose cleanup targeting word/phrase/sentence repetitions and reducing excessive em-dashes.
+- **Copy Edit Pass** – Final prose cleanup targeting word/phrase/sentence repetitions, thematic phrase repetition, reducing excessive em-dashes, and publication-ready tightening (filler phrases, weak verbs).
 - **Vocabulary Scanner** – Pure Python word-boundary regex scanner that enforces hard-banned LLM fingerprint words, soft-limited overused words, and banned multi-word patterns.
 - **Per-Chapter Compression Check** – After each chapter, a compression analyser identifies redundancy patterns and outputs structured ban directives (banned operations, emotional beats, openings, resolutions, plus required contrast) for the next chapter.
+- **Cross-Chapter Pattern Tracking** – Post-chapter extractor tracks procedural types dramatised, chapter opening styles, irreversible consequences, dramatisation ratios, and thematic phrases. Accumulated data is injected into subsequent chapters to prevent repetition and enforce variety.
+- **Procedural Condensation** – Procedural sequences (logistics, planning sessions, inventories) are shown in full at most once per novel; subsequent instances are condensed to outcome references.
+- **Dramatisation Enforcement** – Minimum 70% dramatised scenes per chapter. Exposition density is tracked and low-dramatisation chapters trigger warnings for subsequent drafts.
+- **Anti-Expository Dialogue** – All dialogue must be subtext-driven and reveal personality/motivation. Expository speeches over 3 sentences are broken into conflict-driven exchanges with interruptions, disagreements, and personal stakes.
+- **Irreversible Consequence Tracking** – Character decisions must carry concrete personal costs (lost trust, physical harm, fractured relationships). Consequences are extracted per chapter and injected as hard constraints into subsequent drafts.
+- **Flaw-Driven Character Arcs** – Characters have distinct internal flaws and personal goals independent of the plot. Arcs are driven by how flaws create problems and goals create tension with the main conflict.
+- **Vulnerability Scenes** – 2-3 dedicated scenes per major character showing vulnerability or change through action and dialogue, planned by the Character Arc Planner and enforced by the Character Agent.
+- **Plot Reversals** – Story Architecture plans 2-3 typed reversals (betrayal, loss, discovery, strategic failure, moral compromise, power shift) spread across the novel, each with irreversible consequences.
+- **Early Antagonist Presence** – Active antagonist or opposition force must appear on-page within the first 3 chapters with a concrete hostile action.
+- **Genre Tone Consistency** – Genre contract enforcement across the full pipeline: chapter draft, synthesiser, quality controller, and post-manuscript audits verify tone stays true to genre expectations.
+- **Resonant Final Scene** – The final chapter receives specific directives for a closing scene that resolves the central premise with emotional weight, ending on an image/action/exchange rather than narration.
+- **Commercial Readability** – Quality controller and post-manuscript audits verify high personal stakes, relatable protagonist moments, clear reader payoff, and engagement drop-off risk detection with specific revision recommendations.
 - **Anti-LLM Agent** – Dedicated LLM pass that removes robotic language patterns, overused phrases, and LLM hallmarks to produce human-sounding prose.
 - **Continuity Tracking** – Each completed chapter generates a continuity summary with structural metadata (rhythm, opening type, resolution approach, emotional arc, dominant scene type) that is fed to subsequent chapters.
-- **Ten Post-Generation Audit Agents** – Comprehensive analysis including consistency pass, global continuity audit, narrative compression analysis, character resolution validation, thematic payoff analysis, climax integrity check, loose thread resolution, reader immersion testing, pacing & tension heatmap, and character relationship mapping.
+- **Ten Post-Generation Audit Agents** – Comprehensive analysis including consistency pass (with genre/tone cohesion), global continuity audit, narrative compression analysis (with commercial length targeting), character resolution validation (with earned catharsis), thematic payoff analysis (through consequence, anti-summation), climax integrity check (with catharsis assessment), loose thread resolution, reader immersion testing (with genre consistency and engagement drop-off), pacing & tension heatmap (with drop-off detection), and character relationship mapping.
 - **Chapter Revision** – Users can revise any chapter with custom instructions; the revised chapter runs through the full agent pipeline (with per-chapter timeout).
 - **Comprehensive Editor's Notes** – Export all diagnostic reports from the 10 post-generation audits to identify chapters needing revision.
 - **Session Persistence** – Crash recovery automatically saves progress; interrupted generations can be resumed.
@@ -379,7 +393,7 @@ NovelForge/
 ├── static/
 │   ├── css/style.css       # Custom styles (brand palette, typography, animations, dark mode, responsive)
 │   └── js/script.js        # jQuery client (AJAX, progress timeline, drag-drop, skeletons, tour)
-├── tests/                  # 832 tests across 29 files (pytest)
+├── tests/                  # 932 tests across 29 files (pytest)
 │   ├── conftest.py         # Shared fixtures: app, client, mock_llm
 │   └── test_*.py           # Test modules (see Testing section)
 ├── sessions/
@@ -525,7 +539,7 @@ Click **Generate Outline**. The button transitions to "Conjuring your story..." 
 
 1. Generates a catchy title.
 2. Generates a chapter-by-chapter outline following the nine-phase narrative architecture.
-3. Generates 3–7 main characters with name, age, background, role, and arc.
+3. Generates 3–7 main characters with name, age, background, role, arc, internal flaw, and personal goal.
 4. Selects a unique voice seed for prose style.
 5. Runs all eight planning agents in parallel groups to create comprehensive story constraints.
 
@@ -562,40 +576,41 @@ The browser polls `/progress/<token>` with adaptive backoff (15s → 30s → 60s
 0b. **Chapter Rhythm Classifier** – Recommends contrasting narrative rhythm using cross-chapter rhythm history.
 1. **Draft** – Initial prose written with full context, planning guidance, voice seed, and structured compression ban directives.
 2. **Rhythm Compliance Verifier** – Checks whether the draft actually follows the assigned rhythm; restructures if it defaulted to a generic pattern.
-3. **Prose Refinement** – Refines dialogue and scene momentum.
-4. **Voice & Dialogue Differentiation** – Rewrites dialogue for character-specific voices, natural speech patterns, and prose breathing.
-5. **Scene Variety Audit** – Detects intra-chapter and cross-chapter repetition (directives only).
+3. **Prose Refinement** – Refines dialogue and scene momentum. Checks for expository dialogue, dramatisation, sentence rhythm, and sensory immediacy.
+4. **Voice & Dialogue Differentiation** – Rewrites dialogue for character-specific voices, natural speech patterns, prose breathing, multi-character perspective, and expository speech removal.
+5. **Scene Variety Audit** – Detects intra-chapter and cross-chapter repetition across 8 categories including exposition density and procedural inventory (directives only).
 6. **Context Analyser** – Checks world-building facts, timeline, and technology rules.
-7. **Editing Agent** – Fixes plot holes, pacing problems, and character inconsistencies.
+7. **Editing Agent** – Fixes plot holes, pacing, character inconsistencies. Converts exposition to scenes, enforces consequence checks, dialogue quality, and procedural condensation.
 8. **Momentum & Distinctiveness** – Eliminates cross-chapter redundancy and ensures escalation (rhythm-aware).
 9. **Human Oddities** – Injects 1–2 small, non-plot-serving human moments.
 10. **Structure Agent** – Verifies the chapter fulfils its designated role in the story architecture (rhythm-aware).
 11. **Operational Distinctiveness** – Ensures each chapter has unique operations and methods (rhythm-aware).
-12. **Character Agent** – Deepens character arcs and corrects out-of-character moments.
-13. **Synthesiser** – Unifies narrative voice and thematic thread after all specialist passes.
-14. **Polish Agent** – Elevates grammar, style, and vivid language.
+12. **Character Agent** – Deepens character arcs, enforces flaw-driven development, irreversible cost, and vulnerability scenes.
+13. **Synthesiser** – Unifies narrative voice, thematic thread, and genre tone consistency.
+14. **Polish Agent** – Publication-ready line editing: sentence rhythm, sensory immediacy, weak verb elimination, filler phrase removal.
 15. **Anti-LLM Agent** – Strips robotic patterns and forbidden words.
 16. **Metaphor Reduction** – Removes excessive, decorative, mixed, and stacked metaphors.
 17. **Vocabulary Scanner** – Pure Python word-boundary regex scan (no LLM call).
-18. **Quality Controller** – Checks reader engagement, tension, pacing, and hook strength.
-19. **Copy Edit** – Final pass for prose repetitions, sentence structure variation, and dash cleanup.
+18. **Quality Controller** – Checks engagement, tension, pacing, hook strength, genre promise, commercial hooks, dialogue quality, exposition density. Final-chapter detection for resonant closing scene.
+19. **Copy Edit** – Final pass for prose repetitions, sentence structure, thematic phrase repetition, dash cleanup, and publication-ready tightening.
 20. **Summariser** – Produces a continuity summary with structural metadata (rhythm, opening type, resolution approach, emotional arc, dominant scene type).
 
 **After each chapter**:
 - **Character State Updater** – Records definitive character states for the next chapter.
 - **Per-Chapter Compression Check** – Outputs structured ban directives (banned operations, emotional beats, openings, resolutions, plus required contrast) for the next chapter.
+- **Chapter Pattern Extractor** – Extracts cross-chapter tracking data: procedural types dramatised, chapter opening style, irreversible consequences, dramatisation ratio, and thematic phrases used. This data is accumulated and injected into subsequent chapter drafts to prevent repetition and enforce variety.
 
 **After all chapters are written**, ten post-generation audit agents run:
 
-1. **Consistency Pass** – Reviews all summaries for plot holes and unresolved threads.
+1. **Consistency Pass** – Reviews all summaries for plot holes, unresolved threads, tone consistency, genre promise delivery, and final scene impact.
 2. **Global Continuity Auditor** – Checks for contradictions, character state errors, and timeline errors.
-3. **Narrative Compression Editor** – Identifies redundant sequences and emotional beat repetitions.
-4. **Character Resolution Validator** – Confirms every major character receives closure.
-5. **Thematic Payoff Analyser** – Ensures all themes culminate properly.
-6. **Climax Integrity Checker** – Verifies protagonist makes a definitive moral decision.
+3. **Narrative Compression Editor** – Identifies redundant sequences and emotional beat repetitions with commercial length targeting (75k-95k words).
+4. **Character Resolution Validator** – Confirms every major character receives closure with earned catharsis and trade-off integrity.
+5. **Thematic Payoff Analyser** – Ensures all themes culminate through consequence (not statement), checks for anti-summation.
+6. **Climax Integrity Checker** – Verifies protagonist makes a definitive moral decision with earned catharsis and anti-summation.
 7. **Loose Thread Resolver** – Identifies unresolved narrative questions.
-8. **Reader Immersion Tester** – Evaluates pacing, tension, and engagement.
-9. **Pacing & Tension Heatmap** – Per-chapter metrics for tension, action, emotion, dialogue, description.
+8. **Reader Immersion Tester** – Evaluates pacing, tension, engagement, genre consistency, commercial readability, engagement drop-off risks, and final scene impact.
+9. **Pacing & Tension Heatmap** – Per-chapter metrics for tension, action, emotion, dialogue, description with engagement drop-off detection.
 10. **Character Relationship Map** – Maps character relationships as a Mermaid diagram.
 
 ### Step 4 – Publish (Export & Revision)
@@ -742,13 +757,13 @@ Before chapter generation begins, eight planning agents create comprehensive con
 
 | Agent | Purpose | Output |
 |---|---|---|
-| **Story Architecture Planner** | Creates 3-act (< 16 chapters) or 4-act structure | Per-chapter phase, purpose, escalation targets, operation limits |
+| **Story Architecture Planner** | Creates 3-act (< 16 chapters) or 4-act structure with mandatory beat placement (inciting ~15%, midpoint ~50%, climax ~75%) | Per-chapter phase, purpose, escalation targets, operation limits, 2-3 typed plot reversals |
 | **Master Timeline Planner** | Tracks events and character states | Event ledger, chapter constraints, character state tracking |
 | **Character Fate Registry Planner** | Monitors character outcomes | Status tracking, injury records, outcome locks, conflict checks |
-| **Character Arc Planner** | Plans character development | Arc beats per chapter, transformation milestones, consistency rules |
-| **Antagonist Motivation Planner** | Tracks antagonist goals and tactics | Motivation core, escalation plan, pressure points, consistency rules |
+| **Character Arc Planner** | Plans flaw-driven character development with vulnerability scenes | Internal flaw, personal goal, arc beats per chapter, 2-3 vulnerability scenes, transformation milestones, consistency rules |
+| **Antagonist Motivation Planner** | Tracks antagonist goals and tactics with early-presence requirement | Motivation core, escalation plan (must include on-page action within first 3 chapters), pressure points, consistency rules |
 | **Technology Rules Planner** | Defines system constraints | Latency, costs, blind spots, failure modes, forbidden capabilities |
-| **Theme Reinforcement Planner** | Assigns thematic guidance | Theme appearances per chapter, thematic arcs, chapter-specific guidance |
+| **Theme Reinforcement Planner** | Assigns thematic guidance (themes through consequence, not meditation) | Theme appearances per chapter as character decisions with costs, thematic arcs, chapter-specific guidance |
 | **POV & Focal Character Planner** | Assigns point-of-view per chapter | Primary POV, secondary observers, focal internal character, rotation rules |
 
 Planning agents are implemented as `BaseAgent` subclasses in `agents/planning/` (one file per agent) with a shared orchestration pattern: `build_prompt → call_llm → parse_json → normalise → fallback on error`. They run in parallel groups orchestrated by `services/planning.py` and support **selective regeneration**: on re-approval, only agents whose inputs changed are re-run, based on per-agent input hashing.
@@ -783,6 +798,7 @@ Each chapter passes through a comprehensive pipeline of specialised agents:
 | Step 19 | **Summariser** | Produces continuity summary with structural metadata |
 | Post-ch. | **Character State Updater** | Records definitive character states |
 | Post-ch. | **Compression Check** | Outputs structured ban directives for next chapter |
+| Post-ch. | **Pattern Extractor** | Tracks procedural types, opening styles, consequences, exposition ratio, thematic phrases |
 
 ### Post-Generation Audit Agents
 
@@ -790,15 +806,15 @@ After all chapters are complete, ten audit agents analyse the full manuscript:
 
 | Agent | Purpose | Key Outputs |
 |---|---|---|
-| **Consistency Pass** | Reviews all summaries for issues | Issues list, overall assessment |
+| **Consistency Pass** | Reviews all summaries for issues, tone consistency, genre promise, final scene impact | Issues list, global cohesion checks, overall assessment |
 | **Global Continuity Auditor** | Checks for contradictions | Contradictions, character state errors, timeline errors |
-| **Narrative Compression Editor** | Identifies redundancy | Redundant sequences, emotional beat repetitions |
-| **Character Resolution Validator** | Confirms character closure | Unresolved characters, resolution status |
-| **Thematic Payoff Analyser** | Ensures theme culmination | Abandoned themes, weak payoffs, thematic integrity |
-| **Climax Integrity Checker** | Verifies protagonist decision | Climax chapter, decision checks, integrity failures |
+| **Narrative Compression Editor** | Identifies redundancy with commercial length targeting (75k-95k) | Redundant sequences, emotional beat repetitions, compression priorities |
+| **Character Resolution Validator** | Confirms character closure with earned catharsis and trade-off integrity | Unresolved characters, catharsis assessment, trade-off integrity, resolution status |
+| **Thematic Payoff Analyser** | Ensures theme culmination through consequence, not statement | Abandoned themes, weak payoffs, themes stated vs. lived, anti-summation check, thematic integrity |
+| **Climax Integrity Checker** | Verifies protagonist decision, earned catharsis, anti-summation | Climax chapter, decision checks, catharsis assessment, integrity failures |
 | **Loose Thread Resolver** | Identifies open questions | Unresolved threads, dangling setups |
-| **Reader Immersion Tester** | Evaluates reader experience | Engagement score, weak chapters, recommendations |
-| **Pacing & Tension Heatmap** | Per-chapter metrics | Tension, action, emotion, dialogue, description scores |
+| **Reader Immersion Tester** | Evaluates reader experience, genre consistency, commercial readability, engagement drop-off | Engagement score, genre drift chapters, commercial hooks, final scene impact, weak chapters, recommendations |
+| **Pacing & Tension Heatmap** | Per-chapter metrics with engagement drop-off detection | Tension, action, emotion, dialogue, description scores, engagement drop-off risks with revision recommendations |
 | **Character Relationship Map** | Maps relationships | Characters and edges rendered as Mermaid diagram |
 
 All audit results use named fallback structures (defined in `routes/generation/audits.py`) so that export code can safely consume results even when LLM parsing fails.
@@ -846,14 +862,18 @@ The outline prompt instructs the LLM to structure the story according to the fol
 | **5. Midpoint Shift** | Middle (50%) | A major revelation or reversal that changes the protagonist's direction. |
 | **6. Complications** | Middle (50%) | Worsening problems, rising stakes, ticking clocks. |
 | **7. Crisis** | End (25%) | The hardest decision the protagonist must make. |
-| **8. Climax** | End (25%) | The decisive confrontation or moment of highest tension. |
-| **9. Resolution** | End (25%) | Aftermath and visible character change. |
+| **8. Climax** | ~75% mark | The decisive confrontation or moment of highest tension. |
+| **9. Resolution** | Final ~25% | Falling action, lasting trade-offs, and visible character change. |
+
+**Mandatory beat placement:** Inciting incident by ~15% of chapters, midpoint reversal at ~50%, climax at ~75%, resolution filling the final ~25%. The climax is placed early enough to leave room for falling action, lasting trade-offs, and earned catharsis.
 
 **Architecture selection:** 3-act model for novels with fewer than 16 chapters; 4-act model for 16+ chapters.
 
+**Plot reversals:** 2-3 typed reversals (betrayal, loss, discovery, strategic failure, moral compromise, power shift) spread across the novel with irreversible consequences.
+
 **Scene-level pattern:** Goal → Obstacle → Outcome → New problem.
 
-**Layered consistency targets:** Character arc, theme, cause-and-effect chain, escalation, and payoff.
+**Layered consistency targets:** Character arc (flaw-driven), theme (through consequence), irreversible cost tracking, cause-and-effect chain, escalation, and payoff.
 
 ---
 
@@ -886,7 +906,7 @@ If the browser is closed or the server restarts during generation:
 | `special_instructions` | `/generate_outline` | Optional instructions string |
 | `title` | `/generate_outline`, `/approve_outline` | Novel title string |
 | `chapter_list` | `/generate_outline`, `/approve_outline` | List of `{number, title, summary}` dicts |
-| `character_list` | `/generate_outline`, `/approve_outline` | List of `{name, age, background, role, arc}` dicts |
+| `character_list` | `/generate_outline`, `/approve_outline` | List of `{name, age, background, role, arc, internal_flaw, personal_goal}` dicts |
 | `voice_seed` | `/generate_outline` | Selected voice seed for prose style |
 | `narrative_perspective` | `/approve_outline` | `"third_person"` or `"first_person:<name>"` |
 | `story_architecture` | `/generate_outline`, `/approve_outline` | Story Architecture Planner output |
@@ -932,7 +952,7 @@ The test suite uses **pytest** and Flask's built-in test client. No live LLM cal
 pytest tests/
 ```
 
-**832 tests across 29 files:**
+**932 tests across 29 files:**
 
 | Test File | Coverage Area |
 |---|---|
@@ -1028,15 +1048,15 @@ PER_CHAPTER_TIMEOUT=7200             # 2 hours per chapter (default: 3600)
 
 ### Typical Generation Times
 
-Each chapter makes ~23 LLM calls through the agent pipeline (including rhythm compliance verification), plus 2-3 pre/post-chapter calls.
+Each chapter makes ~23 LLM calls through the agent pipeline (including rhythm compliance verification), plus 3-4 pre/post-chapter calls (continuity gatekeeper, rhythm classifier, character state updater, compression check, pattern extractor).
 
 | Chapters | Approx. LLM Calls | Typical Time (GPT-4o) |
 |----------|-------------------|-----------------------|
-| 3 | ~80 | 20-40 min |
-| 10 | ~260 | 1.5-4 hours |
-| 15 | ~390 | 3-6 hours |
-| 24 | ~625 | 5-12 hours |
-| 50 | ~1300 | 12-24 hours |
+| 3 | ~85 | 20-40 min |
+| 10 | ~275 | 1.5-4 hours |
+| 15 | ~415 | 3-6 hours |
+| 24 | ~660 | 5-12 hours |
+| 50 | ~1375 | 12-24 hours |
 
 **Planning phase:** 8 agents in 3 parallel groups (~2-4 minutes). On re-approval with no changes, skipped entirely via input hashing.
 

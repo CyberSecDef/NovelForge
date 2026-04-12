@@ -59,11 +59,19 @@ def _format_characters(character_list: list[dict]) -> str:
         return "No characters defined."
     lines = []
     for ch in character_list:
-        lines.append(
+        base = (
             f"- {ch.get('name','?')} (age {ch.get('age','?')}): "
             f"{ch.get('role','?')}. Background: {ch.get('background','')}. "
             f"Arc: {ch.get('arc','')}."
         )
+        extras = []
+        flaw = ch.get("internal_flaw", "")
+        if flaw:
+            extras.append(f"  Internal flaw: {flaw}")
+        goal = ch.get("personal_goal", "")
+        if goal:
+            extras.append(f"  Personal goal: {goal}")
+        lines.append("\n".join([base] + extras) if extras else base)
     return "\n".join(lines)
 
 

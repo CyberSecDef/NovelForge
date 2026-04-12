@@ -127,29 +127,32 @@ class TestLargerNovelPhases:
 
     def test_ten_chapter_landmarks(self):
         # inciting=2, midpoint=round((10+1)/2)=round(5.5)=6 (banker's rounding),
-        # climax=9, resolution=10
+        # climax=round(10*0.75)=round(7.5)=8, resolution=10
         assert phase(1, 10) == "Hook"
         assert phase(2, 10) == "Inciting Incident"
         assert phase(6, 10) == "Midpoint Shift"
-        assert phase(9, 10) == "Climax"
+        assert phase(8, 10) == "Climax"
         assert phase(10, 10) == "Resolution"
 
     def test_twenty_chapter_landmark_consistency(self):
-        # inciting=2, midpoint=10, climax=19, resolution=20
+        # inciting=2, midpoint=round((20+1)/2)=10,
+        # climax=round(20*0.75)=15, resolution=20
         assert phase(1, 20) == "Hook"
         assert phase(2, 20) == "Inciting Incident"
         assert phase(10, 20) == "Midpoint Shift"
-        assert phase(19, 20) == "Climax"
+        assert phase(15, 20) == "Climax"
         assert phase(20, 20) == "Resolution"
 
     def test_twenty_chapter_intermediate_phases(self):
         # Chapters between inciting(2) and midpoint(10) → Rising Action
         for c in range(3, 10):
             assert phase(c, 20) == "Rising Action", f"chapter {c}/20"
-        # At least some chapters between midpoint(10) and climax(19)
-        # are Complications or Crisis – not Climax or Resolution
-        for c in range(11, 19):
+        # Chapters between midpoint(10) and climax(15): Complications or Crisis
+        for c in range(11, 15):
             assert phase(c, 20) in {"Complications", "Crisis"}, f"chapter {c}/20"
+        # Chapters after climax(15) are Resolution (falling action)
+        for c in range(16, 21):
+            assert phase(c, 20) == "Resolution", f"chapter {c}/20"
 
 
 # ---------------------------------------------------------------------------

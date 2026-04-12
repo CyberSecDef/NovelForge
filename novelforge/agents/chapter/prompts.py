@@ -71,12 +71,15 @@ def build_chapter_draft_prompt(
     chapter_theme_context: str = "", gatekeeper_brief: str = "", compression_guidance: str = "",
     chapter_rhythm_shape: str = "", chapter_rhythm_reason: str = "", chapter_pov_context: str = "",
     voice_prompt: str = "", perspective_prompt: str = "",
+    procedural_exemplars: str = "", chapter_openings_log: str = "",
+    consequence_log: str = "", total_chapters: int = 0,
 ) -> list[dict[str, str]]:
     """Build the initial chapter draft prompt with all planning context."""
     return render_prompt(
         "chapter_draft",
         title=title, genre=genre, premise=premise,
         chapter_num=chapter_num, chapter_title=chapter_title,
+        total_chapters=total_chapters,
         chapter_summary=chapter_summary, characters_text=characters_text,
         previous_summaries=previous_summaries or "",
         target_words=f"{target_words:,}",
@@ -93,6 +96,9 @@ def build_chapter_draft_prompt(
         compression_guidance=compression_guidance or "",
         chapter_rhythm_shape=chapter_rhythm_shape or "",
         chapter_rhythm_reason=chapter_rhythm_reason or "",
+        procedural_exemplars=procedural_exemplars or "",
+        chapter_openings_log=chapter_openings_log or "",
+        consequence_log=consequence_log or "",
         forbidden_words=", ".join(get_forbidden_words(genre)),
         soft_limited_words=", ".join(get_soft_limited_words(genre)),
         voice_prompt=voice_prompt or "",
@@ -187,9 +193,11 @@ def build_synthesizer_prompt(chapter_text: str, chapter_num: int, title: str, ge
                          perspective_prompt=perspective_prompt or "", chapter_text=chapter_text)
 
 
-def build_quality_controller_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+def build_quality_controller_prompt(chapter_text: str, chapter_num: int, title: str,
+                                    genre: str = "", total_chapters: int = 0) -> list[dict[str, str]]:
     """Build the engagement, pacing, and tension quality check prompt."""
-    return render_prompt("quality_controller", title=title, chapter_num=chapter_num, chapter_text=chapter_text)
+    return render_prompt("quality_controller", title=title, chapter_num=chapter_num,
+                         chapter_text=chapter_text, genre=genre, total_chapters=total_chapters)
 
 
 def build_editing_agent_prompt(chapter_text: str, chapter_summary: str, chapter_num: int, title: str, scene_audit_directives: str = "") -> list[dict[str, str]]:
@@ -382,6 +390,14 @@ def build_character_state_updater_prompt(chapter_text: str, chapter_summary: str
     )
 
 
+def build_chapter_pattern_extractor_prompt(chapter_text: str, chapter_num: int, title: str) -> list[dict[str, str]]:
+    """Build the post-chapter pattern extraction prompt for procedural exemplar and opening style tracking."""
+    return render_prompt(
+        "chapter_pattern_extractor", title=title, chapter_num=chapter_num,
+        chapter_text=chapter_text,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Chapter revision prompt builder
 # ---------------------------------------------------------------------------
@@ -416,12 +432,13 @@ def build_chapter_revision_prompt(
 # Post-manuscript audit prompt builders
 # ---------------------------------------------------------------------------
 
-def build_consistency_pass_prompt(title: str, all_summaries: list[str], special_instructions: str) -> list[dict[str, str]]:
+def build_consistency_pass_prompt(title: str, all_summaries: list[str], special_instructions: str,
+                                  genre: str = "") -> list[dict[str, str]]:
     """Build the post-manuscript consistency audit prompt."""
     summaries_text = "\n\n".join(
         f"Chapter {i+1}:\n{s}" for i, s in enumerate(all_summaries)
     )
-    return render_prompt("consistency_pass", title=title, summaries_text=summaries_text,
+    return render_prompt("consistency_pass", title=title, summaries_text=summaries_text, genre=genre,
                          special_instructions=special_instructions)
 
 
@@ -609,7 +626,7 @@ def build_loose_thread_resolver_prompt(title: str, all_summaries: list[str], cha
                          state_block=state_block, audit_block=audit_block, unresolved_block=unresolved_block)
 
 
-def build_reader_immersion_tester_prompt(title: str, all_summaries: list[str], character_arc_plan: dict | None = None, thematic_report: dict | None = None) -> list[dict[str, str]]:
+def build_reader_immersion_tester_prompt(title: str, all_summaries: list[str], character_arc_plan: dict | None = None, thematic_report: dict | None = None, genre: str = "") -> list[dict[str, str]]:
     """Build the reader immersion and engagement testing prompt."""
     summaries_block = "\n".join(
         f"Chapter {i + 1}: {s}" for i, s in enumerate(all_summaries)
@@ -634,7 +651,7 @@ def build_reader_immersion_tester_prompt(title: str, all_summaries: list[str], c
     theme_block = "\n".join(theme_lines) if theme_lines else "No thematic payoff data available."
 
     return render_prompt("reader_immersion_tester", title=title, summaries_block=summaries_block,
-                         arc_block=arc_block, theme_block=theme_block)
+                         arc_block=arc_block, theme_block=theme_block, genre=genre)
 
 
 def build_pacing_tension_heatmap_prompt(title: str, all_summaries: list[str], total_chapters: int) -> list[dict[str, str]]:

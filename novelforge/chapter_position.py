@@ -13,8 +13,9 @@ Four landmark chapters anchor the narrative arc for any novel length:
   4+ chapters, chapter 1 otherwise.
 * **Midpoint Shift** – ``midpoint_chapter(n)``: the rounded midpoint of the
   chapter range.
-* **Climax** – ``climax_chapter(n)``: second-to-last chapter (or chapter 1
-  for a single-chapter novel).
+* **Climax** – ``climax_chapter(n)``: targets ~75% of the way through the
+  novel (or chapter 1 for a single-chapter novel).  Always at least one
+  chapter after midpoint and at least one chapter before the end.
 * **Resolution** – ``resolution_chapter(n)``: the final chapter.
 
 ``get_phase()`` is defined entirely in terms of these landmarks so that
@@ -33,6 +34,11 @@ The nine phases fill the gaps between landmarks as follows::
 
 For short novels some intermediate phases collapse (e.g. a 4-chapter novel
 yields ``[Hook, Inciting Incident, Climax, Resolution]``).
+
+The climax at ~75% leaves the final ~25% of chapters for falling action
+and resolution, matching the three-act structure recommended by editorial
+review: inciting incident by ~15%, midpoint reversal at ~50%, climax at
+~75%.
 """
 
 
@@ -74,8 +80,21 @@ class ChapterPosition:
 
     @staticmethod
     def climax_chapter(total_chapters: int) -> int:
-        """Return the climax chapter number (second-to-last, or 1 if only one chapter)."""
-        return max(1, total_chapters - 1) if total_chapters > 1 else 1
+        """Return the climax chapter number (~75% mark).
+
+        For novels of 6 or fewer chapters the old second-to-last rule
+        and the 75 % rule converge, so small novels are unaffected.
+        For longer novels the climax shifts earlier, leaving the final
+        quarter for falling action and resolution.
+        """
+        if total_chapters <= 1:
+            return 1
+        if total_chapters <= 6:
+            return total_chapters - 1
+        target = round(total_chapters * 0.75)
+        mid = ChapterPosition.midpoint_chapter(total_chapters)
+        # Ensure climax is after midpoint and before the final chapter
+        return max(mid + 1, min(target, total_chapters - 1))
 
     @staticmethod
     def resolution_chapter(total_chapters: int) -> int:
@@ -104,12 +123,12 @@ class ChapterPosition:
         mid = ChapterPosition.midpoint_chapter(n)
         clx = ChapterPosition.climax_chapter(n)
 
-        # Resolution: the final chapter
-        if c >= n:
+        # Resolution: everything after the climax chapter
+        if c > clx:
             return "Resolution"
 
-        # Climax: from the climax landmark through the penultimate chapter
-        if c >= clx:
+        # Climax: the climax chapter itself
+        if c == clx:
             return "Climax"
 
         # Inciting Incident takes priority over Midpoint Shift when they share
@@ -175,15 +194,15 @@ class ChapterPosition:
         elif self.position_pct <= 50:
             return "deepen the cost of failure and raise the personal price"
         elif self.position_pct <= 75:
-            return "force irreversible decisions and close off safe options"
+            return "force irreversible decisions and push to climax \u2013 survival, identity, or irreversible loss"
         else:
-            return "push stakes to maximum \u2013 survival, identity, or irreversible loss"
+            return "resolve consequences, land emotional payoffs, and close character arcs"
 
     # --- Zone checks ---
 
     def is_climax_zone(self) -> bool:
-        """True if this chapter is in the climax zone (last ~15% of the novel)."""
-        return self.position_pct > 85
+        """True if this chapter is in the climax zone (~70-80% of the novel)."""
+        return 70 <= self.position_pct <= 80
 
     def is_opening(self) -> bool:
         """True if this chapter is in the opening zone (first ~15%)."""

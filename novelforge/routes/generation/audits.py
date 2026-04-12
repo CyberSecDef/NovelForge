@@ -164,7 +164,7 @@ def run_post_manuscript_audits(
     # --- Final consistency pass ---
     progress_manager.update(token, {"step": "Final consistency pass"})
     consistency_raw = call_llm(
-        build_consistency_pass_prompt(title, summaries, special_instructions),
+        build_consistency_pass_prompt(title, summaries, special_instructions, genre=genre),
         action="Final consistency pass", json_mode=True,
     )
     consistency = _parse_audit_json(consistency_raw, CONSISTENCY_FALLBACK)
@@ -260,6 +260,7 @@ def run_post_manuscript_audits(
         build_reader_immersion_tester_prompt(
             title=title, all_summaries=summaries,
             character_arc_plan=character_arc_plan, thematic_report=thematic_report,
+            genre=genre,
         ),
         action="Reader immersion testing", json_mode=True,
     )

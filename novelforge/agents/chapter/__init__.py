@@ -57,6 +57,7 @@ from novelforge.agents.chapter.prompts import (  # noqa: F401
     build_character_agent_prompt,
     build_character_relationship_prompt,
     build_character_resolution_validator_prompt,
+    build_chapter_pattern_extractor_prompt,
     build_character_state_updater_prompt,
     build_characters_prompt,
     build_climax_integrity_checker_prompt,
@@ -93,6 +94,7 @@ from novelforge.agents.chapter.prompts import (  # noqa: F401
 
 from novelforge.agents.chapter.pipeline import (  # noqa: F401
     _run_all_chapter_agents,
+    run_chapter_pattern_extractor,
     run_chapter_rhythm_classifier,
     run_character_state_updater,
     run_continuity_gatekeeper,

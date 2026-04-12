@@ -41,6 +41,7 @@ from novelforge.agents.chapter import (
     build_chapter_draft_prompt,
     run_continuity_gatekeeper, run_chapter_rhythm_classifier,
     run_character_state_updater, run_per_chapter_compression_check,
+    run_chapter_pattern_extractor,
     _run_all_chapter_agents, ChapterContext,
 )
 from novelforge.session.persistence import (
@@ -197,6 +198,11 @@ def _run_chapter_generation_internal(
     compression_guidance: str = ""
     degraded_passes: list[dict] = []
     rhythm_log: list[dict] = []
+    procedural_exemplar_log: list[dict] = []  # tracks which procedural types were dramatized per chapter
+    chapter_openings_log: list[dict] = []     # tracks how each chapter opened
+    consequence_log: list[dict] = []          # tracks irreversible consequences per chapter
+    exposition_log: list[dict] = []           # tracks dramatization ratio per chapter
+    thematic_phrase_log: list[str] = []       # tracks thematic phrases to avoid repeating
 
     # Format voice seed for prompt injection
     from novelforge.voice import format_voice_prompt
@@ -306,6 +312,73 @@ def _run_chapter_generation_internal(
             chapter_rhythm_reason = str(rhythm_result.get("recommendation_reason", "")).strip()
             chapter_detected_patterns = rhythm_result.get("detected_patterns", [])
 
+            # Format tracker context for the draft prompt
+            _procedural_exemplars_text = ""
+            if procedural_exemplar_log:
+                lines = []
+                for entry in procedural_exemplar_log:
+                    for ptype in entry.get("types", []):
+                        lines.append(f"- {ptype} (Ch {entry['chapter']})")
+                if lines:
+                    _procedural_exemplars_text = "\n".join(lines)
+
+            _openings_log_text = ""
+            if chapter_openings_log:
+                lines = [f"- Ch {e['chapter']}: {e['style']} — {e.get('description', '')}"
+                         for e in chapter_openings_log[-5:]]  # last 5 for recency
+                _openings_log_text = "\n".join(lines)
+
+            _consequence_log_text = ""
+            if consequence_log:
+                lines = []
+                for entry in consequence_log:
+                    for c in entry.get("consequences", []):
+                        lines.append(f"- Ch {entry['chapter']}: {c}")
+                if lines:
+                    _consequence_log_text = "\n".join(lines)
+
+            # Build exposition warning if recent chapters had low dramatization
+            _exposition_warning = ""
+            if exposition_log:
+                recent = exposition_log[-3:]  # last 3 chapters
+                low = [e for e in recent if e["dramatized_pct"] < 70]
+                if low:
+                    pcts = ", ".join(f"Ch {e['chapter']}: {e['dramatized_pct']}%" for e in low)
+                    _exposition_warning = (
+                        f"EXPOSITION WARNING: Recent chapters had low dramatization "
+                        f"ratios ({pcts}). This chapter MUST be at least 70% "
+                        f"dramatized scenes — characters acting and speaking in "
+                        f"real time. Minimize internal monologue and summary narration."
+                    )
+
+            # Build thematic phrase warning
+            _theme_warning = ""
+            if thematic_phrase_log:
+                # Deduplicate and take last 15 phrases
+                seen = set()
+                unique = []
+                for p in thematic_phrase_log:
+                    pl = p.lower()
+                    if pl not in seen:
+                        seen.add(pl)
+                        unique.append(p)
+                recent = unique[-15:]
+                _theme_warning = (
+                    "BANNED THEMATIC PHRASINGS (already used in prior chapters — "
+                    "restate themes in FRESH language, not these exact formulations):\n"
+                    + "\n".join(f'- "{p}"' for p in recent)
+                )
+
+            # Combine compression guidance with exposition and theme warnings
+            _combined_guidance = compression_guidance
+            for extra in (_exposition_warning, _theme_warning):
+                if extra:
+                    _combined_guidance = (
+                        f"{_combined_guidance}\n\n{extra}"
+                        if _combined_guidance.strip()
+                        else extra
+                    )
+
             # 1. Draft (with content-rejection retry)
             _set_step(f"Chapter {chapter_num}: drafting")
             text = _draft_with_content_retry(
@@ -317,9 +390,11 @@ def _run_chapter_generation_internal(
                     chapter_fate_context, chapter_arc_context,
                     chapter_antagonist_context, chapter_technology_context,
                     chapter_theme_context, gatekeeper_brief,
-                    compression_guidance, chapter_rhythm_shape,
+                    _combined_guidance, chapter_rhythm_shape,
                     chapter_rhythm_reason, chapter_pov_context,
                     voice_prompt, perspective_prompt,
+                    _procedural_exemplars_text, _openings_log_text,
+                    _consequence_log_text, total_chapters,
                 ),
                 action=f"Chapter {chapter_num}: drafting",
                 special_instructions=special_instructions,
@@ -366,6 +441,48 @@ def _run_chapter_generation_internal(
                 previous_summaries=previous_summaries, title=title,
                 degraded_passes=degraded_passes,
             )
+
+            _set_step(f"Chapter {chapter_num}: extracting patterns")
+            pattern_result = run_chapter_pattern_extractor(
+                chapter_text=text, chapter_num=chapter_num, title=title,
+                degraded_passes=degraded_passes,
+            )
+            proc_types = pattern_result.get("procedural_types_dramatized", [])
+            if proc_types:
+                procedural_exemplar_log.append({
+                    "chapter": chapter_num,
+                    "types": proc_types,
+                })
+            opening_style = pattern_result.get("opening_style", "")
+            opening_desc = pattern_result.get("opening_description", "")
+            if opening_style:
+                chapter_openings_log.append({
+                    "chapter": chapter_num,
+                    "style": opening_style,
+                    "description": opening_desc,
+                })
+            consequences = pattern_result.get("irreversible_consequences", [])
+            if consequences:
+                consequence_log.append({
+                    "chapter": chapter_num,
+                    "consequences": consequences,
+                })
+            dramatized_pct = pattern_result.get("dramatized_scene_pct")
+            if dramatized_pct is not None:
+                try:
+                    dramatized_pct = int(dramatized_pct)
+                except (ValueError, TypeError):
+                    dramatized_pct = None
+            if dramatized_pct is not None:
+                exposition_log.append({
+                    "chapter": chapter_num,
+                    "dramatized_pct": dramatized_pct,
+                })
+            theme_phrases = pattern_result.get("thematic_phrases", [])
+            if isinstance(theme_phrases, list):
+                for phrase in theme_phrases:
+                    if isinstance(phrase, str) and phrase.strip():
+                        thematic_phrase_log.append(phrase.strip())
 
             rhythm_log.append({
                 "chapter": chapter_num,

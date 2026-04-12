@@ -207,6 +207,15 @@ class PovFocalCharacterAgent(BaseAgent):
             lines.append(f"- Justification: {justification}")
         lines.append("- Write this chapter primarily through the primary POV character's perspective.")
         lines.append("- The focal internal character's emotional state and internal conflict should carry the most weight.")
+        if isinstance(secondary, list) and secondary:
+            lines.append(
+                "- MULTI-PERSPECTIVE RULE: Do not filter the entire chapter through "
+                "a single character's lens. The secondary observers listed above must "
+                "contribute their own perspectives — through dialogue, reactions, "
+                "disagreements, or moments where their reading of events visibly "
+                "differs from the POV character's. Show the world through multiple "
+                "pairs of eyes, not just one narrator's interpretation."
+            )
         return "\n".join(lines)
 
 

@@ -19,6 +19,7 @@ from novelforge.agents.chapter.prompts import (
     build_chapter_rhythm_classifier_prompt,
     build_chapter_summary_prompt,
     build_character_agent_prompt,
+    build_chapter_pattern_extractor_prompt,
     build_character_state_updater_prompt,
     build_context_analyzer_prompt,
     build_continuity_gatekeeper_prompt,
@@ -124,6 +125,35 @@ def run_character_state_updater(chapter_text: str, chapter_summary: str, charact
                 "failure_summary": failure_summary,
             })
         return ""
+
+
+def run_chapter_pattern_extractor(chapter_text: str, chapter_num: int, title: str,
+                                  degraded_passes: list[dict] | None = None) -> dict:
+    """Run the pattern extractor, returning a dict with procedural_types_dramatized and opening_style."""
+    try:
+        raw = call_llm(
+            build_chapter_pattern_extractor_prompt(
+                chapter_text=chapter_text, chapter_num=chapter_num, title=title,
+            ),
+            action=f"Running Chapter Pattern Extractor for Chapter {chapter_num}",
+            json_mode=True,
+        )
+        result = parse_llm_json(raw)
+        if not isinstance(result, dict):
+            return {}
+        return result
+    except Exception as exc:
+        failure_summary = _log_pass_failure(
+            exc, pass_name="chapter pattern extractor",
+            chapter_num=chapter_num, chapter_title=title, optional=True,
+        )
+        if degraded_passes is not None:
+            degraded_passes.append({
+                "pass_name": "chapter pattern extractor",
+                "chapter_num": chapter_num,
+                "failure_summary": failure_summary,
+            })
+        return {}
 
 
 def run_continuity_gatekeeper(
@@ -412,7 +442,7 @@ def _run_all_chapter_agents(
     if step_callback:
         step_callback(f"Chapter {chapter_num}: quality control")
     text = _safe(
-        lambda t: build_quality_controller_prompt(t, chapter_num, title),
+        lambda t: build_quality_controller_prompt(t, chapter_num, title, genre, total_chapters),
         text, action=f"Chapter {chapter_num}: quality control",
     )
 

@@ -69,10 +69,23 @@ class CharacterArcPlanAgent(BaseAgent):
             if role_class != "primary":
                 continue
 
+            internal_flaw = str(character.get("internal_flaw", "")).strip()
+            personal_goal = str(character.get("personal_goal", "")).strip()
+
+            # Spread 2 vulnerability scenes across the novel
+            vuln_ch_1 = max(2, total_chapters // 4)
+            vuln_ch_2 = min(total_chapters, max(vuln_ch_1 + 2, round(total_chapters * 0.6)))
+            vulnerability_scenes = [
+                {"chapter": vuln_ch_1, "scene": f"{name}'s flaw creates a visible problem in a relationship or decision."},
+                {"chapter": vuln_ch_2, "scene": f"{name} shows vulnerability through action — admits fault, asks for help, or breaks composure."},
+            ]
+
             arcs.append(
                 {
                     "character": name,
                     "role": role_class,
+                    "internal_flaw": internal_flaw or "Unresolved internal tension that drives poor decisions.",
+                    "personal_goal": personal_goal or "A private aspiration independent of the main conflict.",
                     "start_state": "Begins with a constrained worldview and unresolved internal tension.",
                     "midpoint_transformation": "Confronts disconfirming evidence that shifts priorities.",
                     "crisis_point": "Must choose between self-protection and core values.",
@@ -96,6 +109,7 @@ class CharacterArcPlanAgent(BaseAgent):
                             "beat": "Commits to final moral choice and consequence.",
                         },
                     ],
+                    "vulnerability_scenes": vulnerability_scenes,
                     "consistency_rules": [
                         "Arc must move forward each appearance.",
                         "No regression to start state after midpoint without explicit cause.",
@@ -161,16 +175,31 @@ class CharacterArcPlanAgent(BaseAgent):
                     }
                 )
 
+            vulnerability_scenes = item.get("vulnerability_scenes", [])
+            if not isinstance(vulnerability_scenes, list):
+                vulnerability_scenes = []
+            normalised_vuln = []
+            for vs in vulnerability_scenes:
+                if not isinstance(vs, dict):
+                    continue
+                normalised_vuln.append({
+                    "chapter": _coerce_positive_int(vs.get("chapter"), 1),
+                    "scene": str(vs.get("scene", "")).strip(),
+                })
+
             normalised_arcs.append(
                 {
                     "character": name,
                     "role": str(item.get("role", "primary") or "primary"),
+                    "internal_flaw": str(item.get("internal_flaw", "")).strip(),
+                    "personal_goal": str(item.get("personal_goal", "")).strip(),
                     "start_state": str(item.get("start_state", "")).strip(),
                     "midpoint_transformation": str(item.get("midpoint_transformation", "")).strip(),
                     "crisis_point": str(item.get("crisis_point", "")).strip(),
                     "final_moral_choice": str(item.get("final_moral_choice", "")).strip(),
                     "arc_theme": str(item.get("arc_theme", "")).strip(),
                     "chapter_beats": normalised_beats,
+                    "vulnerability_scenes": normalised_vuln,
                     "consistency_rules": [str(x) for x in consistency_rules if str(x).strip()],
                 }
             )
@@ -216,6 +245,8 @@ class CharacterArcPlanAgent(BaseAgent):
         for arc in arcs:
             if not isinstance(arc, dict):
                 continue
+            char_name = arc.get("character", "?")
+
             beats = arc.get("chapter_beats", [])
             if not isinstance(beats, list):
                 beats = []
@@ -223,13 +254,33 @@ class CharacterArcPlanAgent(BaseAgent):
                 beat for beat in beats
                 if isinstance(beat, dict) and _coerce_positive_int(beat.get("chapter"), 0) == chapter_num
             ]
-            if matching_beats:
+
+            vuln_scenes = arc.get("vulnerability_scenes", [])
+            if not isinstance(vuln_scenes, list):
+                vuln_scenes = []
+            matching_vuln = [
+                vs for vs in vuln_scenes
+                if isinstance(vs, dict) and _coerce_positive_int(vs.get("chapter"), 0) == chapter_num
+            ]
+
+            if matching_beats or matching_vuln:
                 lines.append(
-                    f"- {arc.get('character', '?')}: start={arc.get('start_state', '')}; midpoint={arc.get('midpoint_transformation', '')}; "
+                    f"- {char_name}: start={arc.get('start_state', '')}; midpoint={arc.get('midpoint_transformation', '')}; "
                     f"crisis={arc.get('crisis_point', '')}; final_choice={arc.get('final_moral_choice', '')}"
                 )
+                flaw = arc.get("internal_flaw", "")
+                if flaw:
+                    lines.append(f"  - Internal flaw: {flaw}")
+                goal = arc.get("personal_goal", "")
+                if goal:
+                    lines.append(f"  - Personal goal: {goal}")
                 for beat in matching_beats[:3]:
                     lines.append(f"  - Beat ({beat.get('phase', 'arc')}): {beat.get('beat', '')}")
+                for vs in matching_vuln:
+                    lines.append(
+                        f"  - *** VULNERABILITY SCENE (this chapter): {vs.get('scene', '')} — "
+                        f"Show this through ACTION and DIALOGUE, not narration. ***"
+                    )
                 rules = arc.get("consistency_rules", [])
                 if isinstance(rules, list) and rules:
                     lines.append("  - Arc rules: " + "; ".join(str(x) for x in rules[:4]))

@@ -185,6 +185,24 @@ class StoryArchitectureAgent(BaseAgent):
                 }
             )
 
+        # Build default plot reversals spread across the novel
+        _quarter = max(1, total_chapters // 4)
+        _three_quarter = min(total_chapters - 1, max(_midpoint + 1, round(total_chapters * 0.65)))
+        plot_reversals = [
+            {
+                "chapter": max(2, _quarter),
+                "type": "loss",
+                "detail": "A key resource, ally, or advantage is permanently lost.",
+                "consequence": "Protagonist must adapt strategy without this asset.",
+            },
+            {
+                "chapter": _three_quarter,
+                "type": "betrayal",
+                "detail": "A trusted character acts against the protagonist's interests.",
+                "consequence": "Trust is shattered; alliances must be rebuilt under pressure.",
+            },
+        ]
+
         return {
             "architecture_type": architecture_type,
             "acts": acts,
@@ -206,6 +224,7 @@ class StoryArchitectureAgent(BaseAgent):
                     "detail": "Aftermath and payoff settle the story.",
                 },
             },
+            "plot_reversals": plot_reversals,
             "chapter_plan": sorted(chapter_plan, key=lambda item: item["number"]),
         }
 
@@ -280,10 +299,16 @@ class StoryArchitectureAgent(BaseAgent):
                 }
             )
 
+        # Preserve LLM-generated plot_reversals or fall back to defaults
+        plot_reversals = data.get("plot_reversals")
+        if not isinstance(plot_reversals, list) or not plot_reversals:
+            plot_reversals = fallback.get("plot_reversals", [])
+
         return {
             "architecture_type": architecture_type,
             "acts": acts,
             "global_turns": global_turns,
+            "plot_reversals": plot_reversals,
             "chapter_plan": sorted(merged_plan, key=lambda item: item["number"]),
         }
 
@@ -335,6 +360,19 @@ class StoryArchitectureAgent(BaseAgent):
                 if turn_chapter:
                     suffix = f" – {turn_detail}" if turn_detail else ""
                     lines.append(f"- {label}: Chapter {turn_chapter}{suffix}")
+
+        # Include plot reversals relevant to this chapter
+        for rev in plan.get("plot_reversals", []):
+            if isinstance(rev, dict):
+                rev_chapter = _coerce_positive_int(rev.get("chapter"), 0)
+                if rev_chapter == chapter_num:
+                    rev_type = str(rev.get("type", "")).strip()
+                    rev_detail = str(rev.get("detail", "")).strip()
+                    rev_consequence = str(rev.get("consequence", "")).strip()
+                    lines.append(
+                        f"- *** PLOT REVERSAL IN THIS CHAPTER ({rev_type}): "
+                        f"{rev_detail} Consequence: {rev_consequence} ***"
+                    )
 
         return "\n".join(lines)
 

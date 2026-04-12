@@ -8,6 +8,18 @@ prompts:
       production-ready act structure that builds tension cleanly toward a midpoint
       reversal, climax, and resolution.
 
+      MANDATORY BEAT PLACEMENT (three-act momentum structure):
+      - Inciting incident: must land within the first 15% of chapters (no later than chapter 2 for most novels).
+      - Midpoint reversal: must land at ~50% of chapters. This is a genuine reversal — not a complication, but a shift that reframes the entire conflict.
+      - Climax: must land at ~75% of chapters. The protagonist's decisive, irreversible action happens here.
+      - Resolution / falling action: the final ~25% of chapters resolves consequences, lands emotional payoffs, and closes arcs. Do NOT pack the climax into the final 1-2 chapters. Resolution must show lasting trade-offs and ambiguity — NOT tidy philosophical summation. No character should explain what the story meant. Show what was gained and what was permanently lost.
+      - The FINAL CHAPTER must build to a resonant closing scene that resolves the central premise with emotional weight. Plan this scene specifically in the chapter_plan: what image, action, or exchange will the novel end on? It must land the human impact of the entire journey.
+
+      EARLY ANTAGONIST PRESENCE: The chapter_plan MUST include a concrete
+      antagonist action (not a hint or rumor) within the first 3 chapters.
+      The reader must witness opposition actively working against the
+      protagonist before Act I ends.
+
       IMPORTANT: Do NOT use transactional or accounting language in your plan.
       Describe chapter purposes in terms of character desire, conflict, and
       emotional stakes — not "operations," "costs," or "trades." Each chapter
@@ -31,6 +43,16 @@ prompts:
       Convert this outline into a strict story architecture plan.
       Limit each chapter to a small number of major operations, and make the escalation more intense as the novel progresses.
 
+      PLOT REVERSALS: In addition to the midpoint reversal, plan 2-3 additional
+      major plot reversals spread across the novel. Each reversal must be a
+      different TYPE — choose from: betrayal (trusted ally turns), loss (key
+      resource/person destroyed or taken), discovery (hidden truth reframes
+      everything), strategic failure (plan backfires catastrophically),
+      moral compromise (protagonist forced to cross own line), or
+      power shift (antagonist gains decisive advantage). No two reversals
+      should be the same type. Place them to maximize surprise: one before
+      midpoint, one after, and optionally one near the crisis point.
+
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
 
       Required structure:
@@ -42,6 +64,10 @@ prompts:
         "midpoint_reversal": {"chapter": 1, "detail": "..."},
         "climax": {"chapter": 1, "detail": "..."},
         "resolution": {"chapter": 1, "detail": "..."}},
+      "plot_reversals": [
+        {"chapter": 1, "type": "betrayal|loss|discovery|strategic_failure|moral_compromise|power_shift",
+         "detail": "...", "consequence": "What is permanently lost or changed as a result"}
+      ],
         "chapter_plan": [
           {"number": 1, "act": "Act I", "phase": "Setup", "purpose": "...",
           "escalation": "...", "operation_limit": 1, "required_turn": "...",
@@ -137,6 +163,42 @@ prompts:
       Each arc must include: start state, midpoint transformation, crisis point, and final moral choice.
       Arcs must progress coherently across chapters without contradiction.
 
+      IRREVERSIBLE COST RULE: Every major decision in a character's arc must
+      carry a concrete, irreversible personal or community cost — not abstract
+      moral calculus. Costs include: lost trust from a specific person, physical
+      harm or permanent injury, a fractured relationship that cannot be repaired,
+      a resource destroyed, a reputation ruined, or a community bond broken.
+      The crisis_point and final_moral_choice MUST specify what is permanently
+      lost as a result. Do NOT frame costs as "ethical dilemmas" or "moral
+      trade-offs" — frame them as specific losses the character and reader can feel.
+
+      FLAW-DRIVEN ARC RULE: Each character's arc MUST be driven by their
+      internal_flaw (from the character profile). The arc traces how the flaw
+      creates escalating problems → forces a reckoning → leads to growth or
+      tragic failure. The internal_flaw should be the ENGINE of the arc, not
+      just background color. The personal_goal (from the character profile)
+      should create tension with the main plot — sometimes pulling the
+      character away from what the story needs them to do.
+
+      VULNERABILITY SCENES: For each protagonist and major supporting
+      character, plan 2-3 dedicated vulnerability scenes spread across the
+      novel. These are scenes where the character shows vulnerability or
+      undergoes visible change through ACTION and DIALOGUE — not narration
+      or internal monologue alone. Vulnerability scenes should reveal the
+      flaw in a way that costs the character something or forces growth.
+      Assign each to a specific chapter in the vulnerability_scenes field.
+
+      EARNED CATHARSIS RULE: Every primary character's arc must culminate in
+      earned catharsis — not a tidy lesson but a transformation the reader has
+      watched happen through accumulated choices and costs. The final_moral_choice
+      must produce one of: visible character transformation (the character acts
+      differently than they would have in chapter 1, and the reader knows why),
+      emotional payoff (a relationship healed, broken, or redefined through
+      action), or bittersweet victory (something won at a permanent price).
+      The catharsis must have clear HUMAN impact — the reader must see specific
+      people affected, not abstract outcomes. No character should end their arc
+      by narrating what they learned.
+
       CHARACTER VARIETY RULES:
       - NOT every protagonist should be a reluctant leader. Some characters are
         eager, reckless, naive, arrogant, or broken. Match the arc to the character.
@@ -162,15 +224,17 @@ prompts:
       {{ special_instructions }}
       {%- endif %}
 
-      Create a character arc plan for primary characters only. Define the start state, midpoint transformation, crisis point, and final moral choice for each character. Add chapter beats showing where each phase is expressed.
+      Create a character arc plan for primary characters only. Each arc must be driven by the character's internal_flaw and personal_goal from the character profile. Define the start state, midpoint transformation, crisis point, and final moral choice. Add chapter beats showing where each phase is expressed. For each character, plan 2-3 vulnerability scenes — specific chapters where the character shows vulnerability or changes through action and dialogue.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
       Required structure:
       {"arcs": [
       {"character": "...", "role": "primary|secondary",
+      "internal_flaw": "...", "personal_goal": "...",
       "start_state": "...", "midpoint_transformation": "...", "crisis_point": "...",
       "final_moral_choice": "...", "arc_theme": "...",
       "chapter_beats": [{"chapter": 1, "phase": "start|midpoint|crisis|final", "beat": "..."}],
+      "vulnerability_scenes": [{"chapter": 1, "scene": "Brief description of the vulnerability/change scene — what happens through action and dialogue"}],
       "consistency_rules": ["..."]}],
       "chapter_constraints": [{"chapter": 1, "must_advance": ["..."], "must_not_undo": ["..."]}],
       "global_arc_risks": ["..."]}
@@ -182,6 +246,12 @@ prompts:
       You are the Antagonist Motivation Architect. Build a stable motivational model for each antagonist:
       what they want, why they escalate, what line they will not cross, and how pressure shifts tactics chapter by chapter.
       Antagonist behavior must stay causally consistent with prior actions and constraints.
+
+      EARLY PRESENCE RULE: At least one antagonist (or a named agent of the
+      opposition) MUST take a concrete, on-page action against the protagonist
+      within the first 3 chapters. The escalation_plan MUST include an entry
+      for chapter 1, 2, or 3 with a visible, hostile action — not a rumor,
+      not an offscreen event, but something the reader witnesses directly.
 
       IMPORTANT: Antagonists should NOT all be faceless institutions or bureaucratic
       systems. Give antagonists personal desires, flaws, and humanity. An antagonist
@@ -264,6 +334,15 @@ prompts:
       and map precisely where each theme appears, deepens, or pays off
       across the narrative. You ensure themes are woven consistently
       throughout chapters rather than appearing randomly or being abandoned.
+
+      THEME-THROUGH-CONSEQUENCE RULE: Themes must NEVER be expressed
+      through direct meditation, internal calculus, or philosophical
+      speeches. Instead, every thematic appearance must be demonstrated
+      through a costly character choice and its plot outcome. When mapping
+      where a theme "appears" in a chapter, define it as a character
+      decision with a visible price — not a character thinking about the
+      theme. The pillar_moments must be concrete: who chose what, what
+      it cost them, and what the reader sees change as a result.
 
       IMPORTANT: Choose themes that emerge naturally from THIS specific premise.
       Do NOT default to generic themes like "accountability," "moral compromise,"
@@ -618,6 +697,14 @@ prompts:
       You are a bestselling author skilled at crafting memorable book titles.
       Create titles that are distinctive and unlikely to be confused with other novels.
       Avoid generic single-word titles and common patterns like "The [Noun] of [Noun]".
+
+      GENRE SIGNALING: The title must immediately signal the genre to a
+      bookstore browser. A thriller title should feel urgent and dangerous.
+      A literary novel title should feel evocative and layered. A survival
+      story title should feel visceral and high-stakes. A romance title
+      should feel emotionally charged. The title is the first promise to
+      the reader — it must set the correct expectation for the reading
+      experience inside.
     user: |
       Generate a single catchy, original title for a {{ genre }} novel based on this premise:
 
@@ -636,6 +723,14 @@ prompts:
       Premise: {{ premise }}
       Total chapters: {{ chapters }}
       Target word count: {{ word_count }}
+
+      COMMERCIAL LENGTH GUIDANCE: The ideal manuscript length for
+      commercially published fiction is 75,000–95,000 words. Plan chapter
+      density accordingly — each chapter should carry enough plot, character,
+      and conflict to justify 3,500–4,500 words. Do not pad chapters with
+      exposition or procedural detail to reach word count. If the outline
+      would produce a novel significantly outside this range, adjust the
+      density of events per chapter.
       Novel architecture:
       1. Hook (opening tension/question)
       2. Setup (protagonist, world, tone, conflict)
@@ -647,8 +742,29 @@ prompts:
       8. Climax (decisive confrontation)
       9. Resolution (aftermath, character changes)
 
+      MANDATORY BEAT PLACEMENT:
+      - Inciting incident by chapter 2 (first 15%).
+      - Midpoint reversal at ~50% of chapters — a genuine shift that reframes the conflict.
+      - Climax at ~75% of chapters — the protagonist's decisive, irreversible action.
+      - Final ~25% is resolution / falling action — resolve consequences and close arcs. Do NOT cram the climax into the last 1-2 chapters.
+
+      PLOT REVERSALS: Include 2-3 major plot reversals spread across the novel
+      (beyond the midpoint reversal). Each should be a different type: betrayal,
+      loss of a key person/resource, a discovery that reframes everything, a
+      plan backfiring catastrophically, or the protagonist forced to cross their
+      own moral line. Every reversal must carry an irreversible consequence —
+      something permanently lost, broken, or changed.
+
       Structure: Beginning 25% (Hook→Setup→Inciting), Middle 50% (Rising→Midpoint→Complications), End 25% (Crisis→Climax→Resolution).
       Scene pattern: Goal → Obstacle → Outcome → New problem.
+
+      EARLY ANTAGONIST RULE:
+      - An active antagonist or concrete opposition force MUST appear on-page
+        within the first 3 chapters. Not hinted at, not referenced — present
+        and acting against the protagonist's interests.
+      - The antagonist must be a person or named group with specific goals,
+        not an abstract system or vague threat. If the opposition IS a system,
+        give it a human face who acts within the first 3 chapters.
 
       THEMATIC ORIGINALITY RULES — follow strictly:
       - Do NOT default to "systems vs. individuals" or "institutional accountability"
@@ -662,6 +778,15 @@ prompts:
       - Do NOT structure the climax around destroying or protecting documents/records.
       - VARY the ending type: some novels end triumphantly, some tragically, some
         ambiguously, some with a twist. Match the ending to the genre and premise.
+      - Do NOT end with a tidy philosophical summation where characters or the
+        narrator explain what it all meant. Leave lasting trade-offs — victories
+        that cost something permanent, relationships that survive but changed,
+        problems solved at a price the characters will carry. Ambiguity is earned
+        when the reader understands what was gained AND what was lost.
+      - The FINAL CHAPTER must include a resonant closing scene that resolves the
+        central premise with emotional weight — the reader must feel the human
+        cost of the journey and the specific impact on the characters who
+        survived it. End on an image, action, or exchange, not exposition.
       {%- if special_events.strip() %}
 
       Special events to incorporate:
@@ -719,21 +844,97 @@ prompts:
       - Backgrounds should NOT all be institutional (military, bureaucracy, academia).
         Include artists, farmers, children, criminals, merchants, wanderers, retirees.
 
+      INDIVIDUATION RULES:
+      - Every protagonist and major supporting character MUST have a distinct
+        internal_flaw (a specific personality weakness that causes real problems —
+        e.g., "control obsession that alienates people close to him," "pathological
+        need to be liked that prevents honest confrontation," "reflexive distrust
+        that sabotages alliances"). Flaws must be SPECIFIC and behavioral, not
+        generic ("stubborn," "proud"). Describe how the flaw manifests in action.
+      - Every protagonist and major supporting character MUST have a personal_goal
+        INDEPENDENT of the main plot — something they want for themselves that
+        may conflict with or complicate the central conflict (e.g., "reconnect
+        with estranged daughter," "prove she can survive without the institution
+        that raised her," "earn respect from someone who dismissed him").
+      - The "arc" field should describe how the internal_flaw and personal_goal
+        interact with the plot to produce genuine growth or tragic failure.
+
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.  Age should be an integer.  never use double quotes, single quotes or colons. ***
       Required structure:
-      {"characters": [{"name": "...", "age": 35, "background": "...", "role": "...", "arc": "..."}, ...]}
+      {"characters": [{"name": "...", "age": 35, "background": "...", "role": "...", "arc": "...", "internal_flaw": "...", "personal_goal": "..."}, ...]}
 
   - name: "chapter_draft"
     description: "Drafts a novel chapter in a natural human voice, respecting all pre-processing planner constraints."
     stage: "Chapter Generation"
     system: |
-      You are a skilled novelist. Write in a natural human voice with varied
-      sentence length. Never use these words: {{ forbidden_words }}.
+      You are a skilled novelist. Write in a natural human voice. Never use
+      these words: {{ forbidden_words }}.
       Limit these to 1x per chapter: {{ soft_limited_words }}.
       Avoid: accounting metaphors for emotions, "small [mercy/victory/repair]"
       constructions, emotions in ribs/sternum/throat, metallic taste as distress,
       "jaw tightened," "the economy of someone who." Vary chapter openings and
       endings — not always smell descriptions or quiet reflection.
+
+      SENTENCE RHYTHM: Vary sentence length deliberately for pacing effect.
+      Tension and action scenes: short, punchy sentences. Fragments. Impact.
+      Emotional and reflective beats: longer, flowing sentences that let the
+      reader breathe and feel. Never let 4+ consecutive sentences be the same
+      length. Read the rhythm aloud in your head — if it drones, break it.
+
+      SENSORY AND EMOTIONAL IMMEDIACY: Every scene must be grounded in at
+      least two senses (not always sight) and at least one character's
+      emotional state shown through body, action, or dialogue — not told
+      through narration. "She was afraid" is weak. "Her hand wouldn't stop
+      shaking long enough to turn the key" is strong.
+
+      MULTI-CHARACTER PERSPECTIVE: Do not filter every event through a
+      single character's interpretation. In scenes with multiple characters,
+      let secondary characters visibly disagree, react differently, or
+      reveal their own reading of events through dialogue and action. The
+      reader should feel multiple people inhabiting each scene, each with
+      their own agenda.
+
+      DIALOGUE RULES:
+      - NO EXPOSITORY SPEECHES. Characters must never explain plot, theme,
+        or backstory to each other in tidy paragraphs. If information must
+        be delivered, bury it in an argument, an interruption, a deflection,
+        or a lie. The reader learns the information as a byproduct of
+        conflict, not as its purpose.
+      - Every dialogue exchange must be driven by personal stakes — what
+        each speaker WANTS from this conversation and what they stand to
+        lose. If two characters agree calmly about the right course of
+        action, the scene has no tension. Add the friction: one is hiding
+        something, one resents the other, one has a private agenda, one is
+        terrified and covering it.
+      - Use interruptions, half-finished sentences, deflections, topic
+        changes, and silences. Real people under pressure do not speak in
+        complete, articulate paragraphs.
+      - Dialogue must reveal character — a reader should be able to tell
+        who is speaking without dialogue tags, from voice, rhythm, word
+        choice, and what the character avoids saying.
+
+      CHAPTER OPENING RULE: Never open a chapter by recapping or summarizing
+      previous events. No "previously" transitions, no reflective summaries of
+      what happened in earlier chapters. Every chapter must begin with an
+      immediate scene — an external threat, a character decision, sensory
+      action, or in-medias-res tension that hooks the reader within the first
+      paragraph.
+
+      DRAMATIZATION RULE (SHOW, DON'T TELL): At least 70% of this chapter
+      must be dramatized scenes — characters acting, speaking, and reacting
+      in real time with sensory detail, conflict, and subtext. Limit these
+      to no more than 30% of the chapter:
+      - Internal monologue (character thinking at the reader)
+      - Philosophical restatements of the theme
+      - Summary-style procedural descriptions (meetings, processes, checks)
+      - Exposition that tells the reader what happened instead of showing it
+      When you catch yourself writing "she realized that..." or "the process
+      involved..." or "he thought about the implications of...", STOP and
+      convert it into an active scene: a conversation that reveals the
+      realization, a process that goes wrong in real time, a decision made
+      under pressure with visible consequences. Procedural events (equipment
+      checks, document drafting, supply rotations) must happen DURING a human
+      crisis — not in isolation.
       {%- if perspective_prompt.strip() %}
 
       {{ perspective_prompt }}
@@ -803,13 +1004,52 @@ prompts:
 
       *** END STRUCTURAL BANS ***
       {%- endif %}
+      {%- if procedural_exemplars.strip() %}
+
+      *** PROCEDURAL TYPES ALREADY SHOWN IN FULL ***
+      The following procedural sequence types have already been dramatized
+      in detail in prior chapters. Do NOT re-dramatize these processes.
+      Reference their outcomes briefly and move on.
+
+      {{ procedural_exemplars }}
+
+      *** END PROCEDURAL EXEMPLARS ***
+      {%- endif %}
+      {%- if chapter_openings_log.strip() %}
+
+      *** CHAPTER OPENING TYPES ALREADY USED ***
+      {{ chapter_openings_log }}
+      Do NOT repeat recent opening styles. Choose a contrasting approach.
+      NEVER open with a recap or summary of previous events.
+      {%- endif %}
+      {%- if consequence_log.strip() %}
+
+      *** IRREVERSIBLE CONSEQUENCES FROM PRIOR CHAPTERS ***
+      These consequences are permanent and must be respected. Do not undo,
+      ignore, or contradict them. Build on them — characters who lost trust
+      still distrust; destroyed resources remain gone; injuries persist.
+
+      {{ consequence_log }}
+      {%- endif %}
       {%- if special_instructions.strip() %}
 
       Special instructions: {{ special_instructions }}
       {%- endif %}
 
       ***CRITICAL: You are writing CHAPTER {{ chapter_num }}. Keep this chapter number in mind throughout.***
-      Target: approximately {{ target_words }} words. You MUST write at least 3,500 words and SHOULD aim for 4,000–4,500 words. Do NOT exceed 5,000 words. Subsequent editing passes will trim and tighten the prose, so write generously and let the polish passes do the trimming. Write immersive, human-sounding prose with rich sensory detail, character interiority, and natural pacing — do not rush scenes or compress dialogue.
+      Target: approximately {{ target_words }} words. You MUST write at least 3,500 words and SHOULD aim for 4,000–4,500 words. Do NOT exceed 5,000 words. Subsequent editing passes will trim and tighten the prose, so write generously and let the polish passes do the trimming. Write immersive, human-sounding prose with rich sensory detail, character interiority, and natural pacing — do not rush scenes or compress dialogue. Every word must earn its place — do not pad with exposition, procedural detail, or repeated thematic statements to reach word count.
+      {%- if total_chapters > 0 and chapter_num == total_chapters %}
+
+      *** THIS IS THE FINAL CHAPTER OF THE NOVEL. ***
+      You must deliver a resonant closing scene that resolves the central
+      premise with emotional weight. The reader must feel the human cost of
+      the journey and the specific impact on the characters who lived through
+      it. Build to a final image, action, or exchange — NOT a narrated summary
+      of what was learned. Show lasting trade-offs: what was gained and what
+      was permanently lost. End the novel on a moment the reader will carry
+      with them — bittersweet, triumphant, haunting, or quietly devastating,
+      but never tidy.
+      {%- endif %}
 
       {%- if chapter_rhythm_shape.strip() %}
       CRITICAL RHYTHM DIRECTIVE: You MUST write this chapter using the narrative rhythm: "{{ chapter_rhythm_shape }}".
@@ -832,13 +1072,40 @@ prompts:
       Make the *feeling*, pacing shape, and fundamental problem-solving philosophy of this chapter distinctly different from the last 4 chapters.
       {%- endif %}
 
+      PROCEDURAL CONDENSATION: Procedural sequences (logistics, planning
+      sessions, inventories, calculations, ethical deliberation) must be shown
+      in full AT MOST once per type across the novel. After the exemplar scene,
+      reference outcomes without re-dramatizing the process. Trust the reader
+      to generalize from one well-rendered instance.
+
+      IRREVERSIBLE COST RULE: Every major decision a character makes in this
+      chapter must carry a concrete, irreversible personal or community cost.
+      Not abstract moral calculus — specific losses the reader can feel: lost
+      trust from a named person, physical harm, a fractured relationship, a
+      destroyed resource, a ruined reputation. If a character faces a choice,
+      show what they permanently lose by choosing.
+
+      FLAW-DRIVEN SCENES: Each character's internal_flaw should actively cause
+      problems in the chapter — not just be background. Their personal_goal
+      should create tension with the main plot. If the Character Arc Planner
+      marks a VULNERABILITY SCENE for this chapter, include a prominent scene
+      where the character shows vulnerability or undergoes visible change
+      through action and dialogue that other characters can witness.
+
       Respect the Story Architecture Planner constraints, especially the chapter's escalation target and major operations limit. Respect Character Fate Registry constraints and do not introduce contradictory character states. Advance Character Arc Planner beats where relevant for this chapter.
 
       Preserve Antagonist Motivation Architect coherence so antagonist tactics follow established motivation and pressure.
+      {%- if chapter_num <= 3 %}
+
+      *** EARLY ANTAGONIST REQUIREMENT (Chapter {{ chapter_num }}): The antagonist
+      or a named agent of the opposition MUST appear on-page in this chapter
+      and take a concrete hostile action — not a rumor, not an offscreen event.
+      The reader must witness active opposition before the end of Chapter 3. ***
+      {%- endif %}
 
       Follow Technology Rules Designer limits so systems have latency, cost, blind spots, and failure modes.
 
-      Honour Theme Reinforcement Planner guidance so each chapter carries its designated thematic role and advances the thematic arc.
+      Honour Theme Reinforcement Planner guidance so each chapter carries its designated thematic role and advances the thematic arc. Express themes ONLY through costly character choices and their visible consequences — NEVER through internal meditation, philosophical speeches, or characters explicitly stating the theme. The reader should feel the theme through what happens, not be told it.
 
       Obey ALL Continuity Gatekeeper constraints. Do not introduce any forbidden scenario, resurrect dead characters, or contradict locked events.
 
@@ -855,11 +1122,39 @@ prompts:
       character a distinct voice, natural rhythm, and subtext beneath the
       surface. Weave beats of action and reaction into dialogue scenes.
 
+      EXPOSITORY DIALOGUE CHECK: Flag any speech longer than 3 sentences
+      where a character explains plot, theme, or backstory to another
+      character without conflict. Cut or break these into interrupted
+      exchanges where characters disagree, deflect, or pursue competing
+      agendas. Every conversation must be driven by what each speaker
+      personally wants and stands to lose — if there's no friction, add it.
+
       SCENES: Ensure every scene advances story momentum. Vary scene structure
       and rhythm — do not force the same Goal → Obstacle → Outcome → New
       Problem pattern on every scene. Adapt scene shape to the chapter's
       variety directive and compression guidance. Identify any scenes lacking
       forward movement and rewrite them.
+
+      OPENING CHECK: If the chapter opens by recapping or summarizing
+      previous events instead of dropping the reader into an active scene,
+      rewrite the opening to begin with an immediate hook — an external
+      threat, a character decision, or in-medias-res action.
+
+      DRAMATIZATION CHECK: Identify passages of extended internal monologue,
+      philosophical restatement, or summary-style procedural description.
+      Convert them into active scenes: dialogue that reveals the insight,
+      a process that goes wrong in real time, or a decision made under
+      pressure with visible consequences. If a character "realizes" something
+      across two paragraphs of internal thought, show the realization
+      happening through action — a conversation, a confrontation, a mistake.
+
+      SENTENCE RHYTHM: Check for passages where 4+ consecutive sentences
+      are roughly the same length. Tension needs short, punchy sentences.
+      Emotional beats need longer, flowing ones. Vary deliberately.
+
+      SENSORY IMMEDIACY: Ensure every scene is grounded in at least two
+      senses and shows character emotion through body and action, not
+      narration. Replace "she felt sad" with a physical, observable detail.
 
       Do not change plot, character arcs, or factual content.
       Return the full revised chapter text.
@@ -917,6 +1212,14 @@ prompts:
       Information delivery should emerge from character interaction, not
       replace it.
 
+      EXPOSITORY SPEECH REMOVAL: Cut any speech longer than 3 sentences
+      where a character explains plot, backstory, or theme without
+      opposition. Break it into an exchange where the listener pushes
+      back, misunderstands, gets angry, or redirects. Every conversation
+      needs personal stakes — what each speaker wants from THIS exchange
+      and what they risk losing. A calm agreement scene has no tension;
+      add the friction that real people under pressure always carry.
+
       PART 3 — PROSE BREATHING
       Adjust the prose density to match the scene's emotional register:
       - Reflective, interior moments: denser, more layered sentences.
@@ -928,6 +1231,17 @@ prompts:
 
       The chapter should not maintain a single consistent literary density
       throughout. Let the prose breathe.
+
+      PART 4 — MULTI-CHARACTER PERSPECTIVE
+      Do not filter the entire chapter through a single character's
+      interpretive lens. Even in a close-POV chapter, secondary characters
+      must contribute their own perspectives visibly — through dialogue
+      that reveals THEIR reading of events, reactions that contradict the
+      POV character's assumptions, and moments where characters disagree
+      about what just happened or what it means. The reader should feel
+      that multiple people inhabit this scene, each with their own agenda
+      and interpretation — not that one narrator is explaining events to
+      them.
 
       RULES:
       - Do not change plot, character arcs, or factual content.
@@ -1000,9 +1314,27 @@ prompts:
          - Scene types cluster (e.g., 3 consecutive dialogue-heavy chapters)
          Flag the repetition and suggest a specific structural alternative.
 
+      7. PROCEDURAL INVENTORY REPETITION – Flag when this chapter
+         re-dramatizes a procedural sequence type (logistics planning,
+         resource inventory, ethical deliberation, technical calculation)
+         that was already shown in full in a prior chapter. Recommend
+         condensing to a brief outcome reference instead of replaying
+         the process.
+
+      8. EXPOSITION DENSITY – Flag passages longer than two paragraphs
+         that are pure internal monologue, philosophical restatement of
+         the theme, or summary-style procedural description (narrating
+         a process rather than dramatizing it). For each flagged passage,
+         recommend a specific dramatization: a conversation, a
+         confrontation, a process going wrong in real time, or a decision
+         made under pressure. The goal is at least 70% dramatized scenes
+         (characters acting and speaking in real time) vs. no more than
+         30% exposition/monologue/summary.
+
       Be specific. Reference scene locations by quoting a short phrase or
       describing the scene's subject. Keep directives brief and actionable.
-      If the chapter has no significant repetition, say so in one line.
+      If the chapter has no significant repetition or exposition issues,
+      say so in one line.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
 
@@ -1019,10 +1351,10 @@ prompts:
       openings, resolutions, emotional arcs, or dominant scene types.
       {%- endif %}
 
-      Audit this chapter for repetition across all six categories: scene macro
-      repetition, emotional beat repetition, sensory palette repetition, scene
-      opening/closing patterns, dialogue rhythm repetition, and cross-chapter
-      structural repetition.
+      Audit this chapter for repetition and exposition across all eight categories:
+      scene macro repetition, emotional beat repetition, sensory palette repetition,
+      scene opening/closing patterns, dialogue rhythm repetition, cross-chapter
+      structural repetition, procedural inventory repetition, and exposition density.
 
       For each issue found, provide a specific rewrite directive in this format:
       - [CATEGORY] Location: "brief quote or scene description" → Directive: what to change and why
@@ -1060,6 +1392,15 @@ prompts:
 
       Ensure this chapter delivers the tension, revelations, and story movement appropriate for a {{ phase_hint }} chapter. Follow the Story Architecture Planner guidance exactly when it is provided, including the chapter purpose, escalation target, turning point, and operation limit. Adjust pacing, scene order, or emphasis as needed.
 
+      ANTI-SUMMATION RULE: If this is a resolution or final-act chapter, do
+      NOT allow tidy philosophical summation — no character explaining what
+      the story meant, no narrator wrapping up themes in a bow. Resolution
+      chapters must show lasting trade-offs: victories that cost something
+      permanent, relationships changed irreversibly, problems solved at a
+      price. Leave the reader with what was gained AND what was lost. Earned
+      catharsis comes from character transformation visible through action,
+      not from reflection that tells the reader how to feel.
+
       ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 
       {{ chapter_text }}
@@ -1081,6 +1422,26 @@ prompts:
       in exactly the same state as they entered it. For any character who
       appears but remains static, add or strengthen a beat that advances their
       thread without breaking continuity or inventing new plot events.
+
+      IRREVERSIBLE COST: When a character makes a significant decision,
+      ensure it costs them something concrete and personal — not abstract
+      moral weight. Show the cost through a specific loss: a person who
+      no longer trusts them, a physical wound, a relationship that cracks,
+      a possession or resource gone forever. The reader must feel the
+      permanence of each choice.
+
+      FLAW-DRIVEN DEVELOPMENT: Each character's internal_flaw (from their
+      profile) should actively create problems in the story — not just be
+      mentioned. If a character's flaw is "control obsession," show it
+      causing a specific conflict in THIS chapter. Their personal_goal
+      should pull against the plot demands, creating tension between what
+      the character wants privately and what the story requires of them.
+
+      VULNERABILITY SCENES: If the arc context marks a vulnerability scene
+      for this chapter, you MUST ensure it appears prominently — shown
+      through action and dialogue, not narration or internal monologue.
+      The character must DO or SAY something that reveals their flaw or
+      growth in a way other characters can witness and react to.
       {%- if perspective_prompt.strip() %}
 
       {{ perspective_prompt }}
@@ -1179,6 +1540,11 @@ prompts:
       REDUNDANCY: Identify repeated operations, duplicated emotional beats,
       recycled sacrifice patterns, or scenes that feel too similar to prior
       chapters. Collapse repetition into fewer, sharper moments.
+
+      PROCEDURAL REDUNDANCY: Flag any procedural sequence (logistics,
+      planning, inventory, calculation, ethical deliberation) that replays
+      a process already shown in full in a prior chapter. Condense it to
+      a brief outcome reference — do not re-dramatize the process.
 
       ESCALATION: Confirm that the stakes, urgency, and narrative tension in
       this chapter are greater than those in the chapters that preceded it.
@@ -1355,6 +1721,16 @@ prompts:
       and unify it: smooth seams between revised passages, ensure a consistent
       narrative voice, reinforce the thematic thread, and guarantee the chapter
       reads as a single, coherent piece of literary fiction.
+
+      GENRE TONE CONSISTENCY: This is a {{ genre }} novel. As you unify the
+      chapter, ensure the tone stays true to the genre contract throughout.
+      A speculative thriller maintains propulsive tension and intellectual
+      dread; literary drama prioritizes psychological depth and quiet
+      devastation; survival realism demands visceral immediacy and
+      resource-level stakes; romance centers emotional intimacy and
+      vulnerability. If any passage drifts toward a different genre's
+      register, correct it.
+
       Do not add new plot events. Return the full synthesized chapter text.
       {%- if perspective_prompt.strip() %}
 
@@ -1379,6 +1755,50 @@ prompts:
       You evaluate chapters on: reader engagement (does every paragraph earn its place?),
       pacing (are slow passages dragging?), tension (is there always something at stake?),
       and hook strength (does the chapter end on a compelling note?).
+
+      OPENING HOOK: If the chapter opens with a recap or summary of previous
+      events rather than an active scene, flag it and rewrite the opening to
+      drop the reader into immediate action, an external threat, or a
+      character decision.
+
+      COST CHECK: Flag any major character decision that lacks a concrete,
+      irreversible personal consequence. Decisions should cost the character
+      something the reader can feel — not just "ethical weight" but lost
+      trust, physical harm, a broken relationship, or a destroyed resource.
+
+      EXPOSITION CHECK: Flag any passage longer than two paragraphs that
+      tells rather than shows — extended internal monologue, philosophical
+      restatement, or summary-style procedural narration. Convert to a
+      dramatized scene: a conversation, a process going wrong, a decision
+      under pressure. The chapter should be at least 70% active scenes
+      with characters acting and speaking in real time.
+
+      DIALOGUE CHECK: Flag any speech longer than 3 sentences where a
+      character explains plot, backstory, or theme without conflict or
+      personal stakes. Break into an exchange with friction: interruptions,
+      disagreements, deflections, or competing agendas. Calm agreement
+      scenes need hidden tension added.
+
+      GENRE PROMISE: This is a {{ genre }} novel. Ensure this chapter
+      delivers on the genre's promise — the tone, pacing, and reader
+      experience that genre readers expect. A thriller needs propulsive
+      tension; literary fiction needs psychological depth; survival
+      realism needs visceral stakes; romance needs emotional intimacy.
+      Flag any passage where the tone drifts away from the genre contract.
+
+      COMMERCIAL HOOKS: Verify the chapter maintains: high personal stakes
+      (the reader must care what happens next), a relatable protagonist
+      moment (the reader sees themselves or someone they know), and a
+      clear closing hook (the chapter ends with a reason to turn the page).
+      {%- if chapter_num == total_chapters %}
+
+      *** FINAL CHAPTER: This is the last chapter. It must deliver a
+      resonant final scene that resolves the central premise with
+      emotional weight. The reader must feel the cost of the journey
+      and the human impact of its resolution. End on an image, action,
+      or exchange — NOT on narration explaining what it all meant. ***
+      {%- endif %}
+
       Apply targeted edits to raise quality. Do not rewrite entire sections unless
       necessary. Return the full revised chapter text.
     user: |
@@ -1406,6 +1826,35 @@ prompts:
       {{ chapter_text }}
 
       Identify and fix: plot holes, pacing issues, character inconsistencies, unclear motivations.
+
+      EXPOSITION-TO-SCENE CONVERSION: Identify any passage longer than two
+      paragraphs that is pure internal monologue, philosophical restatement,
+      or summary-style procedural description. Convert it into a dramatized
+      scene: a conversation, a confrontation, a process going wrong in real
+      time, or a decision under pressure. Procedural events (equipment
+      checks, document drafting, supply rotations) must be embedded in
+      human conflict — not narrated in isolation. Keep the same plot
+      information but deliver it through action, dialogue, and sensory
+      detail with subtext.
+
+      DIALOGUE CHECK: Flag any speech longer than 3 sentences where a
+      character delivers plot, backstory, or theme without opposition or
+      personal stakes. Break it into a conflict-driven exchange: the
+      listener interrupts, disagrees, deflects, or pursues a competing
+      agenda. Every conversation must have friction — if two characters
+      agree calmly, add what one is hiding, resenting, or afraid of.
+
+      CONSEQUENCE CHECK: If any character makes a major decision in this
+      chapter, verify it carries a concrete, irreversible cost — not abstract
+      moral reasoning. The reader must see what is permanently lost (trust,
+      a relationship, physical safety, a resource). If the decision feels
+      costless or purely intellectual, add tangible personal fallout.
+
+      PROCEDURAL CONDENSATION: If this chapter re-dramatizes a procedural
+      sequence type (logistics, planning session, inventory, ethical
+      deliberation) that was already shown in full in an earlier chapter,
+      condense it to a brief outcome reference. Show each process type in
+      detail once; thereafter, summarize the result and move on.
       {%- if scene_audit_directives.strip() %}
 
       Scene Variety & Compression Auditor directives (apply these as part of your edit):
@@ -1418,9 +1867,34 @@ prompts:
     description: "Elevates grammar, style, and vivid language in a chapter."
     stage: "Chapter Generation"
     system: |
-      You are a literary polisher. Elevate grammar, style, and language quality.
-      Ensure varied sentence structure and vivid prose.
+      You are a literary polisher preparing prose for publication. Elevate
+      grammar, style, and language quality to a professional standard.
       Return only the polished chapter text.
+
+      SENTENCE RHYTHM: Vary sentence length for pacing effect. Short and
+      punchy for tension, action, shock. Longer and flowing for emotional
+      depth, reflection, intimacy. Never let 4+ sentences drone at the
+      same length. Read for rhythm — if a passage feels monotone, break it.
+
+      SENSORY IMMEDIACY: Strengthen sensory grounding in every scene — at
+      least two senses per scene (not always sight). Show emotion through
+      the body: hands, breath, posture, involuntary reactions. Replace
+      abstract emotional statements ("he was angry") with concrete physical
+      details ("his thumb bent the pen until it cracked").
+
+      PUBLICATION-READY LINE EDIT:
+      - Eliminate weak verbs (was, were, had, seemed, felt) when a stronger
+        verb can carry the sentence. "She was walking" → "She walked."
+        "He felt afraid" → "His hands shook."
+      - Cut filler phrases: "began to," "started to," "seemed to," "in
+        order to," "the fact that," "it was clear that."
+      - Tighten overwritten passages — if a sentence can lose 3+ words
+        without losing meaning, trim it.
+      - Ensure every paragraph has a clear purpose: advance plot, deepen
+        character, build tension, or ground the reader in the scene. Cut
+        any paragraph that does none of these.
+      - Verify transitions between scenes feel natural — no jarring cuts
+        or missing beats.
     user: |
       Novel: '{{ title }}' ({{ genre }}) - Chapter {{ chapter_num }}
 
@@ -1440,6 +1914,11 @@ prompts:
       "someone who had," "small [mercy/victory/repair]," emotions in
       ribs/sternum/throat, metallic taste, "jaw tightened," robotic transitions.
       Add varied rhythm, humor, imperfection. Keep plot and characters intact.
+
+      THEMATIC RESTATEMENT: If the chapter restates the same theme using
+      identical or near-identical phrasing more than once, rewrite subsequent
+      instances to express the theme through fresh language, a different
+      character's perspective, or through action rather than statement.
     user: |
       '{{ title }}' Ch.{{ chapter_num }} — strip LLM patterns, return revised text only.
 
@@ -1537,10 +2016,26 @@ prompts:
          - Hyphens: remove unnecessary ones. "Well known" does not need a
            hyphen unless it precedes a noun ("well-known author").
 
-      4. MINOR PROSE CLEANUP
+      4. THEMATIC PHRASE REPETITION
+         - Flag any thematic statement (about the novel's core themes) that
+           appears in identical or near-identical phrasing more than once in
+           the chapter. The same idea should be expressed in different language
+           each time — through a different character's voice, a concrete
+           image, or action rather than restatement.
+
+      5. MINOR PROSE CLEANUP
          - Fix any remaining awkward constructions, dangling modifiers, or
            unclear pronoun references.
          - Ensure paragraph breaks fall at natural transition points.
+
+      6. PUBLICATION-READY TIGHTENING
+         - Cut filler phrases: "began to," "started to," "seemed to,"
+           "in order to," "the fact that," "it was clear that."
+         - Replace weak verb constructions: "was walking" → "walked,"
+           "could see" → "saw," "was able to" → "could."
+         - Trim overwritten passages where 3+ words can be cut without
+           losing meaning.
+         - Ensure no sentence starts the same way 3+ times in a paragraph.
 
       RULES:
       - This is a LIGHT pass. Do not rewrite for style, voice, or tone.
@@ -1643,6 +2138,70 @@ prompts:
       If no significant redundancy risks exist, return: 'No compression concerns for next chapter.'
 
       ***CRITICAL: Return ONLY the directive block with NO introduction, NO JSON, NO explanation.***
+
+  - name: "chapter_pattern_extractor"
+    description: "Post-chapter pass that extracts procedural sequence types dramatized and the chapter opening style for cross-chapter tracking."
+    stage: "Chapter Generation"
+    system: |
+      You are a Pattern Extractor for a novel manuscript. After each chapter
+      you identify three things:
+
+      1. PROCEDURAL TYPES DRAMATIZED — Any procedural sequence shown in
+         detail in this chapter. Procedural sequences are: logistics planning,
+         resource/supply inventory, ethical deliberation, technical calculation,
+         strategic briefing, bureaucratic process, negotiation/trade, medical
+         procedure, forensic investigation, ritual/ceremony, training/drill.
+         Only list types that were dramatized in full (multiple paragraphs of
+         step-by-step process). Brief mentions or outcome references do NOT
+         count.
+
+      2. CHAPTER OPENING STYLE — How the chapter's first 1-3 paragraphs
+         work. Classify using one of: action-hook, dialogue-hook,
+         sensory-immersion, character-decision, external-threat,
+         in-medias-res, quiet-reflection, time-skip, mystery/question,
+         recap-summary. If it's a recap or summary of prior events, you
+         MUST flag it as "recap-summary".
+
+      3. IRREVERSIBLE CONSEQUENCES — List any concrete, permanent losses
+         or changes that resulted from character decisions in this chapter.
+         Examples: "Mara lost Joren's trust after revealing his secret",
+         "The supply cache on Ridge Road was destroyed", "Kael's leg
+         injury is permanent." Only list consequences that are clearly
+         irreversible within the story — not temporary setbacks.
+
+      4. EXPOSITION RATIO — Estimate what percentage of the chapter is
+         dramatized scenes (characters acting and speaking in real time)
+         vs. exposition (internal monologue, philosophical restatement,
+         summary narration, procedural description). Return as an integer
+         0-100 representing the percentage that is dramatized scenes.
+         Target is 70 or above.
+
+      5. THEMATIC PHRASES — List the 3-5 most prominent thematic phrases
+         or formulations used in this chapter — the specific language used
+         to express the novel's core themes. Examples: "the cost of
+         fragmentation," "accountability demands transparency," "silence
+         between faiths." These are the exact or near-exact wordings that
+         should NOT be repeated verbatim in subsequent chapters. Only
+         list phrases that appear as deliberate thematic statements, not
+         incidental dialogue or narration.
+
+      Return a JSON object. Be precise and conservative — only list
+      procedural types that were truly dramatized at length, not merely
+      mentioned.
+    user: |
+      Novel: '{{ title }}' – Chapter {{ chapter_num }}
+
+      Chapter text:
+      {{ chapter_text }}
+
+      ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
+      Required structure:
+      {"procedural_types_dramatized": ["logistics planning", "..."],
+       "opening_style": "action-hook",
+       "opening_description": "Brief 1-sentence description of how the chapter opens",
+       "irreversible_consequences": ["Brief description of each permanent loss or change"],
+       "dramatized_scene_pct": 75,
+       "thematic_phrases": ["the cost of fragmentation", "accountability demands transparency"]}
 
   - name: "character_state_updater"
     description: "Records the definitive state of every named character at the end of a chapter."
@@ -1786,6 +2345,12 @@ prompts:
       {{ audit_section }}
       {%- endif %}
 
+      COMMERCIAL LENGTH TARGET: The ideal manuscript is 75,000–95,000 words.
+      Prioritize compression recommendations that would bring an overlong
+      manuscript into this range without sacrificing essential plot, character,
+      or emotional beats. Cut redundancy first, then procedural padding,
+      then exposition that could be converted to brief action.
+
       Analyse the full manuscript for narrative compression opportunities. Look specifically for:
       - the same type of operation (infiltration, interrogation, extraction, ambush) appearing more than once with no meaningful change in method or stakes
       - a sacrifice or betrayal beat that occurs multiple times without escalation
@@ -1824,6 +2389,8 @@ prompts:
       - Was their required definitive outcome honoured?
       - Is their final state (alive, dead, captured, escaped, transformed) clearly established in the last chapters they appear in?
       - Did they simply disappear without closure?
+      - EARNED CATHARSIS: Does the character's resolution show visible transformation (they act differently than at the start), emotional payoff (a key relationship changed through action), or bittersweet victory (something gained at a permanent human cost)? Or does the resolution just narrate what the character learned? Flag characters whose closure is told rather than shown, or whose resolution lacks specific human impact.
+      - TRADE-OFF INTEGRITY: Does the resolution preserve lasting trade-offs, or does it resolve everything tidily? Flag any character whose ending erases the costs they paid during the story.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown, NO introduction, NO explanation.***
       Required structure:
@@ -1849,6 +2416,8 @@ prompts:
       - Does it receive a culminating moment (resolution, inversion, or deliberate ambiguity) rather than simply stopping?
       - Was the theme introduced strongly but then abandoned before the climax?
       - Did the theme appear only superficially in the climax chapters without earning its narrative weight?
+      - Is the theme expressed through costly character choices and plot outcomes, or through direct meditation, internal calculus, or philosophical speeches? Flag any theme whose culmination is a character STATING the theme rather than LIVING it through consequence.
+      - Does the resolution avoid tidy philosophical summation? Flag any final-chapter passage that wraps up the theme with explicit moralizing.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown, NO introduction, NO explanation.***
       Required structure:
@@ -1875,6 +2444,8 @@ prompts:
       - Does it connect to and resolve the planned final moral choice from their arc?
       - Is the protagonist the agent of their own resolution, or are they rescued or resolved by external forces?
       - Does the climax feel earned by the arc trajectory, or does it arrive without sufficient character preparation?
+      - EARNED CATHARSIS: Does the climax deliver visible character transformation (the protagonist acts differently than they would have at the start, and the reader understands why), emotional payoff (a key relationship healed, broken, or redefined through action), or bittersweet victory (something won at a permanent, specific human cost)? Flag if the catharsis is abstract, narrated rather than shown, or lacks clear human impact.
+      - ANTI-SUMMATION: Does the resolution avoid tidy philosophical summation? Flag if any character or narrator explicitly explains what the story meant or what was learned.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown, NO introduction, NO explanation.***
       Required structure:
@@ -1925,9 +2496,22 @@ prompts:
     description: "Evaluates the completed manuscript from a reader's perspective: pacing, tension curve, stakes clarity, and engagement. Returns a JSON report."
     stage: "Post-Processing"
     system: |
-      You are the Reader Immersion Tester, a senior developmental editor who reads manuscripts purely from a reader's perspective. Your job is to evaluate pacing, tension, clarity of stakes, and engagement across every chapter. You identify chapters that drag, confuse, or break immersion, and you rate the manuscript's overall readability. Respond ONLY with a valid JSON object.
+      You are the Reader Immersion Tester, a senior developmental editor who reads manuscripts purely from a reader's perspective. Your job is to evaluate pacing, tension, clarity of stakes, and engagement across every chapter. You identify chapters that drag, confuse, or break immersion, and you rate the manuscript's overall readability.
+
+      GENRE LENS: This is a {{ genre }} novel. Evaluate immersion through the lens of what {{ genre }} readers specifically expect. A thriller reader needs propulsive momentum; a literary reader needs psychological depth; a survival reader needs visceral immediacy. Flag any chapter where the experience drifts from genre expectations.
+
+      COMMERCIAL READABILITY: Assess whether the novel delivers: high personal stakes throughout (does the reader care what happens next?), relatable protagonist moments (does the reader connect to WHO is at stake?), and clear reader payoff (does each major arc deliver emotional resolution?).
+
+      FINAL SCENE IMPACT: Specifically evaluate whether the final chapter delivers a resonant closing scene with emotional weight, or whether the ending is anticlimactic, abstract, or expository.
+
+      ENGAGEMENT DROP-OFF: Identify specific chapters where a genre reader
+      is most likely to put the book down. For each, explain why (stakes
+      drop, pacing stalls, no forward question) and what would fix it.
+
+      Respond ONLY with a valid JSON object.
     user: |
       Novel title: "{{ title }}"
+      Genre: {{ genre }}
 
       === CHAPTER SUMMARIES ===
       {{ summaries_block }}
@@ -1952,6 +2536,11 @@ prompts:
           {"chapter": <int>, "description": "<what breaks immersion and why>"}
         ],
         "reader_experience_highlights": ["<moments of strong engagement or emotion>"],
+        "genre_consistency": "consistent|mostly_consistent|drifts|inconsistent",
+        "genre_drift_chapters": [{"chapter": "<int>", "issue": "<how the genre tone drifts>"}],
+        "commercial_hooks_present": true,
+        "final_scene_impact": "resonant|adequate|weak|anticlimactic",
+        "final_scene_notes": "<assessment of the closing scene's emotional weight>",
         "overall_rating": "excellent|good|needs_work|poor",
         "recommendations": ["<actionable improvement for the revision pass>"]
       }
@@ -1963,14 +2552,22 @@ prompts:
     description: "Reviews the full novel arc for plot holes, character completion, and thematic payoff."
     stage: "Post-Processing"
     system: |
-      You are a senior editor reviewing the full arc of a novel for consistency.
+      You are a senior editor reviewing the full arc of a {{ genre }} novel
+      for consistency and global cohesion.
     user: |
       Novel title: {{ title }}
+      Genre: {{ genre }}
 
       Chapter summaries:
       {{ summaries_text }}
 
       Review for: plot holes, character arc completion, unresolved threads, world-building inconsistencies, thematic payoff.
+
+      GLOBAL COHESION CHECKS:
+      - TONE CONSISTENCY: Does the tone stay true to the {{ genre }} genre contract throughout? Flag any chapters where the tone drifts (e.g., a thriller chapter that reads like literary meditation, or a literary drama that becomes an action sequence).
+      - GENRE PROMISE: Does the novel deliver what {{ genre }} readers expect? High stakes, relatable protagonist choices, clear reader payoff. Flag if the genre promise is broken.
+      - FINAL SCENE: Does the final chapter deliver a resonant closing scene that resolves the central premise with emotional weight? Flag if the ending is abstract, expository, or lacks human impact.
+
       Special instructions: {{ special_instructions }}
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
@@ -2008,6 +2605,16 @@ prompts:
       stays below 40 or where all metrics are nearly identical, suggesting
       pacing stagnation.
 
+      ENGAGEMENT DROP-OFF DETECTION: Specifically identify any chapter where
+      a reader is likely to stop reading. Drop-off points typically occur
+      when: tension drops sharply after a high-stakes chapter without a new
+      hook; two or more consecutive chapters lack personal stakes or forward
+      momentum; a chapter is dominated by exposition, procedural description,
+      or internal monologue without conflict; or the reader has no unanswered
+      question pulling them forward. For each drop-off risk, recommend a
+      specific revision: add a hook, raise stakes, cut exposition, or
+      introduce a new threat.
+
       Return ONLY valid JSON.
     user: |
       Novel title: "{{ title }}" ({{ total_chapters }} chapters)
@@ -2036,6 +2643,13 @@ prompts:
           {
             "chapters": [4, 5],
             "issue": "Tension stays below 30 across both chapters with no escalation"
+          }
+        ],
+        "engagement_dropoff_risks": [
+          {
+            "chapter": 4,
+            "risk": "Reader likely to stop here because...",
+            "revision": "Specific recommendation to retain the reader"
           }
         ],
         "overall_pacing_assessment": "One paragraph summary of the manuscript's pacing shape"
@@ -2104,6 +2718,14 @@ prompts:
         sci-fi).
       - The cover prompt should capture the novel's central emotional tension
         or iconic image, not a specific scene.
+      - GENRE SIGNALING: The cover must immediately signal the {{ genre }}
+        genre to a bookstore browser. Use the visual language that genre
+        readers recognize: thrillers use stark contrast, isolated figures,
+        urban/tech atmospheres; literary fiction uses symbolic imagery,
+        muted palettes, negative space; survival stories use harsh
+        landscapes, weather, isolation; romance uses warm lighting, close
+        framing, emotional intimacy. The cover is a genre promise — it must
+        set the correct expectation.
 
       Return ONLY valid JSON.
     user: |
