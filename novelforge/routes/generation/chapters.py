@@ -362,11 +362,11 @@ def _run_chapter_generation_internal(
                     if pl not in seen:
                         seen.add(pl)
                         unique.append(p)
-                recent = unique[-15:]
+                recent_phrases = unique[-15:]
                 _theme_warning = (
                     "BANNED THEMATIC PHRASINGS (already used in prior chapters — "
                     "restate themes in FRESH language, not these exact formulations):\n"
-                    + "\n".join(f'- "{p}"' for p in recent)
+                    + "\n".join(f'- "{p}"' for p in recent_phrases)
                 )
 
             # Combine compression guidance with exposition and theme warnings
