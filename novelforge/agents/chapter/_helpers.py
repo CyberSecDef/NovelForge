@@ -1,4 +1,4 @@
-"""Shared constants, pass-failure helpers, content-policy retry, and vocabulary scanning."""
+"""Shared constants, pass-failure helpers, content-policy retry, vocabulary scanning, and length enforcement."""
 
 import logging
 import re
@@ -395,3 +395,83 @@ def scan_vocabulary_overuse(chapter_text: str, genre: str = "") -> list[str]:
             )
 
     return warnings
+
+
+# ---------------------------------------------------------------------------
+# Chapter length enforcement
+# ---------------------------------------------------------------------------
+
+def check_chapter_length(
+    text: str,
+    target_words: int,
+    min_pct: int = 85,
+) -> tuple[int, int, bool]:
+    """Check whether a chapter meets the minimum length threshold.
+
+    Returns ``(actual_word_count, min_threshold, is_acceptable)`` where
+    *min_threshold* is the minimum word count derived from *target_words*
+    and *min_pct*.
+    """
+    actual = len(text.split())
+    min_threshold = (target_words * min_pct) // 100
+    return actual, min_threshold, actual >= min_threshold
+
+
+def expand_chapter(
+    text: str,
+    *,
+    target_words: int,
+    min_words: int,
+    chapter_num: int,
+    title: str,
+    max_attempts: int = 2,
+) -> tuple[str, int]:
+    """Expand an under-length chapter by calling the expansion agent.
+
+    Tries up to *max_attempts* expansion calls.  Returns
+    ``(expanded_text, final_word_count)``.  If the expansion agent fails or
+    the chapter still doesn't meet the threshold, returns the best result
+    achieved so far rather than raising.
+    """
+    from novelforge.agents.chapter.prompts import build_chapter_expansion_prompt
+
+    current = text
+    current_wc = len(current.split())
+    for attempt in range(1, max_attempts + 1):
+        if current_wc >= min_words:
+            break
+        logger.info(
+            "Chapter %d: expansion attempt %d/%d (%d words, need %d)",
+            chapter_num, attempt, max_attempts, current_wc, min_words,
+        )
+        try:
+            expanded = call_llm(
+                build_chapter_expansion_prompt(
+                    chapter_text=current,
+                    current_words=current_wc,
+                    target_words=target_words,
+                    min_words=min_words,
+                ),
+                action=f"Chapter {chapter_num}: expansion (attempt {attempt})",
+            )
+            new_wc = len(expanded.split())
+            if new_wc > current_wc:
+                current = expanded
+                current_wc = new_wc
+                logger.info(
+                    "Chapter %d: expansion attempt %d produced %d words",
+                    chapter_num, attempt, new_wc,
+                )
+            else:
+                logger.warning(
+                    "Chapter %d: expansion attempt %d did not increase length (%d → %d)",
+                    chapter_num, attempt, current_wc, new_wc,
+                )
+                break
+        except Exception as exc:
+            logger.warning(
+                "Chapter %d: expansion attempt %d failed: %s: %s",
+                chapter_num, attempt, type(exc).__name__, exc,
+            )
+            break
+    return current, current_wc

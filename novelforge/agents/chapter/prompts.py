@@ -106,6 +106,22 @@ def build_chapter_draft_prompt(
     )
 
 
+def build_chapter_expansion_prompt(
+    chapter_text: str,
+    current_words: int,
+    target_words: int,
+    min_words: int,
+) -> list[dict[str, str]]:
+    """Build the expansion prompt for under-length chapters."""
+    return render_prompt(
+        "chapter_expansion",
+        chapter_text=chapter_text,
+        current_words=f"{current_words:,}",
+        target_words=f"{target_words:,}",
+        min_words=f"{min_words:,}",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Chapter refinement agent prompt builders
 # ---------------------------------------------------------------------------

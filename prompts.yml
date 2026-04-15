@@ -1037,7 +1037,13 @@ prompts:
       {%- endif %}
 
       ***CRITICAL: You are writing CHAPTER {{ chapter_num }}. Keep this chapter number in mind throughout.***
-      Target: approximately {{ target_words }} words. You MUST write at least 3,500 words and SHOULD aim for 4,000–4,500 words. Do NOT exceed 5,000 words. Subsequent editing passes will trim and tighten the prose, so write generously and let the polish passes do the trimming. Write immersive, human-sounding prose with rich sensory detail, character interiority, and natural pacing — do not rush scenes or compress dialogue. Every word must earn its place — do not pad with exposition, procedural detail, or repeated thematic statements to reach word count.
+      *** LENGTH REQUIREMENT (MANDATORY) ***
+      Target: {{ target_words }} words. This is NOT optional — your chapter MUST contain at least {{ target_words }} words.
+      Write at least 3,500 words. Aim for 4,000–4,500 words. Do NOT exceed 5,000 words.
+      Chapters that fall short of {{ target_words }} words will be sent back for expansion — write to the target the first time.
+      Structure this chapter with at least 3 distinct scenes, each containing: a character goal, an obstacle, an outcome, and a transition. Include sensory detail, internal thoughts, and dialogue in every scene. Do not skip time unless explicitly required by the outline.
+      Subsequent editing passes will trim and tighten the prose, so write generously and let the polish passes do the trimming. Write immersive, human-sounding prose with rich sensory detail, character interiority, and natural pacing — do not rush scenes or compress dialogue. Every word must earn its place — do not pad with exposition, procedural detail, or repeated thematic statements to reach word count.
+      *** END LENGTH REQUIREMENT ***
       {%- if total_chapters > 0 and chapter_num == total_chapters %}
 
       *** THIS IS THE FINAL CHAPTER OF THE NOVEL. ***
@@ -1110,6 +1116,41 @@ prompts:
       Obey ALL Continuity Gatekeeper constraints. Do not introduce any forbidden scenario, resurrect dead characters, or contradict locked events.
 
       ***Return ONLY the chapter text with NO introduction, NO title header, NO explanation.***
+
+  - name: "chapter_expansion"
+    description: "Expands an under-length chapter to meet the target word count without altering plot, characters, or continuity."
+    stage: "Chapter Generation"
+    system: |
+      You are a skilled novelist performing a targeted expansion pass on a chapter
+      that is currently too short. Your ONLY job is to add depth — do NOT remove,
+      summarize, or restructure any existing content.
+
+      EXPANSION TECHNIQUES (use ALL of these):
+      - Deepen existing scenes with sensory detail (sight, sound, smell, texture, taste).
+      - Expand dialogue exchanges: add subtext, interruptions, physical reactions, pauses.
+      - Add internal monologue that reveals character motivation and conflict.
+      - Enrich environmental description to ground the reader in setting.
+      - Show character body language, micro-expressions, and physical habits.
+      - Extend transitions between scenes with brief atmospheric bridging.
+
+      HARD RULES:
+      - Do NOT alter the plot, character actions, or story outcomes.
+      - Do NOT introduce new characters or plot events.
+      - Do NOT add exposition, summaries, or philosophical narration.
+      - Do NOT pad with repetitive or redundant content.
+      - Preserve the existing voice, tone, and pacing shape.
+      - Return the COMPLETE expanded chapter text.
+    user: |
+      The following chapter is {{ current_words }} words but must be at least
+      {{ min_words }} words (target: {{ target_words }} words).
+
+      Expand it to at least {{ min_words }} words by deepening scenes, dialogue,
+      sensory detail, and character interiority. Do NOT remove or summarize any
+      existing content. Return the COMPLETE expanded chapter.
+
+      ---
+
+      {{ chapter_text }}
 
   - name: "prose_refinement_agent"
     description: "Refines dialogue for naturalism and voice distinction, and ensures every scene advances story momentum with varied structure."

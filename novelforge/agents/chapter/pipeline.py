@@ -248,6 +248,7 @@ def _run_all_chapter_agents(
     degraded_passes: list[dict] | None = None,
     chapter_rhythm_shape: str = "",
     chapter_rhythm_reason: str = "",
+    target_words: int = 0,
 ) -> tuple[str, str]:
     """
     Run all chapter refinement agents (post-draft) and return:
@@ -467,6 +468,33 @@ def _run_all_chapter_agents(
             lambda t: build_vocabulary_fix_prompt(t, chapter_num, title, violations),
             text, action=f"Chapter {chapter_num}: vocabulary fix-up",
         )
+
+    # Length enforcement — expand under-length chapters after all refinement
+    # passes have finished so that the expansion doesn't get trimmed.
+    if target_words > 0:
+        from novelforge.agents.chapter._helpers import check_chapter_length, expand_chapter
+        import novelforge.config as _cfg
+
+        min_pct = _cfg.CHAPTER_MIN_LENGTH_PCT
+        actual_wc, min_threshold, acceptable = check_chapter_length(text, target_words, min_pct)
+        if not acceptable:
+            _check_deadline()
+            if step_callback:
+                step_callback(
+                    f"Chapter {chapter_num}: expanding ({actual_wc} words, need {min_threshold})"
+                )
+            text, actual_wc = expand_chapter(
+                text,
+                target_words=target_words,
+                min_words=min_threshold,
+                chapter_num=chapter_num,
+                title=title,
+                max_attempts=_cfg.MAX_EXPANSION_ATTEMPTS,
+            )
+            logger.info(
+                "Chapter %d: post-expansion word count = %d (target=%d, min=%d)",
+                chapter_num, actual_wc, target_words, min_threshold,
+            )
 
     _check_deadline()
     if step_callback:

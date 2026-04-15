@@ -58,6 +58,9 @@ class ProgressState(TypedDict, total=False):
     # Token linking a novel entry to its illustration job
     illustration_token: str
 
+    # Length enforcement tracking: list of {chapter_num, target, actual, expanded} dicts
+    length_enforcement: list[dict[str, Any]]
+
 
 _REQUIRED_CREATION_KEYS: frozenset[str] = frozenset(
     {"status", "current", "total", "step", "chapters_done", "error"}

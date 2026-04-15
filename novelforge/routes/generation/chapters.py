@@ -203,6 +203,8 @@ def _run_chapter_generation_internal(
     consequence_log: list[dict] = []          # tracks irreversible consequences per chapter
     exposition_log: list[dict] = []           # tracks dramatization ratio per chapter
     thematic_phrase_log: list[str] = []       # tracks thematic phrases to avoid repeating
+    length_enforcement_log: list[dict] = []   # tracks per-chapter length enforcement results
+    total_words_generated: int = 0            # running total for global length tracking
 
     # Format voice seed for prompt injection
     from novelforge.voice import format_voice_prompt
@@ -423,6 +425,7 @@ def _run_chapter_generation_internal(
                 degraded_passes=degraded_passes,
                 chapter_rhythm_shape=chapter_rhythm_shape,
                 chapter_rhythm_reason=chapter_rhythm_reason,
+                target_words=target_per_chapter,
             )
             summaries.append(summary)
 
@@ -494,6 +497,22 @@ def _run_chapter_generation_internal(
             chapter_usage = get_llm_usage()
             chapter_word_count = len(text.split())
 
+            # Track length enforcement results
+            from novelforge.agents.chapter._helpers import check_chapter_length
+            min_pct = config.CHAPTER_MIN_LENGTH_PCT
+            _, min_threshold, meets_target = check_chapter_length(
+                text, target_per_chapter, min_pct,
+            )
+            total_words_generated += chapter_word_count
+            length_enforcement_log.append({
+                "chapter_num": chapter_num,
+                "target": target_per_chapter,
+                "min_threshold": min_threshold,
+                "actual": chapter_word_count,
+                "meets_target": meets_target,
+                "total_words_so_far": total_words_generated,
+            })
+
             chapters_done.append({
                 "number": chapter_num,
                 "title": chapter_title,
@@ -516,6 +535,7 @@ def _run_chapter_generation_internal(
                 "chapters_done": list(chapters_done),
                 "character_state_log": list(character_state_log),
                 "degraded_passes": list(degraded_passes),
+                "length_enforcement": list(length_enforcement_log),
             })
             _persist_progress(force=True)  # always persist on chapter completion
 
