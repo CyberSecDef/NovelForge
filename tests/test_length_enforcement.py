@@ -8,6 +8,8 @@ Covers:
 - Integration with _run_all_chapter_agents() via target_words parameter
 """
 
+import importlib
+
 import pytest
 
 from novelforge.agents.chapter._helpers import check_chapter_length, expand_chapter
@@ -260,7 +262,6 @@ class TestLengthEnforcementConfig:
     """Verify config constants exist and have sensible defaults."""
 
     def test_chapter_min_length_pct_default(self, monkeypatch):
-        import importlib
         import novelforge.config as cfg
         monkeypatch.delenv("CHAPTER_MIN_LENGTH_PCT", raising=False)
         importlib.reload(cfg)
@@ -270,7 +271,6 @@ class TestLengthEnforcementConfig:
             importlib.reload(cfg)
 
     def test_max_expansion_attempts_default(self, monkeypatch):
-        import importlib
         import novelforge.config as cfg
         monkeypatch.delenv("MAX_EXPANSION_ATTEMPTS", raising=False)
         importlib.reload(cfg)
