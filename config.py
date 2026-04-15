@@ -10,6 +10,7 @@ resolve every re-exported symbol precisely.
 """
 
 from novelforge.config import (  # noqa: F401 – re-exports for backward compatibility
+    CHAPTER_MIN_LENGTH_PCT,
     ConfigurationError,
     IMAGE_API_KEY,
     IMAGE_API_URL,
@@ -26,6 +27,7 @@ from novelforge.config import (  # noqa: F401 – re-exports for backward compat
     LLM_TIMEOUT,
     LOGS_DIR,
     MAX_CHAPTERS,
+    MAX_EXPANSION_ATTEMPTS,
     MAX_WORD_COUNT,
     NOVELS_DIR,
     EXPORT_DIR,

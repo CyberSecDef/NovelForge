@@ -30,6 +30,8 @@ from novelforge.agents.chapter._helpers import (  # noqa: F401
     _format_anti_repetition_rules,
     _log_pass_failure,
     _sanitize_for_content_policy,
+    check_chapter_length,
+    expand_chapter,
     format_vocabulary_rules,
     get_forbidden_words,
     get_soft_limited_words,
@@ -50,6 +52,7 @@ from novelforge.agents.chapter.context import (  # noqa: F401
 from novelforge.agents.chapter.prompts import (  # noqa: F401
     build_anti_llm_agent_prompt,
     build_chapter_draft_prompt,
+    build_chapter_expansion_prompt,
     build_chapter_revision_prompt,
     build_chapter_rhythm_classifier_prompt,
     build_rhythm_compliance_verifier_prompt,

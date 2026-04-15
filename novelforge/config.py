@@ -52,6 +52,9 @@ __all__ = [
     # Input validation limits
     "MAX_CHAPTERS",
     "MAX_WORD_COUNT",
+    # Chapter length enforcement
+    "CHAPTER_MIN_LENGTH_PCT",
+    "MAX_EXPANSION_ATTEMPTS",
     # Flask
     "SECRET_KEY",
     "SESSION_FILE_DIR",
@@ -225,6 +228,33 @@ PER_CHAPTER_TIMEOUT = get_env_int("PER_CHAPTER_TIMEOUT", 3600, min_value=1)
 
 MAX_CHAPTERS = get_env_int("MAX_CHAPTERS", 100, min_value=1)
 MAX_WORD_COUNT = get_env_int("MAX_WORD_COUNT", 500000, min_value=1)
+
+# ---------------------------------------------------------------------------
+# Chapter length enforcement (override via environment variables)
+# ---------------------------------------------------------------------------
+
+
+def _get_percentage_env(
+    name: str, default: int, *, min_value: int = 0, max_value: int = 100
+) -> int:
+    """Return an integer percentage env var constrained to the given range."""
+    value = get_env_int(name, default, min_value=min_value)
+    if value > max_value:
+        _CONFIG_PARSE_ERRORS.append(
+            f"{name} must be <= {max_value} (got {value})."
+        )
+        return default
+    return value
+
+
+# Minimum acceptable chapter word count as a percentage of the per-chapter target.
+# Chapters below this threshold trigger an automatic expansion pass.
+CHAPTER_MIN_LENGTH_PCT = _get_percentage_env(
+    "CHAPTER_MIN_LENGTH_PCT", 85, min_value=50, max_value=100
+)
+
+# Maximum number of expansion attempts per chapter before accepting as-is.
+MAX_EXPANSION_ATTEMPTS = get_env_int("MAX_EXPANSION_ATTEMPTS", 2, min_value=0)
 
 # ---------------------------------------------------------------------------
 # Flask
