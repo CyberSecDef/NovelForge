@@ -240,9 +240,10 @@ def _get_percentage_env(
     """Return an integer percentage env var constrained to the given range."""
     value = get_env_int(name, default, min_value=min_value)
     if value > max_value:
-        raise ValueError(
+        _CONFIG_PARSE_ERRORS.append(
             f"{name} must be <= {max_value} (got {value})."
         )
+        return default
     return value
 
 
