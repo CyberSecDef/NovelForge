@@ -6,6 +6,7 @@ out.  No LLM calls, no filesystem I/O, no side effects.
 
 from novelforge.llm.prompts import render_prompt
 from novelforge.names import format_name_pool_for_prompt
+from novelforge.validation import CHARACTER_FIELD_LIMITS
 
 from novelforge.agents.chapter._helpers import (
     get_forbidden_words,
@@ -51,10 +52,32 @@ def build_characters_prompt(
                     function to perform filesystem I/O itself.
     """
     name_pool = format_name_pool_for_prompt(genre)
+    field_limits_block = "\n".join(
+        f"      - {field}: max {limit} characters"
+        for field, limit in CHARACTER_FIELD_LIMITS.items()
+        if field != "age"
+    )
     return render_prompt(
         "characters", premise=premise, genre=genre,
         outline_text=outline_text, names_to_avoid=names_to_avoid,
-        name_pool=name_pool,
+        name_pool=name_pool, field_limits_block=field_limits_block,
+    )
+
+
+def build_character_field_repair_prompt(
+    character_name: str, field_name: str, current_value: str, max_length: int,
+) -> list[dict[str, str]]:
+    """Build a targeted rewrite prompt for a single over-length character field."""
+    current_length = len(current_value)
+    excess = max(0, current_length - max_length)
+    return render_prompt(
+        "character_field_repair",
+        character_name=character_name or "(unnamed)",
+        field_name=field_name,
+        current_value=current_value,
+        max_length=max_length,
+        current_length=current_length,
+        excess=excess,
     )
 
 

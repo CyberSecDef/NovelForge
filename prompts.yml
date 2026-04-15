@@ -859,9 +859,40 @@ prompts:
       - The "arc" field should describe how the internal_flaw and personal_goal
         interact with the plot to produce genuine growth or tragic failure.
 
+      FIELD LENGTH LIMITS (MANDATORY — exceeding any limit will cause the
+      character to be rejected). Aim comfortably UNDER each cap; do not write
+      to the limit:
+      {{ field_limits_block }}
+
+      Prefer concise, specific phrasing over verbose or descriptive overflow.
+      `role` in particular must be a short phrase (e.g. "disillusioned field
+      medic turned reluctant smuggler"), NOT a paragraph.
+
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.  Age should be an integer.  never use double quotes, single quotes or colons. ***
       Required structure:
       {"characters": [{"name": "...", "age": 35, "background": "...", "role": "...", "arc": "...", "internal_flaw": "...", "personal_goal": "..."}, ...]}
+
+  - name: "character_field_repair"
+    description: "Rewrites a single character field that exceeds its maximum length while preserving meaning and tone."
+    stage: "Novel Setup"
+    system: |
+      You rewrite a single character attribute so it fits within a strict
+      character-length limit while preserving its meaning, tone, and specificity.
+      Return ONLY the rewritten value as plain text — no JSON, no quotes, no
+      commentary, no markdown.
+    user: |
+      Character name: {{ character_name }}
+      Field: {{ field_name }}
+      Maximum allowed length: {{ max_length }} characters
+      Current length: {{ current_length }} characters (over limit by {{ excess }})
+
+      Current value:
+      {{ current_value }}
+
+      Rewrite this value so it is at most {{ max_length }} characters and aims
+      comfortably under that cap. Preserve the specificity and intent — do NOT
+      flatten it into something generic. Prefer concise phrasing over descriptive
+      overflow. Return ONLY the rewritten value.
 
   - name: "chapter_draft"
     description: "Drafts a novel chapter in a natural human voice, respecting all pre-processing planner constraints."
@@ -2290,8 +2321,14 @@ prompts:
 
       Read the chapter below and record the definitive state of every named character at the END of this chapter. Note any injuries, captures, deaths, escapes, psychological shifts, or relationship changes that occurred. Future chapters must not contradict these states.
 
+      FLAW & GOAL TRACKING: For each character who has an `internal_flaw` or
+      `personal_goal` in the roster above, note briefly whether this chapter
+      advanced, stalled, or contradicted that flaw's manifestation or that
+      goal's pursuit. If neither moved, say so — this signals the character
+      was coasting and may need flaw-driven pressure in later chapters.
+
       Format each line as:
-      CHARACTER NAME: <status> – <one-sentence reason>
+      CHARACTER NAME: <status> – <one-sentence reason> | flaw: <advanced|stalled|contradicted|absent> | goal: <advanced|stalled|contradicted|absent>
 
       ***CRITICAL: Return ONLY the character state log with NO introduction, NO narrative prose, NO markdown.***
 

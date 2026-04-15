@@ -58,6 +58,7 @@ from novelforge.agents.chapter.prompts import (  # noqa: F401
     build_rhythm_compliance_verifier_prompt,
     build_chapter_summary_prompt,
     build_character_agent_prompt,
+    build_character_field_repair_prompt,
     build_character_relationship_prompt,
     build_character_resolution_validator_prompt,
     build_chapter_pattern_extractor_prompt,

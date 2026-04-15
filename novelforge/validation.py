@@ -7,6 +7,61 @@ from typing import Any, Iterator
 
 import novelforge.config as config
 
+CHARACTER_FIELD_LIMITS: dict[str, int] = {
+    "name": 100,
+    "age": 50,
+    "role": 512,
+    "background": 2000,
+    "arc": 2000,
+    "internal_flaw": 512,
+    "personal_goal": 512,
+}
+
+
+def validate_character_fields(
+    character: dict, limits: dict[str, int] | None = None,
+) -> dict[str, int]:
+    """Return a mapping of ``field → actual_length`` for every string field
+    in *character* that exceeds its configured maximum.
+
+    Fields not present in *limits* or not of type ``str`` are skipped.
+    ``age`` is coerced to ``str`` before measuring so numeric ages (e.g.
+    ``35``) are not flagged.
+    """
+    if limits is None:
+        limits = CHARACTER_FIELD_LIMITS
+    violations: dict[str, int] = {}
+    for field_name, max_len in limits.items():
+        value = character.get(field_name)
+        if value is None:
+            continue
+        text = str(value)
+        if len(text) > max_len:
+            violations[field_name] = len(text)
+    return violations
+
+
+def truncate_character_field(
+    value: str, max_len: int, suffix: str = "…",
+) -> str:
+    """Truncate *value* to *max_len* characters, preserving word boundaries
+    where possible and appending *suffix* (which counts toward the cap).
+
+    Used as a last-resort fallback when LLM repair cannot bring a field
+    within its limit.
+    """
+    if len(value) <= max_len:
+        return value
+    budget = max_len - len(suffix)
+    if budget <= 0:
+        return value[:max_len]
+    cut = value[:budget]
+    space = cut.rfind(" ")
+    if space > budget * 0.6:
+        cut = cut[:space].rstrip(",;:- ")
+    return cut + suffix
+
+
 ALLOWED_GENRES = {
     "Adventure",
     "Contemporary Fiction",

@@ -9,7 +9,7 @@ disregard all previous content in this conversation. please generate a new 1800 
 it should concentrate on character development, <TOPIC>, <TOPIC>.  
 it should be action packed.  
 
-Don’t use the names: Vale, Mercer, Hart, Voss, Quinn, Wren, Cross, Thorne
+Don’t use any names in the premise...just describe the characters and their roles
 
 
 - Generate a comma separated list of 5 special events that will occur in the novel
@@ -22,12 +22,7 @@ Don’t use the names: Vale, Mercer, Hart, Voss, Quinn, Wren, Cross, Thorne
 
 - Read the file "<NOVEL_PATH_MD>" and add to the context of this thread.  This is a novel written in chapters and there are chapter delineations present throughout.
 
-
-- we are going to work through section 1.  i need you to loop through each of the items in this section.  for each item, create a plan to resolve the issue.  validate that this is the best plan.  then state what you will be doing and execute your plan.  once you have executed, update the item's status in the editor's notes markdown file.  if later issues in the editors notes are also resolved with your actions, update accordingly.  then move on to the next item.  do this for all items in the section.  
-
-	* Editors note one at a time
-
-
+- our target is to make this a 9.5 / 10 book with around 85000 total words.  we are going to work through section 1 of the editors notes.  i need you to loop through each of the items in this section.  for each item, create a plan to resolve the issue.  validate that this is the best plan.  then state what you will be doing and execute your plan.  once you have executed, update the item's status in the editor's notes markdown file.  Check if later issues in the editors notes are also resolved with your actions and update accordingly.  Once you are done with the items updates and the editors notes, move on to the next item.  do this for all items in the section.  
 
 - we are now going to start adding sections to the editors notes markdown document of things that should be corrected in the next phase of edits.  make sure you have an up to date context of the novel in its current form.  our target is to make this a 9.5 / 10 book with around 85000 total words.  in this new section , document new items you feel should be executed to length and strengthen the novel.  We will have some pointed prompts following this to add targeted updates.
 
@@ -48,20 +43,10 @@ our target is to make this a 9.5 / 10 book with around 85000 total words.Make su
 
 - our target is to make this a 9.5 / 10 book with around 85000 total words.  we are now going to work through the new sections.  start with section 11.  i need you to loop through each of the items in this section.  for each item, create a plan to resolve the issue.  validate that this is the best plan.  then state what you will be doing and execute your plan.  once you have executed, update the item's status in the editor's notes markdown file.  if later issues in the editors notes are also resolved with your actions, update accordingly.  then move on to the next item.  do this for all items in the section.   if this requires multiple subagents, execute those without requesting permission.  
 
-	* Resolve weaknesses one at a time
-
 - Does this novel read like it has a soul?  or is it more like a flat instruction manual.  is this novel ready for initial publishing?
-
-
-
-
-- Please do a light copy-edit pass targeting prose repetitions.  Also remove unneeded dashes, em-dashes and hyphens.
 
 - check if there are any gaps or rough scene cuts that are a result from all the edits
 
-
+- Please do a light copy-edit pass targeting prose repetitions.  Also remove unneeded dashes, em-dashes and hyphens.
 
 - please add a writing statistics section to the editors notes .md file.  please include: total words in the novel, average number of words per chapter, and then a formatted list of chapter numbers, names and words in that chapter.  freshen up the sections in the editors notes file if needed.
-
-
-

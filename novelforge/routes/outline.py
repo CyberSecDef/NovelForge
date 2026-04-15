@@ -7,11 +7,17 @@ import re
 from flask import Blueprint, Response, jsonify, request, session
 
 from novelforge import limiter
-from novelforge.validation import validate_outline_input
+from novelforge.validation import (
+    validate_outline_input,
+    validate_character_fields,
+    truncate_character_field,
+    CHARACTER_FIELD_LIMITS,
+)
 from novelforge.llm.client import call_llm, parse_llm_json, friendly_llm_error
 from novelforge.voice import select_voice_seed, format_voice_prompt
 from novelforge.agents.chapter import (
     build_title_prompt, build_outline_prompt, build_characters_prompt,
+    build_character_field_repair_prompt,
     collect_existing_character_names,
 )
 from novelforge.services.planning import run_full_planning, run_selective_planning
@@ -20,6 +26,57 @@ from novelforge.session.persistence import save_session_state
 logger = logging.getLogger(__name__)
 
 outline_bp = Blueprint("outline", __name__)
+
+
+def _enforce_character_field_limits(character_list: list[dict]) -> list[dict]:
+    """Validate each character's field lengths, repairing violations via a
+    targeted LLM rewrite and falling back to truncation as a last resort.
+
+    Mutates and returns the list so callers can keep the same reference.
+    """
+    for char in character_list:
+        if not isinstance(char, dict):
+            continue
+        violations = validate_character_fields(char)
+        for field_name, actual_len in violations.items():
+            max_len = CHARACTER_FIELD_LIMITS[field_name]
+            current_value = str(char.get(field_name, ""))
+            logger.warning(
+                "Character %r field %r is %d chars (limit %d); attempting repair",
+                char.get("name", "?"), field_name, actual_len, max_len,
+            )
+            repaired: str | None = None
+            try:
+                repaired = call_llm(
+                    build_character_field_repair_prompt(
+                        character_name=str(char.get("name", "")),
+                        field_name=field_name,
+                        current_value=current_value,
+                        max_length=max_len,
+                    ),
+                    action=f"Repairing character field {field_name}",
+                ).strip().strip('"').strip("'")
+            except Exception as exc:
+                logger.warning(
+                    "Character field repair failed for %r.%s: %s",
+                    char.get("name", "?"), field_name, exc,
+                )
+            if repaired and len(repaired) <= max_len:
+                char[field_name] = repaired
+                logger.info(
+                    "Repaired %r.%s: %d → %d chars",
+                    char.get("name", "?"), field_name, actual_len, len(repaired),
+                )
+                continue
+            # Last-resort truncation.
+            source = repaired if repaired else current_value
+            truncated = truncate_character_field(source, max_len)
+            char[field_name] = truncated
+            logger.warning(
+                "Truncated %r.%s to %d chars (repair attempt did not fit)",
+                char.get("name", "?"), field_name, len(truncated),
+            )
+    return character_list
 
 
 def _apply_rename(text: str, old_name: str, new_name: str) -> str:
@@ -109,6 +166,9 @@ def generate_outline() -> Response | tuple[Response, int]:
         except json.JSONDecodeError:
             character_list = []
 
+        # Enforce field-length limits: repair via LLM, truncate as last resort.
+        character_list = _enforce_character_field_limits(character_list)
+
         # Run all planning agents via the shared orchestration service
         planning = run_full_planning(
             title=title,
@@ -169,16 +229,19 @@ def approve_outline() -> Response | tuple[Response, int]:
 
     character_list = data.get("characters", [])
 
-    # Validate character field lengths
-    _char_limits = {"name": 100, "age": 50, "role": 200, "background": 2000, "arc": 2000}
+    # Validate character field lengths using the central schema.
     for i, char in enumerate(character_list, 1):
         if not isinstance(char, dict):
             continue
-        for field, limit in _char_limits.items():
-            value = char.get(field, "")
-            if isinstance(value, str) and len(value) > limit:
-                label = char.get("name", f"Character {i}")
-                return jsonify({"error": f"{label}: {field} must be {limit:,} characters or fewer."}), 400
+        violations = validate_character_fields(char)
+        if violations:
+            field_name, actual_len = next(iter(violations.items()))
+            limit = CHARACTER_FIELD_LIMITS[field_name]
+            label = char.get("name", f"Character {i}")
+            return jsonify({
+                "error": f"{label}: {field_name} must be {limit:,} characters or fewer "
+                         f"(got {actual_len:,}).",
+            }), 400
 
     # String fields are stored as plain text; XSS escaping is handled at
     # render time by Jinja2 auto-escape and jQuery .text().
