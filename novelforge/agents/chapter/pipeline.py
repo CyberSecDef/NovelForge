@@ -471,30 +471,91 @@ def _run_all_chapter_agents(
 
     # Length enforcement — expand under-length chapters after all refinement
     # passes have finished so that the expansion doesn't get trimmed.
+    # Expansion uses _safe() so vocabulary rules and content-retry apply,
+    # and a vocabulary scan runs afterwards to catch any reintroduced words.
     if target_words > 0:
-        from novelforge.agents.chapter._helpers import check_chapter_length, expand_chapter
+        from novelforge.agents.chapter._helpers import check_chapter_length
+        from novelforge.agents.chapter.prompts import build_chapter_expansion_prompt
         import novelforge.config as _cfg
 
         min_pct = _cfg.CHAPTER_MIN_LENGTH_PCT
         actual_wc, min_threshold, acceptable = check_chapter_length(text, target_words, min_pct)
         if not acceptable:
-            _check_deadline()
-            if step_callback:
-                step_callback(
-                    f"Chapter {chapter_num}: expanding ({actual_wc} words, need {min_threshold})"
+            for _exp_attempt in range(1, _cfg.MAX_EXPANSION_ATTEMPTS + 1):
+                if actual_wc >= min_threshold:
+                    break
+                _check_deadline()
+                if step_callback:
+                    step_callback(
+                        f"Chapter {chapter_num}: expanding ({actual_wc} words, "
+                        f"need {min_threshold}, attempt {_exp_attempt})"
+                    )
+                logger.info(
+                    "Chapter %d: expansion attempt %d/%d (%d words, need %d)",
+                    chapter_num, _exp_attempt, _cfg.MAX_EXPANSION_ATTEMPTS,
+                    actual_wc, min_threshold,
                 )
-            text, actual_wc = expand_chapter(
-                text,
-                target_words=target_words,
-                min_words=min_threshold,
-                chapter_num=chapter_num,
-                title=title,
-                max_attempts=_cfg.MAX_EXPANSION_ATTEMPTS,
-            )
+                try:
+                    _cur_wc = actual_wc
+                    _cur_target = target_words
+                    _cur_min = min_threshold
+                    expanded = _safe(
+                        lambda t: build_chapter_expansion_prompt(
+                            chapter_text=t,
+                            current_words=_cur_wc,
+                            target_words=_cur_target,
+                            min_words=_cur_min,
+                        ),
+                        text,
+                        action=f"Chapter {chapter_num}: expansion (attempt {_exp_attempt})",
+                    )
+                    new_wc = len(expanded.split())
+                    if new_wc > actual_wc:
+                        text = expanded
+                        actual_wc = new_wc
+                        logger.info(
+                            "Chapter %d: expansion attempt %d produced %d words",
+                            chapter_num, _exp_attempt, new_wc,
+                        )
+                    else:
+                        logger.warning(
+                            "Chapter %d: expansion attempt %d did not increase length (%d → %d)",
+                            chapter_num, _exp_attempt, actual_wc, new_wc,
+                        )
+                        break
+                except Exception as exc:
+                    logger.warning(
+                        "Chapter %d: expansion attempt %d failed: %s: %s",
+                        chapter_num, _exp_attempt, type(exc).__name__, exc,
+                    )
+                    break
+
             logger.info(
                 "Chapter %d: post-expansion word count = %d (target=%d, min=%d)",
                 chapter_num, actual_wc, target_words, min_threshold,
             )
+
+            # Re-run vocabulary scan after expansion since the LLM may have
+            # reintroduced forbidden or overused words.
+            _check_deadline()
+            post_violations = scan_vocabulary_overuse(text, genre=genre)
+            if post_violations:
+                if step_callback:
+                    step_callback(
+                        f"Chapter {chapter_num}: fixing {len(post_violations)} "
+                        f"vocabulary issues (post-expansion)"
+                    )
+                logger.info(
+                    "Chapter %d: post-expansion vocabulary scan found %d violations",
+                    chapter_num, len(post_violations),
+                )
+                text = _safe(
+                    lambda t: build_vocabulary_fix_prompt(
+                        t, chapter_num, title, post_violations,
+                    ),
+                    text,
+                    action=f"Chapter {chapter_num}: vocabulary fix-up (post-expansion)",
+                )
 
     _check_deadline()
     if step_callback:

@@ -1038,9 +1038,9 @@ prompts:
 
       ***CRITICAL: You are writing CHAPTER {{ chapter_num }}. Keep this chapter number in mind throughout.***
       *** LENGTH REQUIREMENT (MANDATORY) ***
-      Target: {{ target_words }} words. This is NOT optional — your chapter MUST contain at least {{ target_words }} words.
+      Target: {{ target_words }} words. Aim for the full target, but your chapter MUST contain at least 85% of this target (approximately {{ target_words }} × 0.85 words).
       Write at least 3,500 words. Aim for 4,000–4,500 words. Do NOT exceed 5,000 words.
-      Chapters that fall short of {{ target_words }} words will be sent back for expansion — write to the target the first time.
+      Chapters that fall significantly short will be sent back for automatic expansion — write to the target the first time.
       Structure this chapter with at least 3 distinct scenes, each containing: a character goal, an obstacle, an outcome, and a transition. Include sensory detail, internal thoughts, and dialogue in every scene. Do not skip time unless explicitly required by the outline.
       Subsequent editing passes will trim and tighten the prose, so write generously and let the polish passes do the trimming. Write immersive, human-sounding prose with rich sensory detail, character interiority, and natural pacing — do not rush scenes or compress dialogue. Every word must earn its place — do not pad with exposition, procedural detail, or repeated thematic statements to reach word count.
       *** END LENGTH REQUIREMENT ***

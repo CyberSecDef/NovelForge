@@ -59,7 +59,7 @@ class ProgressState(TypedDict, total=False):
     illustration_token: str
 
     # Length enforcement tracking: list of per-chapter dicts such as
-    # {chapter_num, min_threshold, actual, meets_target, total_words_so_far}.
+    # {chapter_num, target, min_threshold, actual, meets_min_threshold, total_words_so_far}.
     length_enforcement: list[dict[str, Any]]
 
 

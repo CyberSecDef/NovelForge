@@ -500,7 +500,7 @@ def _run_chapter_generation_internal(
             # Track length enforcement results
             from novelforge.agents.chapter._helpers import check_chapter_length
             min_pct = config.CHAPTER_MIN_LENGTH_PCT
-            _, min_threshold, meets_target = check_chapter_length(
+            _, min_threshold, meets_min = check_chapter_length(
                 text, target_per_chapter, min_pct,
             )
             total_words_generated += chapter_word_count
@@ -509,7 +509,7 @@ def _run_chapter_generation_internal(
                 "target": target_per_chapter,
                 "min_threshold": min_threshold,
                 "actual": chapter_word_count,
-                "meets_target": meets_target,
+                "meets_min_threshold": meets_min,
                 "total_words_so_far": total_words_generated,
             })
 
