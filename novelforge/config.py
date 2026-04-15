@@ -233,9 +233,24 @@ MAX_WORD_COUNT = get_env_int("MAX_WORD_COUNT", 500000, min_value=1)
 # Chapter length enforcement (override via environment variables)
 # ---------------------------------------------------------------------------
 
+
+def _get_percentage_env(
+    name: str, default: int, *, min_value: int = 0, max_value: int = 100
+) -> int:
+    """Return an integer percentage env var constrained to the given range."""
+    value = get_env_int(name, default, min_value=min_value)
+    if value > max_value:
+        raise ValueError(
+            f"{name} must be <= {max_value} (got {value})."
+        )
+    return value
+
+
 # Minimum acceptable chapter word count as a percentage of the per-chapter target.
 # Chapters below this threshold trigger an automatic expansion pass.
-CHAPTER_MIN_LENGTH_PCT = get_env_int("CHAPTER_MIN_LENGTH_PCT", 85, min_value=50)
+CHAPTER_MIN_LENGTH_PCT = _get_percentage_env(
+    "CHAPTER_MIN_LENGTH_PCT", 85, min_value=50, max_value=100
+)
 
 # Maximum number of expansion attempts per chapter before accepting as-is.
 MAX_EXPANSION_ATTEMPTS = get_env_int("MAX_EXPANSION_ATTEMPTS", 2, min_value=0)
