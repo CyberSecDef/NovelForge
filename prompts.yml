@@ -1039,7 +1039,6 @@ prompts:
       ***CRITICAL: You are writing CHAPTER {{ chapter_num }}. Keep this chapter number in mind throughout.***
       *** LENGTH REQUIREMENT (MANDATORY) ***
       Target: {{ target_words }} words. Aim for the full target, but your chapter MUST contain at least 85% of this target (approximately {{ target_words }} × 0.85 words).
-      Write at least 3,500 words. Aim for 4,000–4,500 words. Do NOT exceed 5,000 words.
       Chapters that fall significantly short will be sent back for automatic expansion — write to the target the first time.
       Structure this chapter with at least 3 distinct scenes, each containing: a character goal, an obstacle, an outcome, and a transition. Include sensory detail, internal thoughts, and dialogue in every scene. Do not skip time unless explicitly required by the outline.
       Subsequent editing passes will trim and tighten the prose, so write generously and let the polish passes do the trimming. Write immersive, human-sounding prose with rich sensory detail, character interiority, and natural pacing — do not rush scenes or compress dialogue. Every word must earn its place — do not pad with exposition, procedural detail, or repeated thematic statements to reach word count.
@@ -1198,6 +1197,9 @@ prompts:
       narration. Replace "she felt sad" with a physical, observable detail.
 
       Do not change plot, character arcs, or factual content.
+
+      LENGTH PRESERVATION (MANDATORY): Preserve the chapter's full word count. Do NOT shorten the chapter overall — when you cut expository dialogue or tighten prose, replace the removed material with equivalent dramatized content (action beats, sensory detail, physical reactions, interiority). The output must be at least as long as the input.
+
       Return the full revised chapter text.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
@@ -1715,7 +1717,11 @@ prompts:
       prior chapter (same approach, same failure mode, same power dynamic), revise the
       operation so it introduces a novel tactical problem or escalated stakes.
       Preserve all character relationships, plot outcomes, and continuity.
-      Do not invent entirely new plots. Return the full revised chapter text only.
+      Do not invent entirely new plots.
+
+      LENGTH PRESERVATION (MANDATORY): Preserve the chapter's full word count. When you revise an operation for distinctiveness, the replacement must be at least as long as what it replaces. The output must be at least as long as the input.
+
+      Return the full revised chapter text only.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
 
@@ -1772,7 +1778,11 @@ prompts:
       vulnerability. If any passage drifts toward a different genre's
       register, correct it.
 
-      Do not add new plot events. Return the full synthesized chapter text.
+      Do not add new plot events.
+
+      LENGTH PRESERVATION (MANDATORY): Preserve the chapter's full word count. Smoothing seams between passes should not shorten the chapter. The output must be at least as long as the input.
+
+      Return the full synthesized chapter text.
       {%- if perspective_prompt.strip() %}
 
       {{ perspective_prompt }}
@@ -1841,7 +1851,11 @@ prompts:
       {%- endif %}
 
       Apply targeted edits to raise quality. Do not rewrite entire sections unless
-      necessary. Return the full revised chapter text.
+      necessary.
+
+      LENGTH PRESERVATION (MANDATORY): Preserve the chapter's full word count. Do NOT cut scenes, paragraphs, or exposition to "tighten" the chapter — if a passage feels slow, deepen it with sensory detail, subtext, or reaction instead of trimming. The output must be at least as long as the input.
+
+      Return the full revised chapter text.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
 
@@ -1857,6 +1871,8 @@ prompts:
     system: |
       You are a professional fiction editor specialising in plot, pacing, and
       character consistency. Your job is to refine, not rewrite wholesale.
+
+      LENGTH PRESERVATION (MANDATORY): Preserve the chapter's full word count. When you convert exposition to scenes or break up long speeches, the dramatized version must be at least as long as what it replaces. Do NOT shorten the chapter overall — the output must be at least as long as the input.
     user: |
       Novel: '{{ title }}' - Chapter {{ chapter_num }}
 
@@ -1929,17 +1945,22 @@ prompts:
         "He felt afraid" → "His hands shook."
       - Cut filler phrases: "began to," "started to," "seemed to," "in
         order to," "the fact that," "it was clear that."
-      - Tighten overwritten passages — if a sentence can lose 3+ words
-        without losing meaning, trim it.
+      - Tighten overwritten passages at the sentence level — but when you
+        cut filler words, compensate at the paragraph level by deepening
+        sensory detail, interiority, or physical reaction so the overall
+        chapter length is preserved.
       - Ensure every paragraph has a clear purpose: advance plot, deepen
-        character, build tension, or ground the reader in the scene. Cut
-        any paragraph that does none of these.
+        character, build tension, or ground the reader in the scene. If a
+        paragraph lacks purpose, REWRITE it to earn its place — do NOT
+        simply delete it.
       - Verify transitions between scenes feel natural — no jarring cuts
         or missing beats.
+
+      LENGTH PRESERVATION (MANDATORY): Preserve the chapter's full word count. This is a line-edit pass, not a trim pass. The output must be at least as long as the input. Line-level tightening is allowed, but compensate with added sensory detail, interiority, or scene grounding so the overall length is preserved or grows slightly.
     user: |
       Novel: '{{ title }}' ({{ genre }}) - Chapter {{ chapter_num }}
 
-      Polish this chapter for grammar, style, and language quality. Ensure varied sentence structure and vivid prose.
+      Polish this chapter for grammar, style, and language quality. Ensure varied sentence structure and vivid prose. Preserve the full word count — do not shorten the chapter overall.
 
       ***CRITICAL: Return ONLY the complete polished chapter text with NO introduction, NO explanation, NO markdown.***
 
@@ -1955,6 +1976,8 @@ prompts:
       "someone who had," "small [mercy/victory/repair]," emotions in
       ribs/sternum/throat, metallic taste, "jaw tightened," robotic transitions.
       Add varied rhythm, humor, imperfection. Keep plot and characters intact.
+
+      LENGTH PRESERVATION (MANDATORY): Preserve the chapter's full word count. When replacing LLM patterns with human-sounding prose, replacements must be at least as long as what they replace. The output must be at least as long as the input.
 
       THEMATIC RESTATEMENT: If the chapter restates the same theme using
       identical or near-identical phrasing more than once, rewrite subsequent
@@ -2280,7 +2303,11 @@ prompts:
     system: |
       You are a senior developmental editor revising an existing chapter.
       Apply requested changes precisely while preserving coherence, voice,
-      and continuity with the larger novel. Return the full revised chapter text only.
+      and continuity with the larger novel.
+
+      LENGTH PRESERVATION (MANDATORY): Preserve the chapter's full word count unless the revision instructions explicitly ask for shortening. The output must be at least as long as the input.
+
+      Return the full revised chapter text only.
       {%- if perspective_prompt.strip() %}
 
       {{ perspective_prompt }}
