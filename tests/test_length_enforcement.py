@@ -259,13 +259,25 @@ class TestExpandChapter:
 class TestLengthEnforcementConfig:
     """Verify config constants exist and have sensible defaults."""
 
-    def test_chapter_min_length_pct_default(self):
+    def test_chapter_min_length_pct_default(self, monkeypatch):
+        import importlib
         import novelforge.config as cfg
-        assert cfg.CHAPTER_MIN_LENGTH_PCT == 85
+        monkeypatch.delenv("CHAPTER_MIN_LENGTH_PCT", raising=False)
+        importlib.reload(cfg)
+        try:
+            assert cfg.CHAPTER_MIN_LENGTH_PCT == 85
+        finally:
+            importlib.reload(cfg)
 
-    def test_max_expansion_attempts_default(self):
+    def test_max_expansion_attempts_default(self, monkeypatch):
+        import importlib
         import novelforge.config as cfg
-        assert cfg.MAX_EXPANSION_ATTEMPTS == 2
+        monkeypatch.delenv("MAX_EXPANSION_ATTEMPTS", raising=False)
+        importlib.reload(cfg)
+        try:
+            assert cfg.MAX_EXPANSION_ATTEMPTS == 2
+        finally:
+            importlib.reload(cfg)
 
     def test_chapter_min_length_pct_in_all(self):
         import novelforge.config as cfg
