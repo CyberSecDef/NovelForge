@@ -184,9 +184,12 @@ class TestExpandChapter:
 
     def test_expansion_handles_llm_failure(self, monkeypatch):
         """If LLM call fails, returns original text."""
+        def mock_llm(msgs, action=""):
+            raise RuntimeError("API down")
+
         monkeypatch.setattr(
             "novelforge.agents.chapter._helpers.call_llm",
-            lambda msgs, action="": (_ for _ in ()).throw(RuntimeError("API down")),
+            mock_llm,
         )
         original = "short text with few words"
         result_text, result_wc = expand_chapter(

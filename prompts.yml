@@ -1141,12 +1141,12 @@ prompts:
       - Preserve the existing voice, tone, and pacing shape.
       - Return the COMPLETE expanded chapter text.
     user: |
-      The following chapter is {{ current_words }} words but must be at least
-      {{ min_words }} words (target: {{ target_words }} words).
+      This chapter currently has {{ current_words }} words. Expand it to meet the
+      minimum of {{ min_words }} words (target: {{ target_words }} words).
 
-      Expand it to at least {{ min_words }} words by deepening scenes, dialogue,
-      sensory detail, and character interiority. Do NOT remove or summarize any
-      existing content. Return the COMPLETE expanded chapter.
+      Deepen scenes, dialogue, sensory detail, and character interiority.
+      Do NOT remove or summarize any existing content.
+      Return the COMPLETE expanded chapter.
 
       ---
 
