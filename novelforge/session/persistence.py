@@ -503,6 +503,7 @@ def persist_completed_chapters(
     session_id: str,
     chapters_done: list[dict],
     progress_token: str = "",
+    character_list: list[dict] | None = None,
 ) -> bool:
     """
     Persist completed chapters and progress data to the session JSON file.
@@ -511,6 +512,10 @@ def persist_completed_chapters(
     If *progress_token* is provided, the current in-memory progress snapshot
     is written into the ``progress_data`` field so that audit reports,
     status, and chapter data stay in sync on disk.
+
+    If *character_list* is provided, the on-disk ``character_list`` is
+    replaced with it. Used by the reconciliation pipeline to persist
+    characters that were auto-registered during chapter drafting.
 
     Returns ``True`` on success, ``False`` if the session file does not exist
     or cannot be read/written.  :exc:`ValueError` from an invalid
@@ -527,6 +532,9 @@ def persist_completed_chapters(
                 return False
             state = json.loads(session_file.read_text(encoding="utf-8"))
             state["completed_chapters"] = list(chapters_done)
+
+            if character_list is not None:
+                state["character_list"] = list(character_list)
 
             if progress_token:
                 progress = progress_manager.get(progress_token)

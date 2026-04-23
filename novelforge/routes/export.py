@@ -167,6 +167,7 @@ def export_editors_notes() -> Response | tuple[Response, int]:
         climax_integrity_report, loose_thread_report,
         reader_immersion_report, pacing_heatmap,
         character_relationship_map.get("relationships"),
+        progress_data.get("reconciliation_log"),
     ])
 
     if not has_content:
@@ -188,6 +189,18 @@ def export_editors_notes() -> Response | tuple[Response, int]:
             lines.append("**Issues:**\n")
             for issue in issues:
                 lines.append(f"- {_md_text(issue)}")
+            lines.append("")
+        duplicates = consistency.get("duplicate_characters") or []
+        if duplicates:
+            lines.append("**Duplicate Character Clusters:**\n")
+            for dup in duplicates:
+                if isinstance(dup, dict):
+                    names = dup.get("names", [])
+                    reason = dup.get("reason", "")
+                    names_text = ", ".join(_md_text(str(n)) for n in names)
+                    lines.append(f"- {names_text} — {_md_text(reason)}")
+                else:
+                    lines.append(f"- {_md_text(str(dup))}")
             lines.append("")
 
     # 2. Global Continuity Audit
@@ -294,6 +307,21 @@ def export_editors_notes() -> Response | tuple[Response, int]:
                     lines.append(f"- **{_md_text(name)}**: {_md_text(status)}")
                 else:
                     lines.append(f"- {_md_text(r)}")
+            lines.append("")
+        gaps = character_resolution_report.get("registry_gaps") or []
+        if gaps:
+            lines.append("**Registry Gaps (prose names absent from roster):**\n")
+            for gap in gaps:
+                if isinstance(gap, dict):
+                    name = gap.get("name", "Unknown")
+                    chapters = gap.get("chapters", [])
+                    reason = gap.get("reason", "")
+                    lines.append(
+                        f"- **{_md_text(str(name))}** (chapters {chapters}): "
+                        f"{_md_text(reason)}"
+                    )
+                else:
+                    lines.append(f"- {_md_text(str(gap))}")
             lines.append("")
 
     if thematic_payoff_report:
@@ -537,6 +565,47 @@ def export_editors_notes() -> Response | tuple[Response, int]:
             desc = rel.get("label", "")
             lines.append(f"| {_md_table_cell(fr)} | {_md_table_cell(to)} | {_md_table_cell(rtype)} | {_md_table_cell(desc)} |")
         lines.append("")
+        unregistered = character_relationship_map.get("unregistered_names") or []
+        if unregistered:
+            lines.append("**Unregistered Names (found in prose, absent from roster):**\n")
+            for name in unregistered:
+                lines.append(f"- {_md_text(str(name))}")
+            lines.append("")
+
+    # 11. Character Reconciliation Log (roster changes detected during generation)
+    reconciliation_log = progress_data.get("reconciliation_log") or []
+    if reconciliation_log:
+        lines.append("---\n")
+        lines.append("## 11. Character Reconciliation Log\n")
+        lines.append(
+            "The following character names were detected in chapter prose "
+            "during generation and resolved against the canonical roster.\n"
+        )
+        for entry in reconciliation_log:
+            if not isinstance(entry, dict):
+                continue
+            chapter = entry.get("chapter", "?")
+            decisions = entry.get("decisions", []) or []
+            if not decisions:
+                continue
+            lines.append(f"**Chapter {chapter}:**\n")
+            for d in decisions:
+                if not isinstance(d, dict):
+                    continue
+                prose = _md_text(str(d.get("prose_name", "?")))
+                res = str(d.get("resolution", "?"))
+                if res == "REGISTER":
+                    target = _md_text(str(d.get("roster_name", "?")))
+                    lines.append(f"- `{prose}` → **REGISTERED** as roster character **{target}**")
+                elif res == "RENAME_TO":
+                    target = _md_text(str(d.get("roster_name", "?")))
+                    lines.append(f"- `{prose}` → **RENAMED** to existing roster member **{target}**")
+                elif res == "DEMOTE_TO_EXTRA":
+                    repl = _md_text(str(d.get("replacement", "?")))
+                    lines.append(f"- `{prose}` → **DEMOTED** to unnamed role (`{repl}`)")
+                else:
+                    lines.append(f"- `{prose}` → {_md_text(res)}")
+            lines.append("")
 
     markdown_content = "\n".join(lines)
 

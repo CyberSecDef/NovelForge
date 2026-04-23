@@ -62,6 +62,14 @@ class ProgressState(TypedDict, total=False):
     # {chapter_num, target, min_threshold, actual, meets_min_threshold, total_words_so_far}.
     length_enforcement: list[dict[str, Any]]
 
+    # Canonical character roster, possibly mutated mid-run by the
+    # reconciliation pipeline as new characters are auto-registered.
+    character_list: list[dict[str, Any]]
+
+    # Per-chapter record of reconciliation decisions (REGISTER / RENAME_TO /
+    # DEMOTE_TO_EXTRA) applied when unknown names are detected in prose.
+    reconciliation_log: list[dict[str, Any]]
+
 
 _REQUIRED_CREATION_KEYS: frozenset[str] = frozenset(
     {"status", "current", "total", "step", "chapters_done", "error"}

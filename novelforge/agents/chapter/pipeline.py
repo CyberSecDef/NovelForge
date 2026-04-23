@@ -1,15 +1,22 @@
 """Chapter agent pipeline and runner functions that wrap prompt builders with LLM calls."""
 
 import logging
+import re
 import time
 from collections.abc import Callable
 
 from novelforge.llm.client import call_llm, parse_llm_json, ChapterTimeoutError, PER_CHAPTER_TIMEOUT
+from novelforge.validation import (
+    CHARACTER_FIELD_LIMITS,
+    truncate_character_field,
+    validate_character_fields,
+)
 
 from novelforge.agents.chapter._helpers import (
     PASS_FAILURE_KEY,
     _call_with_content_retry,
     _log_pass_failure,
+    extract_named_characters,
     format_vocabulary_rules,
     scan_vocabulary_overuse,
 )
@@ -19,6 +26,8 @@ from novelforge.agents.chapter.prompts import (
     build_chapter_rhythm_classifier_prompt,
     build_chapter_summary_prompt,
     build_character_agent_prompt,
+    build_character_field_repair_prompt,
+    build_character_reconciliation_prompt,
     build_chapter_pattern_extractor_prompt,
     build_character_state_updater_prompt,
     build_context_analyzer_prompt,
@@ -125,6 +134,198 @@ def run_character_state_updater(chapter_text: str, chapter_summary: str, charact
                 "failure_summary": failure_summary,
             })
         return ""
+
+
+def _apply_name_substitution(text: str, old_name: str, replacement: str) -> str:
+    """Replace every whole-word occurrence of *old_name* with *replacement*.
+
+    Handles possessive ``'s`` suffixes (``"Thomas's"`` → ``"the clerk's"``)
+    and auto-capitalizes *replacement* when the match is at a sentence
+    boundary so demoted role phrases read naturally at sentence starts.
+    """
+    if not old_name or not replacement:
+        return text
+    cap_replacement = replacement[0].upper() + replacement[1:]
+    pattern = r"\b" + re.escape(old_name) + r"('s)?\b"
+
+    def _replace(m: re.Match) -> str:
+        start = m.start()
+        before = text[:start].rstrip(" \t")
+        at_sentence_start = (not before) or before[-1] in ".!?\n"
+        out = cap_replacement if at_sentence_start else replacement
+        return out + (m.group(1) or "")
+
+    return re.sub(pattern, _replace, text)
+
+
+def _repair_registered_character(char: dict) -> dict:
+    """Enforce ``CHARACTER_FIELD_LIMITS`` on a newly-registered character.
+
+    Attempts a single LLM rewrite per over-length field and falls back to
+    :func:`truncate_character_field` if the repair itself exceeds the cap.
+    This mirrors the behaviour of ``_enforce_character_field_limits`` in
+    :mod:`novelforge.routes.outline`.
+    """
+    violations = validate_character_fields(char)
+    for field_name, actual_len in violations.items():
+        max_len = CHARACTER_FIELD_LIMITS[field_name]
+        current_value = str(char.get(field_name, ""))
+        logger.warning(
+            "Reconciled character %r field %r is %d chars (limit %d); attempting repair",
+            char.get("name", "?"), field_name, actual_len, max_len,
+        )
+        repaired: str | None = None
+        try:
+            repaired = call_llm(
+                build_character_field_repair_prompt(
+                    character_name=str(char.get("name", "")),
+                    field_name=field_name,
+                    current_value=current_value,
+                    max_length=max_len,
+                ),
+                action=f"Reconciliation: repairing {field_name}",
+            ).strip().strip('"').strip("'")
+        except Exception as exc:
+            logger.warning(
+                "Reconciliation repair failed for %r.%s: %s",
+                char.get("name", "?"), field_name, exc,
+            )
+        if repaired and len(repaired) <= max_len:
+            char[field_name] = repaired
+            continue
+        source = repaired if repaired else current_value
+        char[field_name] = truncate_character_field(source, max_len)
+    return char
+
+
+def run_character_reconciliation(
+    chapter_text: str,
+    character_list: list[dict],
+    chapter_num: int,
+    title: str,
+    genre: str,
+    degraded_passes: list[dict] | None = None,
+) -> tuple[str, list[dict], dict]:
+    """Reconcile newly-detected named characters in *chapter_text* against the canonical roster.
+
+    Runs the pure-Python scanner, then — only if unknowns or variants are
+    found — calls the LLM reconciliation agent to decide between REGISTER,
+    RENAME_TO, and DEMOTE_TO_EXTRA for each detection. Applies decisions
+    directly:
+
+    * REGISTER → appends a new (field-limit-validated) character to the
+      returned ``character_list``.
+    * RENAME_TO → rewrites the prose, substituting the prose name with the
+      canonical roster name.
+    * DEMOTE_TO_EXTRA → rewrites the prose, substituting the prose name
+      with a role phrase (e.g. ``"the clerk"``).
+
+    Returns ``(updated_chapter_text, updated_character_list, log)`` where
+    ``log`` is a dict containing the scan result and the applied decisions,
+    suitable for progress-tracking and diagnostic export.
+    """
+    scan = extract_named_characters(chapter_text, character_list)
+    unknowns: list[tuple[str, int]] = list(scan.get("unknown", []))
+    variants: list[tuple[str, str, int]] = list(scan.get("variants", []))
+
+    if not unknowns and not variants:
+        return chapter_text, character_list, {"scan": scan, "decisions": []}
+
+    try:
+        raw = call_llm(
+            build_character_reconciliation_prompt(
+                chapter_text=chapter_text, chapter_num=chapter_num,
+                title=title, genre=genre, character_list=character_list,
+                unknowns=unknowns, variants=variants,
+            ),
+            action=f"Chapter {chapter_num}: character reconciliation",
+            json_mode=True,
+        )
+        parsed = parse_llm_json(raw)
+    except Exception as exc:
+        failure_summary = _log_pass_failure(
+            exc, pass_name="character reconciliation",
+            chapter_num=chapter_num, chapter_title=title, optional=True,
+        )
+        if degraded_passes is not None:
+            degraded_passes.append({
+                "pass_name": "character reconciliation",
+                "chapter_num": chapter_num,
+                "failure_summary": failure_summary,
+            })
+        return chapter_text, character_list, {"scan": scan, "decisions": [], "error": failure_summary}
+
+    if not isinstance(parsed, dict):
+        return chapter_text, character_list, {"scan": scan, "decisions": []}
+    decisions = parsed.get("decisions", [])
+    if not isinstance(decisions, list):
+        return chapter_text, character_list, {"scan": scan, "decisions": []}
+
+    updated_text = chapter_text
+    updated_list: list[dict] = list(character_list)
+    applied: list[dict] = []
+    existing_names = {str(c.get("name", "")).strip() for c in updated_list if isinstance(c, dict)}
+
+    for decision in decisions:
+        if not isinstance(decision, dict):
+            continue
+        prose_name = str(decision.get("prose_name", "")).strip()
+        resolution = str(decision.get("resolution", "")).strip().upper()
+        if not prose_name or not resolution:
+            continue
+
+        if resolution == "REGISTER":
+            profile = decision.get("profile")
+            if not isinstance(profile, dict):
+                continue
+            new_name = str(profile.get("name") or decision.get("roster_name") or prose_name).strip()
+            if not new_name or new_name in existing_names:
+                continue
+            profile["name"] = new_name
+            profile.setdefault("age", "")
+            for field_name in ("role", "background", "arc", "internal_flaw", "personal_goal"):
+                profile.setdefault(field_name, "")
+            profile = _repair_registered_character(profile)
+            updated_list.append(profile)
+            existing_names.add(new_name)
+            applied.append({
+                "prose_name": prose_name, "resolution": "REGISTER",
+                "roster_name": new_name, "notes": decision.get("notes", ""),
+            })
+            logger.info(
+                "Chapter %d: REGISTERED new character %r from prose (detected as %r)",
+                chapter_num, new_name, prose_name,
+            )
+
+        elif resolution == "RENAME_TO":
+            target = str(decision.get("roster_name", "")).strip()
+            if not target:
+                continue
+            updated_text = _apply_name_substitution(updated_text, prose_name, target)
+            applied.append({
+                "prose_name": prose_name, "resolution": "RENAME_TO",
+                "roster_name": target, "notes": decision.get("notes", ""),
+            })
+            logger.info(
+                "Chapter %d: RENAMED prose name %r → roster %r",
+                chapter_num, prose_name, target,
+            )
+
+        elif resolution == "DEMOTE_TO_EXTRA":
+            replacement = str(decision.get("replacement", "")).strip()
+            if not replacement:
+                continue
+            updated_text = _apply_name_substitution(updated_text, prose_name, replacement)
+            applied.append({
+                "prose_name": prose_name, "resolution": "DEMOTE_TO_EXTRA",
+                "replacement": replacement, "notes": decision.get("notes", ""),
+            })
+            logger.info(
+                "Chapter %d: DEMOTED walk-on %r → %r",
+                chapter_num, prose_name, replacement,
+            )
+
+    return updated_text, updated_list, {"scan": scan, "decisions": applied}
 
 
 def run_chapter_pattern_extractor(chapter_text: str, chapter_num: int, title: str,

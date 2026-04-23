@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 CONSISTENCY_FALLBACK: dict = {
     "issues": [],
+    "duplicate_characters": [],
     "overall_assessment": "",
 }
 
@@ -59,6 +60,7 @@ NARRATIVE_COMPRESSION_FALLBACK: dict = {
 CHARACTER_RESOLUTION_FALLBACK: dict = {
     "character_resolutions": [],
     "unresolved_characters": [],
+    "registry_gaps": [],
     "resolution_integrity": "unknown",
     "overall_assessment": "",
 }
@@ -112,6 +114,7 @@ PACING_HEATMAP_FALLBACK: dict = {
 CHARACTER_RELATIONSHIP_FALLBACK: dict = {
     "characters": [],
     "relationships": [],
+    "unregistered_names": [],
 }
 
 
@@ -164,7 +167,10 @@ def run_post_manuscript_audits(
     # --- Final consistency pass ---
     progress_manager.update(token, {"step": "Final consistency pass"})
     consistency_raw = call_llm(
-        build_consistency_pass_prompt(title, summaries, special_instructions, genre=genre),
+        build_consistency_pass_prompt(
+            title, summaries, special_instructions, genre=genre,
+            character_list=character_list,
+        ),
         action="Final consistency pass", json_mode=True,
     )
     consistency = _parse_audit_json(consistency_raw, CONSISTENCY_FALLBACK)

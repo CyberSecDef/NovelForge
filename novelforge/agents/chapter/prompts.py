@@ -437,6 +437,53 @@ def build_chapter_pattern_extractor_prompt(chapter_text: str, chapter_num: int, 
     )
 
 
+def build_character_reconciliation_prompt(
+    chapter_text: str,
+    chapter_num: int,
+    title: str,
+    genre: str,
+    character_list: list[dict],
+    unknowns: list[tuple[str, int]],
+    variants: list[tuple[str, str, int]],
+) -> list[dict[str, str]]:
+    """Build the reconciliation prompt for names detected in chapter prose but absent from the roster.
+
+    Each entry in *unknowns* is ``(prose_name, mention_count)``; each entry
+    in *variants* is ``(prose_name, closest_roster_token, mention_count)``.
+    The prompt asks the LLM to return a JSON decision (REGISTER, RENAME_TO,
+    or DEMOTE_TO_EXTRA) for every detected name.
+    """
+    roster_text = "\n".join(
+        f"- {c.get('name', '?')} (age {c.get('age', '?')}): "
+        f"role={c.get('role', '')}; background={c.get('background', '')}; "
+        f"arc={c.get('arc', '')}"
+        for c in character_list
+    ) or "(no characters on roster yet)"
+
+    detection_lines: list[str] = []
+    for name, count in unknowns:
+        detection_lines.append(f'- "{name}" — {count} mention(s); no roster match')
+    for name, target, count in variants:
+        detection_lines.append(
+            f'- "{name}" — {count} mention(s); fuzzy match to roster token "{target}"'
+        )
+    detections_text = "\n".join(detection_lines) or "(no detections)"
+
+    field_limits_block = "\n".join(
+        f"- {fname}: max {limit} characters"
+        for fname, limit in CHARACTER_FIELD_LIMITS.items()
+        if fname != "age"
+    )
+
+    return render_prompt(
+        "character_reconciliation",
+        title=title, genre=genre, chapter_num=chapter_num,
+        roster_text=roster_text, detections_text=detections_text,
+        field_limits_block=field_limits_block,
+        chapter_text=chapter_text,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Chapter revision prompt builder
 # ---------------------------------------------------------------------------
@@ -472,12 +519,24 @@ def build_chapter_revision_prompt(
 # ---------------------------------------------------------------------------
 
 def build_consistency_pass_prompt(title: str, all_summaries: list[str], special_instructions: str,
-                                  genre: str = "") -> list[dict[str, str]]:
-    """Build the post-manuscript consistency audit prompt."""
+                                  genre: str = "",
+                                  character_list: list[dict] | None = None) -> list[dict[str, str]]:
+    """Build the post-manuscript consistency audit prompt.
+
+    If *character_list* is provided, the roster is injected so the audit can
+    perform duplicate-character detection (e.g. aliases accidentally produced
+    by the reconciliation pipeline across different chapters).
+    """
     summaries_text = "\n\n".join(
         f"Chapter {i+1}:\n{s}" for i, s in enumerate(all_summaries)
     )
+    roster_text = "\n".join(
+        f"- {c.get('name', '?')}: role={c.get('role', '')}; "
+        f"background={c.get('background', '')}; arc={c.get('arc', '')}"
+        for c in (character_list or []) if isinstance(c, dict)
+    ) or "(no characters on roster)"
     return render_prompt("consistency_pass", title=title, summaries_text=summaries_text, genre=genre,
+                         roster_text=roster_text,
                          special_instructions=special_instructions)
 
 

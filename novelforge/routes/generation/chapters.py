@@ -40,6 +40,7 @@ from novelforge.agents.chapter import (
     _draft_with_content_retry,
     build_chapter_draft_prompt,
     run_continuity_gatekeeper, run_chapter_rhythm_classifier,
+    run_character_reconciliation,
     run_character_state_updater, run_per_chapter_compression_check,
     run_chapter_pattern_extractor,
     _run_all_chapter_agents, ChapterContext,
@@ -204,6 +205,7 @@ def _run_chapter_generation_internal(
     exposition_log: list[dict] = []           # tracks dramatization ratio per chapter
     thematic_phrase_log: list[str] = []       # tracks thematic phrases to avoid repeating
     length_enforcement_log: list[dict] = []   # tracks per-chapter length enforcement results
+    reconciliation_log: list[dict] = []       # tracks character reconciliation decisions per chapter
     total_words_generated: int = 0            # running total for global length tracking
 
     # Format voice seed for prompt injection
@@ -429,6 +431,24 @@ def _run_chapter_generation_internal(
             )
             summaries.append(summary)
 
+            _set_step(f"Chapter {chapter_num}: reconciling characters")
+            text, character_list, reconciliation_result = run_character_reconciliation(
+                chapter_text=text, character_list=character_list,
+                chapter_num=chapter_num, title=title, genre=genre,
+                degraded_passes=degraded_passes,
+            )
+            applied_decisions = reconciliation_result.get("decisions", [])
+            if applied_decisions:
+                reconciliation_log.append({
+                    "chapter": chapter_num,
+                    "decisions": applied_decisions,
+                })
+                characters_text = _format_characters(character_list)
+                # Propagate the reconciled roster into the snapshot so resume/
+                # crash-recovery picks up newly-registered characters and so
+                # subsequent chapters pass the updated list to planning context.
+                snap["character_list"] = list(character_list)
+
             _set_step(f"Chapter {chapter_num}: updating character states")
             state_update = run_character_state_updater(
                 chapter_text=text, chapter_summary=summary,
@@ -536,12 +556,17 @@ def _run_chapter_generation_internal(
                 "character_state_log": list(character_state_log),
                 "degraded_passes": list(degraded_passes),
                 "length_enforcement": list(length_enforcement_log),
+                "character_list": list(character_list),
+                "reconciliation_log": list(reconciliation_log),
             })
             _persist_progress(force=True)  # always persist on chapter completion
 
             session_id = snap.get("session_id")
             if session_id:
-                persist_completed_chapters(session_id, chapters_done, token)
+                persist_completed_chapters(
+                    session_id, chapters_done, token,
+                    character_list=character_list,
+                )
 
         # --- Post-manuscript audits ---
         audit_results = run_post_manuscript_audits(
@@ -569,7 +594,10 @@ def _run_chapter_generation_internal(
 
         session_id = snap.get("session_id")
         if session_id:
-            persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(
+                session_id, chapters_done, token,
+                character_list=character_list,
+            )
 
     except ContentRejectionError as exc:
         logger.error(
@@ -588,7 +616,10 @@ def _run_chapter_generation_internal(
         })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(
+                session_id, chapters_done, token,
+                character_list=character_list,
+            )
         _set_step("Error: content policy rejection")
         _persist_progress(force=True)
 
@@ -601,7 +632,10 @@ def _run_chapter_generation_internal(
         })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(
+                session_id, chapters_done, token,
+                character_list=character_list,
+            )
         _set_step(f"Error: {exc}")
         _persist_progress(force=True)
 
@@ -617,7 +651,10 @@ def _run_chapter_generation_internal(
         })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(
+                session_id, chapters_done, token,
+                character_list=character_list,
+            )
         _set_step("Error: LLM API circuit breaker tripped")
         _persist_progress(force=True)
 
@@ -634,7 +671,10 @@ def _run_chapter_generation_internal(
         })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(
+                session_id, chapters_done, token,
+                character_list=character_list,
+            )
         _set_step("Error: all LLM providers exhausted")
         _persist_progress(force=True)
 
@@ -647,7 +687,10 @@ def _run_chapter_generation_internal(
         })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(
+                session_id, chapters_done, token,
+                character_list=character_list,
+            )
         _set_step(f"Error: {str(exc)}")
         _persist_progress(force=True)
 
@@ -661,7 +704,10 @@ def _run_chapter_generation_internal(
         })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(
+                session_id, chapters_done, token,
+                character_list=character_list,
+            )
         _set_step("Error: unparseable LLM response")
         _persist_progress(force=True)
 
@@ -678,7 +724,10 @@ def _run_chapter_generation_internal(
         })
         session_id = snap.get("session_id")
         if session_id and chapters_done:
-            persist_completed_chapters(session_id, chapters_done, token)
+            persist_completed_chapters(
+                session_id, chapters_done, token,
+                character_list=character_list,
+            )
         _set_step(f"Error: {str(exc)}")
         _persist_progress(force=True)
 

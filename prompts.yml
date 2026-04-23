@@ -906,6 +906,18 @@ prompts:
       "jaw tightened," "the economy of someone who." Vary chapter openings and
       endings — not always smell descriptions or quiet reflection.
 
+      CHARACTER REGISTRY CONSTRAINT (mandatory): The "Main characters" list in
+      the user prompt is the canonical roster for this novel. Every named
+      character who speaks, acts, or is referenced by name in this chapter
+      MUST come from that roster. Do NOT invent new named characters.
+      Unnamed background figures referred to by role only ("the bartender,"
+      "a guard," "the technician," "a passing courier") are allowed and
+      encouraged for texture — but do NOT give them a proper name. If the
+      chapter summary names a minor figure not on the roster, use that exact
+      name; otherwise, stay role-only. A character introduced with a proper
+      name implies future reappearance, consistency, and an arc the reader
+      will expect to track; an unnamed extra carries none of those promises.
+
       SENTENCE RHYTHM: Vary sentence length deliberately for pacing effect.
       Tension and action scenes: short, punchy sentences. Fragments. Impact.
       Emotional and reflective beats: longer, flowing sentences that let the
@@ -1320,6 +1332,13 @@ prompts:
       RULES:
       - Do not change plot, character arcs, or factual content.
       - Do not add or remove scenes.
+      - Do NOT introduce a new named character. The character list below
+        is the canonical roster — every speaker and every named thinker
+        must come from it. If the draft contains dialogue attributed to a
+        name NOT on the roster, either (a) reattribute the line to a
+        roster character who is plausibly present, or (b) convert the
+        attribution to a role reference ("the guard said," "a technician
+        muttered"). Do not invent a new proper name under any circumstance.
       - Preserve the chapter's approximate word count.
       - Return the COMPLETE revised chapter text.
     user: |
@@ -1488,6 +1507,15 @@ prompts:
       background, motivations, and arc trajectory.
       Deepen emotional authenticity, eliminate out-of-character moments,
       and advance each key character's arc.
+
+      CHARACTER REGISTRY CONSTRAINT (mandatory): The "Character profiles"
+      list below is the canonical roster. Do NOT introduce a new named
+      character while deepening this chapter. If you find a character in
+      the prose who is NOT in the roster, prefer to demote them to an
+      unnamed role reference ("the guard," "the technician") rather than
+      keep the unknown name. Never invent a new proper name to "deepen"
+      a scene. Texture may come from unnamed extras; named characters must
+      come from the roster.
 
       CRITICAL: Every named character who appears in this chapter must
       experience meaningful forward narrative movement — a decision made,
@@ -1720,6 +1748,10 @@ prompts:
         The whole point is that they don't mean anything.
       - They should match the character's personality and situation.
       - Do not change plot, character arcs, or factual content.
+      - Do NOT introduce a new named character to carry the oddity. Attach
+        the oddity to a character already on the CHARACTER LIST, or to an
+        unnamed background figure ("a passerby," "the receptionist"). Never
+        invent a new proper name for a throwaway beat.
       - Preserve the chapter's approximate word count.
       - Return the COMPLETE revised chapter text.
     user: |
@@ -2334,6 +2366,93 @@ prompts:
 
       {{ chapter_text }}
 
+  - name: "character_reconciliation"
+    description: "Decides how to reconcile newly-detected named characters in a chapter against the canonical roster: register as new, rename to an existing character, or demote to an unnamed role."
+    stage: "Chapter Generation"
+    system: |
+      You are the Character Reconciliation Agent. A scanner has detected
+      proper-noun names in a chapter draft that are NOT in the canonical
+      character roster. Your job is to decide, for each detected name,
+      exactly one of three resolutions:
+
+      1. RENAME_TO — The name is a misspelling, diminutive, or voice variant
+         of an existing roster character (e.g., "Sara" for "Sarah",
+         "Aldrick" for "Aldric"). Specify the canonical roster name to
+         replace it with.
+
+      2. REGISTER — The name is a legitimate recurring character the LLM
+         has introduced during drafting: they have dialogue, they take
+         meaningful action, they are addressed by roster characters, or
+         they appear across multiple scenes. Generate a full character
+         profile consistent with the chapter's evidence. The profile MUST
+         respect the field-length limits provided.
+
+      3. DEMOTE_TO_EXTRA — The name is a walk-on with no recurring role:
+         a single dialogue line, a passing mention, a background
+         attribution that does not warrant a tracked character. Provide a
+         role phrase ("the guard", "a clerk", "the technician") that will
+         replace every mention of the proper name in the prose.
+
+      DECISION RULES (apply in order):
+      - If the detected name is fuzzy-close to a roster name AND could
+        plausibly be the same person given the chapter context → RENAME_TO.
+      - If the name speaks more than one line of dialogue, is addressed
+        by name by other characters, or takes an action that advances
+        plot → REGISTER.
+      - Otherwise → DEMOTE_TO_EXTRA.
+
+      Bias toward REGISTER for ambiguous cases — a tracked character is
+      easier to manage downstream than an orphaned name that reappears
+      in a later chapter.
+
+      For REGISTER decisions, generate the profile from evidence in the
+      chapter only. Do NOT invent backstory the chapter does not support.
+      If a field (e.g. internal_flaw, personal_goal) cannot be reasonably
+      inferred, return an empty string for that field — an empty string
+      is always acceptable and preferred over a fabricated value.
+    user: |
+      Novel: '{{ title }}' — Chapter {{ chapter_num }}
+      Genre: {{ genre }}
+
+      === CANONICAL ROSTER ===
+      {{ roster_text }}
+
+      === DETECTED NAMES (not in roster) ===
+      {{ detections_text }}
+
+      === CHARACTER FIELD LIMITS (REGISTER profiles must respect these) ===
+      {{ field_limits_block }}
+
+      === CHAPTER TEXT ===
+      {{ chapter_text }}
+
+      For EACH detected name above, return a decision object. Every
+      detected prose_name must appear in the output exactly once.
+
+      ***CRITICAL: Return ONLY a valid JSON object with NO markdown, NO introduction, NO explanation.***
+      Required structure:
+      {"decisions": [
+        {
+          "prose_name": "Thomas",
+          "resolution": "REGISTER",
+          "roster_name": "Thomas Black",
+          "profile": {"name": "Thomas Black", "age": 42, "role": "...", "background": "...", "arc": "...", "internal_flaw": "", "personal_goal": ""},
+          "notes": "appears in three scenes with dialogue"
+        },
+        {
+          "prose_name": "Sara",
+          "resolution": "RENAME_TO",
+          "roster_name": "Sarah Miller",
+          "notes": "diminutive form of Sarah Miller"
+        },
+        {
+          "prose_name": "Jenkins",
+          "resolution": "DEMOTE_TO_EXTRA",
+          "replacement": "the clerk",
+          "notes": "single-line walk-on with no recurring role"
+        }
+      ]}
+
   - name: "chapter_revision"
     description: "Incorporates editor revision instructions into an existing chapter while preserving coherence and continuity."
     stage: "Chapter Generation"
@@ -2497,9 +2616,18 @@ prompts:
       - EARNED CATHARSIS: Does the character's resolution show visible transformation (they act differently than at the start), emotional payoff (a key relationship changed through action), or bittersweet victory (something gained at a permanent human cost)? Or does the resolution just narrate what the character learned? Flag characters whose closure is told rather than shown, or whose resolution lacks specific human impact.
       - TRADE-OFF INTEGRITY: Does the resolution preserve lasting trade-offs, or does it resolve everything tidily? Flag any character whose ending erases the costs they paid during the story.
 
+      REGISTRY COMPLETENESS CHECK: The character roster above is the
+      canonical list. Every named character who appears in the chapter
+      summaries MUST be present in the roster. Scan the summaries for
+      any proper-noun character name that does NOT appear in the roster
+      and add it to ``registry_gaps`` with the chapters where it was
+      referenced. A non-empty ``registry_gaps`` list indicates the
+      reconciliation pipeline missed a character — this is a hard
+      integrity failure.
+
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown, NO introduction, NO explanation.***
       Required structure:
-      {"character_resolutions": [{"character": "...", "arc_complete": true, "outcome_honoured": true, "final_state_clear": true, "closure_type": "death|survival|transformation|exile|open|missing", "notes": "..."}], "unresolved_characters": ["..."], "resolution_integrity": "high|medium|low", "overall_assessment": "..."}
+      {"character_resolutions": [{"character": "...", "arc_complete": true, "outcome_honoured": true, "final_state_clear": true, "closure_type": "death|survival|transformation|exile|open|missing", "notes": "..."}], "unresolved_characters": ["..."], "registry_gaps": [{"name": "...", "chapters": [3, 7], "reason": "..."}], "resolution_integrity": "high|medium|low", "overall_assessment": "..."}
 
   - name: "thematic_payoff_analyzer"
     description: "Verifies that every major thematic pillar culminates meaningfully in the final quarter of the manuscript. Returns a JSON audit report."
@@ -2654,7 +2782,7 @@ prompts:
       {"chapter": 4, "issue": "Extended exposition slows momentum after the chapter 3 action sequence, losing reader interest."}
 
   - name: "consistency_pass"
-    description: "Reviews the full novel arc for plot holes, character completion, and thematic payoff."
+    description: "Reviews the full novel arc for plot holes, character completion, thematic payoff, and duplicate characters."
     stage: "Post-Processing"
     system: |
       You are a senior editor reviewing the full arc of a {{ genre }} novel
@@ -2662,6 +2790,9 @@ prompts:
     user: |
       Novel title: {{ title }}
       Genre: {{ genre }}
+
+      === CANONICAL CHARACTER ROSTER ===
+      {{ roster_text }}
 
       Chapter summaries:
       {{ summaries_text }}
@@ -2673,11 +2804,24 @@ prompts:
       - GENRE PROMISE: Does the novel deliver what {{ genre }} readers expect? High stakes, relatable protagonist choices, clear reader payoff. Flag if the genre promise is broken.
       - FINAL SCENE: Does the final chapter deliver a resonant closing scene that resolves the central premise with emotional weight? Flag if the ending is abstract, expository, or lacks human impact.
 
+      DUPLICATE-CHARACTER CHECK: Review the roster above for characters
+      that appear to be duplicates or aliases of the same narrative
+      function — for example, two different names filling the same role
+      with substantially overlapping backgrounds or arcs. This can happen
+      when characters are auto-registered from different chapters. Flag
+      every cluster of 2+ characters that look redundant. Do NOT flag
+      pairs who serve genuinely different narrative roles even if they
+      share a profession (e.g., two soldiers, but one is the loyal
+      lieutenant and the other is the protagonist's estranged brother).
+      Focus on clusters where the roles, backgrounds, and arcs are
+      substantially similar and no scene shows them together or
+      acknowledges them as separate.
+
       Special instructions: {{ special_instructions }}
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
       Required structure:
-      {"issues": ["..."], "overall_assessment": "..."}
+      {"issues": ["..."], "duplicate_characters": [{"names": ["Alice Carver", "Alicia Carver"], "reason": "Nearly identical roles and backgrounds; never appear together; likely a reconciliation artifact"}], "overall_assessment": "..."}
 
   - name: "pacing_tension_heatmap"
     description: "Generates per-chapter pacing and tension metrics to identify flat sections and pacing imbalances across the manuscript."
@@ -2775,7 +2919,7 @@ prompts:
       Novel: "{{ title }}"
       Genre: {{ genre }}
 
-      Characters:
+      Characters (CANONICAL ROSTER — do not invent nodes):
       {{ characters_text }}
 
       Chapter summaries:
@@ -2784,6 +2928,14 @@ prompts:
       Map all significant character relationships. Include every named character
       that appears in at least 2 chapters. For each relationship, describe the
       dynamic in one sentence.
+
+      REGISTRY INTEGRITY: Every ``from`` and ``to`` value in the
+      ``relationships`` output MUST match a name from the canonical
+      roster above exactly. If the chapter summaries mention a named
+      character who is NOT on the roster, do NOT create a graph node
+      for them — instead, add their name to ``unregistered_names`` so
+      the audit can surface the reconciliation miss. Unnamed role
+      references ("the guard", "a clerk") are never nodes.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
       Required structure:
@@ -2796,7 +2948,8 @@ prompts:
             "type": "ally|rival|mentor|etc",
             "label": "One-sentence description of the dynamic"
           }
-        ]
+        ],
+        "unregistered_names": ["..."]
       }
 
   - name: "illustration_prompt_generator"

@@ -1,5 +1,6 @@
 """Shared constants, pass-failure helpers, content-policy retry, vocabulary scanning, and length enforcement."""
 
+import difflib
 import logging
 import re
 from collections.abc import Callable
@@ -395,6 +396,162 @@ def scan_vocabulary_overuse(chapter_text: str, genre: str = "") -> list[str]:
             )
 
     return warnings
+
+
+# ---------------------------------------------------------------------------
+# Named-character detection (for reconciliation against the canonical roster)
+# ---------------------------------------------------------------------------
+
+# Common capitalized English words that are NOT character names. Used to
+# filter sentence-initial and conventional capitalization out of the
+# named-character scanner. Roster-token matching is applied BEFORE this
+# filter, so a character legitimately named "May" or "Crown" is still
+# detected correctly — the stop list only catches spans that have no
+# roster hit.
+_NAMED_CHARACTER_STOP_WORDS: frozenset[str] = frozenset({
+    # Pronouns / sentence-initial
+    "i", "he", "she", "they", "it", "we", "you", "me", "him", "her", "them", "us",
+    "his", "hers", "theirs", "its", "ours", "yours", "mine",
+    "this", "that", "these", "those", "there", "here",
+    "then", "when", "where", "why", "how", "what", "who", "whose", "which",
+    # Conjunctions / modifiers
+    "the", "a", "an", "and", "or", "but", "so", "yet", "as", "if", "while",
+    "because", "since", "although", "though", "unless", "until",
+    "not", "never", "always", "still", "only", "even", "also",
+    "now", "before", "after", "later", "soon", "ago", "once", "twice",
+    "yes", "no", "ok", "okay",
+    # Days
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    # Months (excluding May — often a character name; roster check handles it)
+    "january", "february", "march", "april", "june", "july",
+    "august", "september", "october", "november", "december",
+    # Honorifics / titles that commonly appear alone
+    "mr", "mrs", "ms", "dr", "sir", "madam", "lord", "lady",
+    "captain", "lieutenant", "sergeant", "major", "colonel", "general",
+    "professor", "father", "mother", "sister", "brother", "uncle", "aunt",
+    "detective", "inspector", "officer", "commander", "admiral", "chief",
+    "doctor", "nurse", "reverend", "pastor",
+    # Structural / narrative
+    "chapter", "book", "part", "act", "scene", "volume", "prologue", "epilogue",
+    # Exclamations / religious references
+    "god", "christ", "jesus", "heaven", "hell", "lord",
+    # Greetings / filler
+    "hello", "goodbye", "thanks", "please",
+    # Cardinal directions / generic place words
+    "north", "south", "east", "west", "street", "road", "avenue", "place",
+    "square", "city", "town", "village", "county", "state", "country",
+})
+
+
+# Candidate-name regex: one to three adjacent capitalized tokens.
+# Matches "Sarah", "Sarah Miller", "John Fitzgerald Kennedy" but does not
+# span apostrophes, hyphens, or punctuation — so "Sarah's" yields "Sarah".
+_NAME_CANDIDATE_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b")
+
+
+def _roster_name_tokens(roster: list[dict]) -> set[str]:
+    """Return the set of lowercase name tokens from a character roster.
+
+    Each character's ``name`` is split on whitespace; tokens shorter than
+    two characters are discarded (they match too many false positives under
+    fuzzy matching).
+    """
+    tokens: set[str] = set()
+    for ch in roster or []:
+        if not isinstance(ch, dict):
+            continue
+        name = str(ch.get("name", "")).strip()
+        if not name:
+            continue
+        for tok in name.split():
+            tok_clean = tok.strip(".,;:'\"").lower()
+            if len(tok_clean) >= 2:
+                tokens.add(tok_clean)
+    return tokens
+
+
+def extract_named_characters(
+    chapter_text: str,
+    roster: list[dict],
+    *,
+    min_mentions: int = 2,
+    fuzzy_cutoff: float = 0.85,
+) -> dict:
+    """Detect named characters in chapter prose and classify them against *roster*.
+
+    Pure Python — no LLM call. Uses a capitalized-span regex, a stop-word
+    filter, and :func:`difflib.get_close_matches` for variant detection.
+
+    Parameters
+    ----------
+    chapter_text:  The chapter prose to scan.
+    roster:        The canonical ``character_list`` (list of dicts with
+                   a ``name`` key).
+    min_mentions:  Minimum distinct mentions required before a capitalized
+                   span is reported as an unknown character. Spans that
+                   appear fewer times are treated as likely sentence-initial
+                   false positives or throwaway walk-ons.
+    fuzzy_cutoff:  :mod:`difflib` similarity threshold for variant matching.
+                   Higher = stricter. 0.85 catches typos and short
+                   diminutives without conflating distinct names.
+
+    Returns
+    -------
+    dict with three keys:
+        ``known``:    sorted list of capitalized spans that intersect the
+                      roster's name tokens (for diagnostic logging).
+        ``unknown``:  list of ``(prose_name, count)`` tuples for names with
+                      no roster match and at least *min_mentions* occurrences,
+                      ordered by descending count.
+        ``variants``: list of ``(prose_name, roster_token, count)`` tuples
+                      — likely misspellings or diminutives of roster names.
+    """
+    tokens = _roster_name_tokens(roster)
+
+    raw_counts: dict[str, int] = {}
+    for m in _NAME_CANDIDATE_RE.finditer(chapter_text):
+        raw_counts[m.group()] = raw_counts.get(m.group(), 0) + 1
+
+    known: set[str] = set()
+    unknown_counts: dict[str, int] = {}
+    for span, count in raw_counts.items():
+        span_tokens = [t.lower() for t in span.split()]
+        # Roster check first: a span whose any token matches a roster token
+        # is a known character, regardless of stop-word overlap.
+        if tokens and any(t in tokens for t in span_tokens):
+            known.add(span)
+            continue
+        # Drop spans whose every token is a stop word (sentence-initial
+        # noise, honorifics with no name attached, etc.).
+        if all(t in _NAMED_CHARACTER_STOP_WORDS for t in span_tokens):
+            continue
+        if count < min_mentions:
+            continue
+        unknown_counts[span] = count
+
+    variants: list[tuple[str, str, int]] = []
+    unknowns: list[tuple[str, int]] = []
+    roster_token_list = sorted(tokens)
+    for span, count in sorted(unknown_counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        match_found: str | None = None
+        if roster_token_list:
+            for t in span.split():
+                close = difflib.get_close_matches(
+                    t.lower(), roster_token_list, n=1, cutoff=fuzzy_cutoff,
+                )
+                if close:
+                    match_found = close[0]
+                    break
+        if match_found is not None:
+            variants.append((span, match_found, count))
+        else:
+            unknowns.append((span, count))
+
+    return {
+        "known": sorted(known),
+        "unknown": unknowns,
+        "variants": variants,
+    }
 
 
 # ---------------------------------------------------------------------------
