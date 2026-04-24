@@ -26,17 +26,33 @@ def build_title_prompt(premise: str, genre: str) -> list[dict[str, str]]:
 def build_outline_prompt(
     premise: str, genre: str, chapters: int, word_count: int,
     special_events: str, special_instructions: str,
+    roster_text: str = "",
+    drift_callout: list[str] | None = None,
 ) -> list[dict[str, str]]:
-    """Build the chapter outline prompt from premise, genre, and word count."""
+    """Build the chapter outline prompt.
+
+    Parameters
+    ----------
+    roster_text:    Markdown-formatted canonical character roster. Every
+                    named character in the outline MUST come from this list.
+                    Produced by the caller after character generation; the
+                    prompt template injects it as a hard constraint so the
+                    outline agent cannot invent new names.
+    drift_callout:  On retry, the list of invented names that appeared in
+                    the first attempt; the template highlights these so
+                    the LLM avoids them on the second try.
+    """
     return render_prompt(
         "outline", premise=premise, genre=genre, chapters=chapters,
         word_count=f"{word_count:,}", special_events=special_events or "",
         special_instructions=special_instructions or "",
+        roster_text=roster_text or "",
+        drift_callout=", ".join(drift_callout) if drift_callout else "",
     )
 
 
 def build_characters_prompt(
-    premise: str, genre: str, outline_text: str, names_to_avoid: str = "",
+    premise: str, genre: str, chapters_count: int, names_to_avoid: str = "",
 ) -> list[dict[str, str]]:
     """Build the character-generation prompt.
 
@@ -44,7 +60,11 @@ def build_characters_prompt(
     ----------
     premise:        Novel premise text.
     genre:          Novel genre string.
-    outline_text:   Chapter outline produced by the outline agent.
+    chapters_count: Total chapter count for the novel — used by the prompt
+                    to guide cast size (longer novels warrant larger supporting
+                    casts). The character generator runs before the outline in
+                    the characters-first pipeline, so no outline text is
+                    available as context.
     names_to_avoid: Comma-separated character names from prior novels that
                     should not be reused.  Obtain this value by calling
                     :func:`collect_existing_character_names` in the caller
@@ -59,7 +79,7 @@ def build_characters_prompt(
     )
     return render_prompt(
         "characters", premise=premise, genre=genre,
-        outline_text=outline_text, names_to_avoid=names_to_avoid,
+        chapters_count=chapters_count, names_to_avoid=names_to_avoid,
         name_pool=name_pool, field_limits_block=field_limits_block,
     )
 

@@ -19,6 +19,7 @@ from novelforge.agents.chapter import (
     build_title_prompt, build_outline_prompt, build_characters_prompt,
     build_character_field_repair_prompt,
     collect_existing_character_names,
+    extract_named_characters,
 )
 from novelforge.services.planning import run_full_planning, run_selective_planning
 from novelforge.session.persistence import save_session_state
@@ -79,6 +80,88 @@ def _enforce_character_field_limits(character_list: list[dict]) -> list[dict]:
     return character_list
 
 
+def _format_roster_for_outline_prompt(character_list: list[dict]) -> str:
+    """Format the canonical roster as compact Markdown for the outline prompt.
+
+    Only name + role are injected — background and arc are intentionally
+    omitted. The outline agent needs to know WHO exists and WHAT they do,
+    not their inner lives; overloading the prompt with arc detail has been
+    observed to cause the outline to over-index on a single character.
+    """
+    lines: list[str] = []
+    for ch in character_list:
+        if not isinstance(ch, dict):
+            continue
+        name = str(ch.get("name", "")).strip()
+        role = str(ch.get("role", "")).strip()
+        if not name:
+            continue
+        lines.append(f"- {name}: {role}" if role else f"- {name}")
+    return "\n".join(lines)
+
+
+def _enforce_outline_roster_discipline(
+    *,
+    chapter_list: list[dict],
+    character_list: list[dict],
+    premise: str,
+    genre: str,
+    chapters: int,
+    word_count: int,
+    special_events: str,
+    special_instructions: str,
+    roster_text: str,
+) -> list[dict]:
+    """Retry outline generation once if it invented names not on the roster.
+
+    Uses :func:`extract_named_characters` to detect drift. ``min_mentions=1``
+    — outline summaries are short enough that even a single invented name
+    matters. On a second failure, returns the original outline as-is; the
+    chapter-level reconciliation pass will catch remaining drift during
+    chapter generation.
+    """
+    outline_text_full = "\n\n".join(
+        f"Chapter {c.get('number', '?')}: {c.get('title', '')}\n{c.get('summary', '')}"
+        for c in chapter_list if isinstance(c, dict)
+    )
+    scan = extract_named_characters(
+        outline_text_full, character_list, min_mentions=1,
+    )
+    invented = [name for name, _ in scan.get("unknown", [])]
+    if not invented:
+        return chapter_list
+
+    logger.warning(
+        "Outline drift detected — invented names %r not in roster %r; retrying once.",
+        invented, [c.get("name") for c in character_list],
+    )
+    try:
+        retry_raw = call_llm(
+            build_outline_prompt(
+                premise, genre, chapters, word_count,
+                special_events, special_instructions,
+                roster_text=roster_text,
+                drift_callout=invented,
+            ),
+            action="Generating Outline (roster-discipline retry)",
+            json_mode=True,
+        )
+    except RuntimeError as exc:
+        logger.warning("Outline drift retry failed: %s", exc)
+        return chapter_list
+    try:
+        retry_data = parse_llm_json(retry_raw)
+        retry_chapters = (
+            retry_data.get("chapters", []) if isinstance(retry_data, dict) else []
+        )
+        if retry_chapters:
+            return retry_chapters
+    except json.JSONDecodeError:
+        pass
+    # Second failure: proceed with original.
+    return chapter_list
+
+
 def _apply_rename(text: str, old_name: str, new_name: str) -> str:
     """Replace *old_name* with *new_name* using whole-word boundary matching.
 
@@ -131,10 +214,42 @@ def generate_outline() -> Response | tuple[Response, int]:
         # 1. Generate title
         title = call_llm(build_title_prompt(str(premise), genre), action="Generating Title").strip().strip('"')
 
-        # 2. Generate outline
+        # 2. Generate characters FIRST — from premise + genre only.
+        #    This is the canonical roster; the outline step below is forbidden
+        #    from inventing new names and must use these exact characters.
+        characters_raw = call_llm(
+            build_characters_prompt(
+                str(premise), genre, chapters,
+                names_to_avoid=collect_existing_character_names(),
+            ),
+            action="Generating Characters",
+            json_mode=True,
+        )
+        try:
+            characters_data = parse_llm_json(characters_raw)
+            character_list = characters_data.get("characters", []) if isinstance(characters_data, dict) else []
+        except json.JSONDecodeError:
+            character_list = []
+
+        # Enforce field-length limits: repair via LLM, truncate as last resort.
+        character_list = _enforce_character_field_limits(character_list)
+
+        # Fail fast if character generation produced nothing usable — the
+        # outline step below depends on an authoritative roster.
+        if not character_list:
+            logger.error("Character generation produced no usable characters; aborting outline build.")
+            return jsonify({
+                "error": "Character generation produced no usable characters; cannot build outline.",
+            }), 502
+
+        # 3. Generate outline SECOND — with the canonical roster injected as
+        #    a hard constraint. The outline agent must use only these names.
+        roster_text = _format_roster_for_outline_prompt(character_list)
         outline_raw = call_llm(
             build_outline_prompt(
-                str(premise), genre, chapters, word_count, special_events, special_instructions
+                str(premise), genre, chapters, word_count,
+                special_events, special_instructions,
+                roster_text=roster_text,
             ),
             action="Generating Outline",
             json_mode=True,
@@ -148,26 +263,19 @@ def generate_outline() -> Response | tuple[Response, int]:
                 for i in range(chapters)
             ]
 
-        outline_text = "\n".join(
-            f"Chapter {c['number']}: {c['title']} – {c['summary']}"
-            for c in chapter_list
+        # 4. Drift-guard: if the outline invented names not on the roster,
+        #    retry once with an explicit callout; otherwise proceed.
+        chapter_list = _enforce_outline_roster_discipline(
+            chapter_list=chapter_list,
+            character_list=character_list,
+            premise=str(premise),
+            genre=genre,
+            chapters=chapters,
+            word_count=word_count,
+            special_events=special_events,
+            special_instructions=special_instructions,
+            roster_text=roster_text,
         )
-
-        # 3. Generate characters (needed by Group 1 timeline agent)
-        characters_raw = call_llm(
-            build_characters_prompt(str(premise), genre, outline_text,
-                                    names_to_avoid=collect_existing_character_names()),
-            action="Generating Characters",
-            json_mode=True,
-        )
-        try:
-            characters_data = parse_llm_json(characters_raw)
-            character_list = characters_data.get("characters", []) if isinstance(characters_data, dict) else []
-        except json.JSONDecodeError:
-            character_list = []
-
-        # Enforce field-length limits: repair via LLM, truncate as last resort.
-        character_list = _enforce_character_field_limits(character_list)
 
         # Run all planning agents via the shared orchestration service
         planning = run_full_planning(

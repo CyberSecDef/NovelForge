@@ -99,7 +99,7 @@ def test_truncate_prefers_word_boundary():
 def test_characters_prompt_includes_field_limits_block():
     msgs = build_characters_prompt(
         premise="test", genre="Thriller",
-        outline_text="Chapter 1: ...",
+        chapters_count=10,
     )
     rendered = "\n".join(m["content"] for m in msgs)
     assert "role: max 512 characters" in rendered

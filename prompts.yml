@@ -713,16 +713,40 @@ prompts:
       ***Return ONLY the title text, nothing else.***
 
   - name: "outline"
-    description: "Generates a chapter-by-chapter JSON outline for a novel."
+    description: "Generates a chapter-by-chapter JSON outline for a novel using a canonical character roster."
     stage: "Novel Setup"
     system: |
       You are a master story architect who creates detailed, compelling novel outlines.
+
+      CHARACTER REGISTRY CONSTRAINT (mandatory): The "Canonical character
+      roster" in the user prompt is the complete cast for this novel. Every
+      named character who speaks, acts, or is referenced by name in any
+      chapter summary MUST come from that roster. Do NOT invent new named
+      characters in chapter summaries — not even once, not even for a single
+      scene, not even as a throwaway walk-on. Unnamed background figures
+      referred to by role only ("the mayor," "a dockworker," "the senator's
+      aide") are allowed for texture, but must NOT be given proper names.
+      If a chapter needs a named figure not on the roster, you are drafting
+      the wrong chapter — revise to route the action through an existing
+      roster member instead.
     user: |
       Create a detailed chapter-by-chapter outline for a {{ genre }} novel.
 
       Premise: {{ premise }}
       Total chapters: {{ chapters }}
       Target word count: {{ word_count }}
+
+      {%- if roster_text %}
+
+      Canonical character roster (use these EXACT names — do not invent others):
+      {{ roster_text }}
+      {%- endif %}
+      {%- if drift_callout %}
+
+      RETRY NOTE: Your previous attempt introduced these names that are NOT
+      in the roster: {{ drift_callout }}. Do NOT use them in this attempt.
+      Every named reference must map to a roster entry above.
+      {%- endif %}
 
       COMMERCIAL LENGTH GUIDANCE: The ideal manuscript length for
       commercially published fiction is 75,000–95,000 words. Plan chapter
@@ -805,7 +829,7 @@ prompts:
       ***Each chapter summary should be 2-4 sentences describing key events and purpose.***
 
   - name: "characters"
-    description: "Generates a list of main characters from a novel premise and outline."
+    description: "Generates the canonical character roster from a novel premise and genre (runs before outline)."
     stage: "Novel Setup"
     system: |
       You are a character development expert who creates vivid, memorable fictional characters.
@@ -823,12 +847,22 @@ prompts:
         {{ names_to_avoid }}
       {%- endif %}
     user: |
-      Based on this {{ genre }} novel premise and outline, create 3-7 main characters.
+      Based on this {{ genre }} novel premise, create the canonical character
+      roster for the novel. This roster is authoritative — every named
+      character who appears in any chapter (now or later) must come from this
+      list. No other source of character names exists in the pipeline.
 
       Premise: {{ premise }}
 
-      Outline:
-      {{ outline_text }}
+      Chapter count: {{ chapters_count }}
+      CAST SIZE GUIDANCE:
+      - 1-10 chapters: 3-5 characters (protagonist, antagonist, 1-3 supporting)
+      - 11-20 chapters: 5-7 characters
+      - 21+ chapters: 6-9 characters
+      Err on the side of FEWER characters — readers track a small cast
+      better than a large one, and a tight roster forces every character
+      to earn their presence. Include at least one active antagonist or
+      concrete opposition figure.
 
       Remember: every character needs a unique first AND last name drawn from the genre-appropriate
       name pool above. Names should feel distinctive, pronounceable, and true to the genre.

@@ -449,25 +449,31 @@ _NAMED_CHARACTER_STOP_WORDS: frozenset[str] = frozenset({
 _NAME_CANDIDATE_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b")
 
 
-def _roster_name_tokens(roster: list[dict]) -> set[str]:
-    """Return the set of lowercase name tokens from a character roster.
+def _roster_name_token_sets(roster: list[dict]) -> list[set[str]]:
+    """Return a list of lowercase token sets — one set per roster character.
 
     Each character's ``name`` is split on whitespace; tokens shorter than
     two characters are discarded (they match too many false positives under
-    fuzzy matching).
+    fuzzy matching). Returning per-character sets (rather than a flat union)
+    lets the scanner distinguish "Marcus Reid" from "Marcus Fellowes" —
+    the shared "marcus" token alone is not enough to classify a prose span
+    as a known roster character.
     """
-    tokens: set[str] = set()
+    result: list[set[str]] = []
     for ch in roster or []:
         if not isinstance(ch, dict):
             continue
         name = str(ch.get("name", "")).strip()
         if not name:
             continue
-        for tok in name.split():
-            tok_clean = tok.strip(".,;:'\"").lower()
-            if len(tok_clean) >= 2:
-                tokens.add(tok_clean)
-    return tokens
+        char_tokens = {
+            tok.strip(".,;:'\"").lower()
+            for tok in name.split()
+            if len(tok.strip(".,;:'\"")) >= 2
+        }
+        if char_tokens:
+            result.append(char_tokens)
+    return result
 
 
 def extract_named_characters(
@@ -506,7 +512,11 @@ def extract_named_characters(
         ``variants``: list of ``(prose_name, roster_token, count)`` tuples
                       — likely misspellings or diminutives of roster names.
     """
-    tokens = _roster_name_tokens(roster)
+    per_char_tokens = _roster_name_token_sets(roster)
+    # Flat union is kept only for difflib variant matching below; the known/
+    # unknown classification uses per-character sets to avoid cross-character
+    # false positives like "Marcus Fellowes" matching "Marcus Reid".
+    flat_tokens: set[str] = {t for s in per_char_tokens for t in s}
 
     raw_counts: dict[str, int] = {}
     for m in _NAME_CANDIDATE_RE.finditer(chapter_text):
@@ -515,15 +525,22 @@ def extract_named_characters(
     known: set[str] = set()
     unknown_counts: dict[str, int] = {}
     for span, count in raw_counts.items():
-        span_tokens = [t.lower() for t in span.split()]
-        # Roster check first: a span whose any token matches a roster token
-        # is a known character, regardless of stop-word overlap.
-        if tokens and any(t in tokens for t in span_tokens):
+        span_tokens_list = [t.lower() for t in span.split()]
+        span_tokens = set(span_tokens_list)
+        # Roster check first: a span is known only when it maps entirely to
+        # a single roster character — either the span's tokens are a subset
+        # of that character's tokens (e.g. "Marcus" → "Marcus Reid") or a
+        # superset (e.g. "Marcus Reid the Third" → "Marcus Reid").
+        is_known = any(
+            span_tokens.issubset(char_set) or char_set.issubset(span_tokens)
+            for char_set in per_char_tokens
+        )
+        if is_known:
             known.add(span)
             continue
         # Drop spans whose every token is a stop word (sentence-initial
         # noise, honorifics with no name attached, etc.).
-        if all(t in _NAMED_CHARACTER_STOP_WORDS for t in span_tokens):
+        if all(t in _NAMED_CHARACTER_STOP_WORDS for t in span_tokens_list):
             continue
         if count < min_mentions:
             continue
@@ -531,7 +548,7 @@ def extract_named_characters(
 
     variants: list[tuple[str, str, int]] = []
     unknowns: list[tuple[str, int]] = []
-    roster_token_list = sorted(tokens)
+    roster_token_list = sorted(flat_tokens)
     for span, count in sorted(unknown_counts.items(), key=lambda kv: (-kv[1], kv[0])):
         match_found: str | None = None
         if roster_token_list:

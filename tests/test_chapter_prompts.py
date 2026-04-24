@@ -13,7 +13,9 @@ import pytest
 
 from novelforge.agents.chapter import (
     build_characters_prompt,
+    build_outline_prompt,
     collect_existing_character_names,
+    extract_named_characters,
 )
 
 
@@ -28,7 +30,7 @@ class TestBuildCharactersPromptPure:
         return build_characters_prompt(
             premise="A lone detective uncovers a city-wide conspiracy.",
             genre="Crime",
-            outline_text="Chapter 1: Clue found. Chapter 2: Trail goes cold.",
+            chapters_count=12,
             names_to_avoid=names_to_avoid,
         )
 
@@ -184,3 +186,92 @@ class TestCollectExistingCharacterNames:
 
         result = collect_existing_character_names()
         assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# build_outline_prompt — roster injection and drift callout
+# ---------------------------------------------------------------------------
+
+class TestBuildOutlinePromptRoster:
+    """The outline prompt must surface the canonical roster and drift callout."""
+
+    def _call(self, **overrides) -> list[dict[str, str]]:
+        defaults = dict(
+            premise="A lone detective uncovers a city-wide conspiracy.",
+            genre="Crime",
+            chapters=12,
+            word_count=90000,
+            special_events="",
+            special_instructions="",
+        )
+        defaults.update(overrides)
+        return build_outline_prompt(**defaults)
+
+    def test_roster_text_appears_in_prompt_when_provided(self):
+        roster = "- Aldric Holt: disillusioned detective\n- Vesper Crane: crime boss"
+        result = self._call(roster_text=roster)
+        combined = " ".join(msg["content"] for msg in result)
+        assert "Aldric Holt" in combined
+        assert "Vesper Crane" in combined
+
+    def test_empty_roster_text_omits_roster_block(self):
+        """With no roster (default), the "Canonical character roster" header must not appear."""
+        result = self._call()
+        combined = " ".join(msg["content"] for msg in result)
+        assert "Canonical character roster" not in combined
+
+    def test_drift_callout_appears_on_retry(self):
+        result = self._call(
+            roster_text="- Aldric Holt: protagonist",
+            drift_callout=["Marcus", "Sarah"],
+        )
+        combined = " ".join(msg["content"] for msg in result)
+        assert "RETRY NOTE" in combined
+        assert "Marcus" in combined
+        assert "Sarah" in combined
+
+    def test_no_drift_callout_by_default(self):
+        result = self._call(roster_text="- Aldric Holt: protagonist")
+        combined = " ".join(msg["content"] for msg in result)
+        assert "RETRY NOTE" not in combined
+
+    def test_system_message_contains_registry_constraint(self):
+        """The system prompt must carry the mandatory no-invented-names rule."""
+        result = self._call(roster_text="- Aldric Holt: protagonist")
+        system_msg = next(m for m in result if m["role"] == "system")
+        assert "CHARACTER REGISTRY CONSTRAINT" in system_msg["content"]
+
+
+# ---------------------------------------------------------------------------
+# extract_named_characters — per-character token set fix
+# ---------------------------------------------------------------------------
+
+class TestScannerPerCharacterTokenSets:
+    """A prose name sharing a single token with a different roster character
+    must be classified as unknown, not known.
+    """
+
+    def test_shared_first_name_is_not_known(self):
+        """'Marcus Fellowes' must not be classified as 'Marcus Reid'."""
+        roster = [{"name": "Marcus Reid"}]
+        text = "Marcus Fellowes entered. Marcus Fellowes drew his pistol."
+        result = extract_named_characters(text, roster, min_mentions=2)
+        unknown_names = [n for n, _ in result["unknown"]]
+        assert "Marcus Fellowes" in unknown_names
+        assert "Marcus Fellowes" not in result["known"]
+
+    def test_subset_of_roster_name_is_known(self):
+        """A prose span using just the first name of a roster character is known."""
+        roster = [{"name": "Marcus Reid"}]
+        text = "Marcus walked in. Marcus paused at the door."
+        result = extract_named_characters(text, roster)
+        assert "Marcus" in result["known"]
+
+    def test_superset_of_roster_name_is_known(self):
+        """A prose span adding a suffix to a full roster name is known."""
+        roster = [{"name": "Marcus Reid"}]
+        text = "Marcus Reid the Third appeared. Marcus Reid the Third bowed."
+        result = extract_named_characters(text, roster)
+        assert "Marcus Reid" in result["known"] or any(
+            "Marcus Reid" in s for s in result["known"]
+        )
