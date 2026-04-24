@@ -839,9 +839,10 @@ prompts:
       - {{ name_pool }}
       - Names must fit the genre, hook the reader, and suit each character's role.
       - No two characters in the same novel may share a first name or a last name.
-      - NEVER use any of these overused fiction names: James, John, Sarah, Elena, Marcus,
-        Alexander, Elizabeth, Catherine, William, Michael, David, Thomas, Robert, Alice, Emma,
-        Kai, Liam, Aria, Luna, Maya, Zara, Ethan, Aiden, Elara, Kira, Mira, Sera, Nyx, Raven.
+      - NEVER use any of these overused fantasy/fiction names (LLM fingerprints):
+        Kai, Aria, Luna, Zara, Aiden, Elara, Kira, Mira, Sera, Nyx, Raven.
+        Common real-world names (James, Sarah, Michael, Emma, etc.) are acceptable
+        if they fit the genre and the character.
       {%- if names_to_avoid %}
       - Additionally, do NOT use any of these names (from prior novels):
         {{ names_to_avoid }}

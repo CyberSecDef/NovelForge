@@ -548,17 +548,27 @@ def extract_named_characters(
 
     variants: list[tuple[str, str, int]] = []
     unknowns: list[tuple[str, int]] = []
-    roster_token_list = sorted(flat_tokens)
     for span, count in sorted(unknown_counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        span_token_list = [t.strip(".,;:'\"").lower() for t in span.split()]
         match_found: str | None = None
-        if roster_token_list:
-            for t in span.split():
-                close = difflib.get_close_matches(
-                    t.lower(), roster_token_list, n=1, cutoff=fuzzy_cutoff,
+        # Variant detection: a prose span is a variant of a single roster
+        # character only when EVERY one of its tokens fuzzy-matches some
+        # token in that character's name. "Marcus Fellowes" is not a
+        # variant of "Marcus Reid" because "fellowes" has no fuzzy match
+        # to "reid"; matching on a shared first name alone would reopen
+        # the cross-character false-positive bug.
+        for char_set in per_char_tokens:
+            char_token_list = sorted(char_set)
+            close_tokens: list[str] = []
+            for tok in span_token_list:
+                hits = difflib.get_close_matches(
+                    tok, char_token_list, n=1, cutoff=fuzzy_cutoff,
                 )
-                if close:
-                    match_found = close[0]
-                    break
+                if hits:
+                    close_tokens.append(hits[0])
+            if close_tokens and len(close_tokens) == len(span_token_list):
+                match_found = close_tokens[0]
+                break
         if match_found is not None:
             variants.append((span, match_found, count))
         else:
