@@ -80,6 +80,35 @@ class CharacterArcPlanAgent(BaseAgent):
                 {"chapter": vuln_ch_2, "scene": f"{name} shows vulnerability through action — admits fault, asks for help, or breaks composure."},
             ]
 
+            # Plant 2-3 foreshadow beats per major pivot in earlier chapters
+            # so each arc turn (midpoint, crisis, final) feels earned.
+            # Foreshadow chapters are clamped to land BEFORE the pivot they
+            # telegraph, and at least chapter 2 to leave room for setup.
+            def _foreshadow_chapters(pivot_ch: int) -> list[int]:
+                slots = [
+                    max(2, pivot_ch - max(1, pivot_ch // 3)),
+                    max(2, pivot_ch - max(1, pivot_ch // 2)),
+                ]
+                return sorted({c for c in slots if c < pivot_ch})
+
+            foreshadow_beats: list[dict] = []
+            for pivot_label, pivot_ch in (
+                ("midpoint", midpoint_chapter),
+                ("crisis", crisis_chapter),
+                ("final", final_chapter),
+            ):
+                for fch in _foreshadow_chapters(pivot_ch):
+                    foreshadow_beats.append({
+                        "chapter": fch,
+                        "foreshadows": pivot_label,
+                        "beat": (
+                            f"Plant a small, dramatized moment for {name} that "
+                            f"telegraphs the upcoming {pivot_label} — a line of "
+                            f"dialogue, a decision, or a visible reaction that "
+                            f"the reader will recognize in retrospect."
+                        ),
+                    })
+
             arcs.append(
                 {
                     "character": name,
@@ -110,6 +139,7 @@ class CharacterArcPlanAgent(BaseAgent):
                         },
                     ],
                     "vulnerability_scenes": vulnerability_scenes,
+                    "foreshadow_beats": foreshadow_beats,
                     "consistency_rules": [
                         "Arc must move forward each appearance.",
                         "No regression to start state after midpoint without explicit cause.",
@@ -187,6 +217,31 @@ class CharacterArcPlanAgent(BaseAgent):
                     "scene": str(vs.get("scene", "")).strip(),
                 })
 
+            # Foreshadow beats — scheduled plants for upcoming pivots. Each
+            # beat binds a chapter to a specific pivot it telegraphs; the
+            # per-chapter Character agent verifies the beat is on-page when
+            # the scheduled chapter is written. Records missing a non-empty
+            # ``beat`` field are dropped (they cannot be verified).
+            foreshadow_beats = item.get("foreshadow_beats", [])
+            if not isinstance(foreshadow_beats, list):
+                foreshadow_beats = []
+            normalised_foreshadow: list[dict] = []
+            allowed_pivots = {"midpoint", "crisis", "final"}
+            for fb in foreshadow_beats:
+                if not isinstance(fb, dict):
+                    continue
+                beat_text = str(fb.get("beat", "")).strip()
+                if not beat_text:
+                    continue
+                foreshadows = str(fb.get("foreshadows", "")).strip().lower()
+                if foreshadows not in allowed_pivots:
+                    foreshadows = "midpoint"
+                normalised_foreshadow.append({
+                    "chapter": _coerce_positive_int(fb.get("chapter"), 1),
+                    "foreshadows": foreshadows,
+                    "beat": beat_text,
+                })
+
             normalised_arcs.append(
                 {
                     "character": name,
@@ -200,6 +255,7 @@ class CharacterArcPlanAgent(BaseAgent):
                     "arc_theme": str(item.get("arc_theme", "")).strip(),
                     "chapter_beats": normalised_beats,
                     "vulnerability_scenes": normalised_vuln,
+                    "foreshadow_beats": normalised_foreshadow,
                     "consistency_rules": [str(x) for x in consistency_rules if str(x).strip()],
                 }
             )
@@ -263,7 +319,15 @@ class CharacterArcPlanAgent(BaseAgent):
                 if isinstance(vs, dict) and _coerce_positive_int(vs.get("chapter"), 0) == chapter_num
             ]
 
-            if matching_beats or matching_vuln:
+            foreshadow_beats = arc.get("foreshadow_beats", [])
+            if not isinstance(foreshadow_beats, list):
+                foreshadow_beats = []
+            matching_foreshadow = [
+                fb for fb in foreshadow_beats
+                if isinstance(fb, dict) and _coerce_positive_int(fb.get("chapter"), 0) == chapter_num
+            ]
+
+            if matching_beats or matching_vuln or matching_foreshadow:
                 lines.append(
                     f"- {char_name}: start={arc.get('start_state', '')}; midpoint={arc.get('midpoint_transformation', '')}; "
                     f"crisis={arc.get('crisis_point', '')}; final_choice={arc.get('final_moral_choice', '')}"
@@ -280,6 +344,13 @@ class CharacterArcPlanAgent(BaseAgent):
                     lines.append(
                         f"  - *** VULNERABILITY SCENE (this chapter): {vs.get('scene', '')} — "
                         f"Show this through ACTION and DIALOGUE, not narration. ***"
+                    )
+                for fb in matching_foreshadow:
+                    pivot = str(fb.get("foreshadows", "")).strip() or "upcoming pivot"
+                    lines.append(
+                        f"  - *** FORESHADOW BEAT (this chapter, telegraphs {pivot}): "
+                        f"{fb.get('beat', '')} — Must appear on-page through a "
+                        f"dramatized moment (dialogue, decision, or visible reaction). ***"
                     )
                 rules = arc.get("consistency_rules", [])
                 if isinstance(rules, list) and rules:

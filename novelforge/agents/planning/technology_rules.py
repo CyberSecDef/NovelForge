@@ -37,6 +37,17 @@ class TechnologyRulesAgent(BaseAgent):
         """Create a deterministic fallback with a single surveillance system and chapter constraints."""
         safe_chapter_list = _safe_chapter_list(chapter_list)
         total_chapters = max(1, len(safe_chapter_list))
+        # Minimal default rules — intentionally sparse. The fallback exists
+        # only when the LLM call fails entirely; a real novel's LLM output
+        # will supply 4-10 concrete, genre-appropriate rules.
+        rules = [
+            {
+                "capability": "Primary detection apparatus",
+                "cost": "Finite compute budget; cannot run every check simultaneously.",
+                "forbidden": "Instant omniscient tracking of all targets; retroactive perfect reconstruction of past events.",
+                "exception": "none",
+            }
+        ]
         systems = [
             {
                 "name": "Primary Surveillance Grid",
@@ -60,6 +71,7 @@ class TechnologyRulesAgent(BaseAgent):
                 "must_not_allow": ["Do not grant instant detection or infinite processing without explicit setup."],
             })
         return {
+            "rules": rules,
             "systems": systems,
             "global_constraints": [
                 "Every tech action has delay, uncertainty, or resource cost.",
@@ -75,6 +87,29 @@ class TechnologyRulesAgent(BaseAgent):
         fallback = self._build_fallback_impl(chapter_list)
         if not isinstance(data, dict):
             return fallback
+
+        # Normalise the authoritative `rules` array. Each rule must have a
+        # non-empty `capability`; other fields default to empty string or
+        # "none" so the gatekeeper can always render them.
+        raw_rules = data.get("rules", [])
+        if not isinstance(raw_rules, list):
+            raw_rules = []
+        normalised_rules: list[dict] = []
+        seen_capabilities: set[str] = set()
+        for item in raw_rules:
+            if not isinstance(item, dict):
+                continue
+            capability = str(item.get("capability", "")).strip()
+            if not capability or capability.lower() in seen_capabilities:
+                continue
+            seen_capabilities.add(capability.lower())
+            exception = str(item.get("exception", "")).strip() or "none"
+            normalised_rules.append({
+                "capability": capability,
+                "cost": str(item.get("cost", "")).strip(),
+                "forbidden": str(item.get("forbidden", "")).strip(),
+                "exception": exception,
+            })
 
         raw_systems = data.get("systems", [])
         if not isinstance(raw_systems, list):
@@ -126,6 +161,7 @@ class TechnologyRulesAgent(BaseAgent):
             continuity_risks = []
 
         return {
+            "rules": normalised_rules or fallback["rules"],
             "systems": normalised_systems or fallback["systems"],
             "global_constraints": [str(x) for x in global_constraints if str(x).strip()] or fallback["global_constraints"],
             "chapter_constraints": normalised_constraints or fallback["chapter_constraints"],
@@ -133,14 +169,39 @@ class TechnologyRulesAgent(BaseAgent):
         }
 
     def get_chapter_context(self, plan: dict, chapter_num: int) -> str:
-        """Format technology systems and constraints as a prompt snippet for a chapter."""
+        """Format world rules, systems, and constraints as a prompt snippet for a chapter.
+
+        Rules are surfaced at the top as the primary, enforceable constraints
+        the Continuity Gatekeeper should match chapter plans against. Other
+        fields (systems, global/chapter constraints, continuity risks) are
+        supplementary detail.
+        """
         if not isinstance(plan, dict):
             return ""
+
+        lines = ["Technology Rules Designer output for this chapter:"]
+
+        # Primary: enforceable rules (capability / cost / forbidden / exception).
+        rules = plan.get("rules", [])
+        if isinstance(rules, list) and rules:
+            lines.append("- ENFORCEABLE RULES:")
+            for rule in rules[:10]:
+                if not isinstance(rule, dict):
+                    continue
+                capability = str(rule.get("capability", "?")).strip() or "?"
+                cost = str(rule.get("cost", "")).strip()
+                forbidden = str(rule.get("forbidden", "")).strip()
+                exception = str(rule.get("exception", "")).strip() or "none"
+                lines.append(f"  - Rule '{capability}':")
+                if cost:
+                    lines.append(f"    · cost: {cost}")
+                if forbidden:
+                    lines.append(f"    · forbidden: {forbidden}")
+                lines.append(f"    · exception: {exception}")
 
         systems = plan.get("systems", [])
         if not isinstance(systems, list):
             systems = []
-        lines = ["Technology Rules Designer output for this chapter:"]
         for system in systems[:6]:
             if not isinstance(system, dict):
                 continue

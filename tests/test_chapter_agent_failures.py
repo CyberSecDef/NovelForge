@@ -154,13 +154,15 @@ class TestOptionalPassFallbackValues:
         )
         assert result == ""
 
-    def test_character_state_updater_returns_empty_string(self, monkeypatch):
+    def test_character_state_updater_returns_empty_tuple(self, monkeypatch):
+        """The state updater now returns ``(state_log, ledger_updates)`` —
+        on failure both elements are empty."""
         _patch_chapter_call_llm(monkeypatch, _raise_runtime("x"))
         result = run_character_state_updater(
             chapter_text="t", chapter_summary="s",
             characters_text="c", chapter_num=3, title="Novel",
         )
-        assert result == ""
+        assert result == ("", [])
 
     def test_compression_check_returns_empty_string(self, monkeypatch):
         _patch_chapter_call_llm(monkeypatch, _raise_runtime("x"))

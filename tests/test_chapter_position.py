@@ -247,3 +247,52 @@ class TestChapterPositionClamping:
     def test_over_range_chapter_uses_clamped_phase(self):
         # chapter 20 of 10 is clamped to 10 → Resolution
         assert ChapterPosition(20, 10).get_phase() == "Resolution"
+
+
+# ---------------------------------------------------------------------------
+# Climax rhythm gate helpers (is_climax_chapter / is_aftermath_chapter)
+# ---------------------------------------------------------------------------
+
+class TestClimaxRhythmGateHelpers:
+    """is_climax_chapter() marks exactly one chapter; is_aftermath_chapter()
+    marks every chapter strictly after it.
+    """
+
+    @pytest.mark.parametrize("n", [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30])
+    def test_exactly_one_climax_chapter_per_novel(self, n):
+        climax_matches = [
+            c for c in range(1, n + 1)
+            if ChapterPosition(c, n).is_climax_chapter()
+        ]
+        assert len(climax_matches) == 1, (
+            f"n={n}: expected exactly one climax, got {climax_matches}"
+        )
+
+    @pytest.mark.parametrize("n", [4, 5, 6, 8, 10, 12, 15, 20, 30])
+    def test_climax_chapter_matches_landmark_helper(self, n):
+        clx = ChapterPosition.climax_chapter(n)
+        assert ChapterPosition(clx, n).is_climax_chapter()
+
+    @pytest.mark.parametrize("n", [4, 5, 6, 8, 10, 12, 15, 20, 30])
+    def test_aftermath_covers_all_post_climax_chapters(self, n):
+        clx = ChapterPosition.climax_chapter(n)
+        for c in range(1, n + 1):
+            is_aftermath = ChapterPosition(c, n).is_aftermath_chapter()
+            assert is_aftermath == (c > clx), (
+                f"n={n}, ch={c}: is_aftermath={is_aftermath}, expected {c > clx}"
+            )
+
+    def test_climax_and_aftermath_are_disjoint(self):
+        for n in (4, 10, 25):
+            for c in range(1, n + 1):
+                pos = ChapterPosition(c, n)
+                assert not (pos.is_climax_chapter() and pos.is_aftermath_chapter())
+
+    def test_pre_climax_chapters_are_neither(self):
+        # For a 10-chapter novel the climax is at chapter 8 (75%).
+        # Chapters 1-7 should be neither climax nor aftermath.
+        n = 10
+        for c in range(1, 8):
+            pos = ChapterPosition(c, n)
+            assert not pos.is_climax_chapter()
+            assert not pos.is_aftermath_chapter()

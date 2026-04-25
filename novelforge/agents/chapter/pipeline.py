@@ -111,16 +111,31 @@ def run_per_chapter_compression_check(chapter_num: int, chapter_summary: str, pr
         return ""
 
 
-def run_character_state_updater(chapter_text: str, chapter_summary: str, characters_text: str, chapter_num: int, title: str,
-                                 degraded_passes: list[dict] | None = None) -> str:
-    """Run the character state updater, returning state changes or empty string on failure."""
+def run_character_state_updater(
+    chapter_text: str, chapter_summary: str, characters_text: str,
+    chapter_num: int, title: str,
+    degraded_passes: list[dict] | None = None,
+) -> tuple[str, list[dict]]:
+    """Run the character state updater, returning ``(state_log, ledger_updates)``.
+
+    ``state_log`` is the bullet-point character state text (empty string on
+    failure). ``ledger_updates`` is a list of object-ledger delta records
+    (empty list on failure or when no plot-critical object moved). The
+    caller merges ledger_updates into a cumulative object ledger keyed by
+    ``object_name``.
+
+    If the LLM returns plain text instead of JSON (for example because the
+    prompt change landed mid-run), the text is treated as the state log and
+    the ledger updates are an empty list.
+    """
     try:
-        return call_llm(
+        raw = call_llm(
             build_character_state_updater_prompt(
                 chapter_text=chapter_text, chapter_summary=chapter_summary,
                 characters_text=characters_text, chapter_num=chapter_num, title=title,
             ),
-            action=f"Running Character State Updater for Chapter {chapter_num}"
+            action=f"Running Character State Updater for Chapter {chapter_num}",
+            json_mode=True,
         )
     except Exception as exc:
         failure_summary = _log_pass_failure(
@@ -133,7 +148,33 @@ def run_character_state_updater(chapter_text: str, chapter_summary: str, charact
                 "chapter_num": chapter_num,
                 "failure_summary": failure_summary,
             })
-        return ""
+        return "", []
+
+    # Tolerant parse: JSON preferred, plain text accepted as legacy fallback.
+    try:
+        data = parse_llm_json(raw)
+    except Exception:
+        data = None
+    if isinstance(data, dict):
+        state_log = str(data.get("character_state_log", "") or "").strip()
+        ledger_updates_raw = data.get("object_ledger_updates", [])
+        ledger_updates: list[dict] = []
+        if isinstance(ledger_updates_raw, list):
+            for item in ledger_updates_raw:
+                if not isinstance(item, dict):
+                    continue
+                object_name = str(item.get("object_name", "")).strip()
+                if not object_name:
+                    continue
+                ledger_updates.append({
+                    "object_name": object_name,
+                    "current_holder": str(item.get("current_holder", "")).strip(),
+                    "last_transfer_method": str(item.get("last_transfer_method", "")).strip(),
+                    "plot_critical": bool(item.get("plot_critical", True)),
+                })
+        return state_log, ledger_updates
+    # Legacy / non-JSON response: keep the text and emit no ledger updates.
+    return str(raw or "").strip(), []
 
 
 def _apply_name_substitution(text: str, old_name: str, replacement: str) -> str:
@@ -361,6 +402,9 @@ def run_continuity_gatekeeper(
     chapter_num: int, chapter_title: str, chapter_summary: str, previous_summaries: str,
     chapter_timeline_context: str = "", chapter_fate_context: str = "",
     chapter_arc_context: str = "", character_state_log: str = "",
+    chapter_technology_context: str = "",
+    chapter_rhythm_shape: str = "",
+    object_ledger_context: str = "",
     degraded_passes: list[dict] | None = None,
 ) -> str:
     """Run the pre-chapter continuity gatekeeper, returning a brief or empty string on failure."""
@@ -373,6 +417,9 @@ def run_continuity_gatekeeper(
                 chapter_fate_context=chapter_fate_context,
                 chapter_arc_context=chapter_arc_context,
                 character_state_log=character_state_log,
+                chapter_technology_context=chapter_technology_context,
+                chapter_rhythm_shape=chapter_rhythm_shape,
+                object_ledger_context=object_ledger_context,
             ),
             action=f"Running Continuity Gatekeeper for Chapter {chapter_num}",
         )

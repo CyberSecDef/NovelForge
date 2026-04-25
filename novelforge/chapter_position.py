@@ -204,6 +204,25 @@ class ChapterPosition:
         """True if this chapter is in the climax zone (~70-80% of the novel)."""
         return 70 <= self.position_pct <= 80
 
+    def is_climax_chapter(self) -> bool:
+        """True if this chapter is the single canonical climax chapter.
+
+        This is the exact chapter returned by :meth:`climax_chapter` — the
+        place where the protagonist's decisive, irreversible choice must
+        land. The climax rhythm gate uses this to force ``climax-focal``
+        regardless of the LLM rhythm classifier's suggestion.
+        """
+        return self.chapter_num == ChapterPosition.climax_chapter(self.total_chapters)
+
+    def is_aftermath_chapter(self) -> bool:
+        """True if this chapter follows the canonical climax chapter.
+
+        Used by the climax rhythm gate to force ``aftermath``: consequences
+        and closure only, no new decisive action, no re-staging of
+        alternatives to the climactic choice.
+        """
+        return self.chapter_num > ChapterPosition.climax_chapter(self.total_chapters)
+
     def is_opening(self) -> bool:
         """True if this chapter is in the opening zone (first ~15%)."""
         return self.position_pct <= 15

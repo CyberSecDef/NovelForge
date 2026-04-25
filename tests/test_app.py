@@ -751,6 +751,161 @@ class TestCharacterArcPlanner:
         assert "Beat (midpoint)" in context_text
         assert "Must advance" in context_text
 
+    def test_normalise_preserves_valid_foreshadow_beats(self):
+        """Arcs may carry foreshadow_beats that telegraph upcoming pivots."""
+        from novelforge.agents.planning import normalise_character_arc_plan
+
+        raw = {
+            "arcs": [
+                {
+                    "character": "Aldric Holt",
+                    "start_state": "guarded",
+                    "midpoint_transformation": "admits need for allies",
+                    "crisis_point": "betrayed by a sworn friend",
+                    "final_moral_choice": "chooses exposure over safety",
+                    "foreshadow_beats": [
+                        {"chapter": 5, "foreshadows": "crisis",
+                         "beat": "Aldric dismisses a colleague's loyalty as sentimental."},
+                        {"chapter": 8, "foreshadows": "crisis",
+                         "beat": "Aldric snaps at a subordinate over a small slight."},
+                        {"chapter": 10, "foreshadows": "final",
+                         "beat": "Aldric refuses an olive branch: 'Trust is a luxury.'"},
+                    ],
+                }
+            ],
+        }
+        plan = normalise_character_arc_plan(
+            raw,
+            [{"name": "Aldric Holt", "role": "Protagonist", "arc": "Learns trust"}],
+            [{"number": i, "title": f"Ch{i}", "summary": ""} for i in range(1, 13)],
+        )
+        arc = plan["arcs"][0]
+        assert arc["character"] == "Aldric Holt"
+        beats = arc["foreshadow_beats"]
+        assert len(beats) == 3
+        assert beats[0]["chapter"] == 5
+        assert beats[0]["foreshadows"] == "crisis"
+        assert "dismisses a colleague" in beats[0]["beat"]
+        # Verify non-whitelisted pivot values default to "midpoint"
+        assert all(b["foreshadows"] in {"midpoint", "crisis", "final"} for b in beats)
+
+    def test_normalise_drops_foreshadow_beats_without_beat_text(self):
+        """Records missing the dramatized beat text are dropped — the agent
+        cannot verify an empty beat appeared on-page."""
+        from novelforge.agents.planning import normalise_character_arc_plan
+
+        raw = {
+            "arcs": [
+                {
+                    "character": "Aldric",
+                    "foreshadow_beats": [
+                        {"chapter": 5, "foreshadows": "crisis", "beat": "valid plant"},
+                        {"chapter": 6, "foreshadows": "crisis", "beat": ""},
+                        {"chapter": 7, "foreshadows": "crisis"},  # no beat key
+                        "not a dict",
+                    ],
+                }
+            ],
+        }
+        plan = normalise_character_arc_plan(
+            raw, [{"name": "Aldric", "role": "Protagonist", "arc": ""}],
+            [{"number": 1, "title": "", "summary": ""}],
+        )
+        beats = plan["arcs"][0]["foreshadow_beats"]
+        assert len(beats) == 1
+        assert beats[0]["beat"] == "valid plant"
+
+    def test_normalise_coerces_unknown_pivot_label_to_midpoint(self):
+        from novelforge.agents.planning import normalise_character_arc_plan
+
+        raw = {
+            "arcs": [
+                {
+                    "character": "Aldric",
+                    "foreshadow_beats": [
+                        {"chapter": 5, "foreshadows": "nonsense", "beat": "plant"},
+                    ],
+                }
+            ],
+        }
+        plan = normalise_character_arc_plan(
+            raw, [{"name": "Aldric", "role": "Protagonist", "arc": ""}],
+            [{"number": 1, "title": "", "summary": ""}],
+        )
+        assert plan["arcs"][0]["foreshadow_beats"][0]["foreshadows"] == "midpoint"
+
+    def test_fallback_generates_foreshadow_beats_for_primary_arc(self):
+        """Deterministic fallback must include at least one foreshadow beat
+        per primary arc so the per-chapter agent always has something to
+        verify on a foreshadow-scheduled chapter."""
+        from novelforge.agents.planning import normalise_character_arc_plan
+
+        plan = normalise_character_arc_plan(
+            {},
+            [{"name": "Elena", "role": "Protagonist", "arc": "Learns trust"}],
+            [{"number": i, "title": "", "summary": ""} for i in range(1, 13)],
+        )
+        arc = plan["arcs"][0]
+        assert "foreshadow_beats" in arc
+        assert len(arc["foreshadow_beats"]) >= 1
+        # Every fallback beat is scheduled BEFORE its pivot chapter
+        for fb in arc["foreshadow_beats"]:
+            assert fb["chapter"] >= 2
+            assert fb["foreshadows"] in {"midpoint", "crisis", "final"}
+            assert fb["beat"]
+
+    def test_get_chapter_arc_context_surfaces_foreshadow_beat_for_scheduled_chapter(self):
+        from novelforge.agents.planning import get_chapter_arc_context
+
+        arc_plan = {
+            "arcs": [
+                {
+                    "character": "Elena",
+                    "role": "primary",
+                    "start_state": "isolated",
+                    "midpoint_transformation": "",
+                    "crisis_point": "",
+                    "final_moral_choice": "",
+                    "chapter_beats": [],
+                    "vulnerability_scenes": [],
+                    "foreshadow_beats": [
+                        {"chapter": 5, "foreshadows": "crisis",
+                         "beat": "Elena refuses an olive branch."},
+                    ],
+                }
+            ],
+            "chapter_constraints": [],
+            "global_arc_risks": [],
+        }
+        # Chapter 5 is the scheduled chapter — beat must surface.
+        context = get_chapter_arc_context(arc_plan, 5)
+        assert "FORESHADOW BEAT" in context
+        assert "telegraphs crisis" in context
+        assert "olive branch" in context
+
+    def test_get_chapter_arc_context_omits_foreshadow_for_other_chapters(self):
+        from novelforge.agents.planning import get_chapter_arc_context
+
+        arc_plan = {
+            "arcs": [
+                {
+                    "character": "Elena",
+                    "role": "primary",
+                    "start_state": "", "midpoint_transformation": "",
+                    "crisis_point": "", "final_moral_choice": "",
+                    "chapter_beats": [],
+                    "vulnerability_scenes": [],
+                    "foreshadow_beats": [
+                        {"chapter": 5, "foreshadows": "crisis",
+                         "beat": "Elena refuses an olive branch."},
+                    ],
+                }
+            ],
+        }
+        # Chapter 3 is NOT the scheduled chapter — beat must not appear.
+        context = get_chapter_arc_context(arc_plan, 3)
+        assert "FORESHADOW BEAT" not in context
+
 
 class TestAntagonistMotivationArchitect:
     def test_normalise_antagonist_motivation_plan_uses_fallback(self):
@@ -865,6 +1020,88 @@ class TestTechnologyRulesDesigner:
         assert "Must respect" in context_text
         assert "Must not allow" in context_text
 
+    def test_normalise_accepts_and_validates_rules_field(self):
+        """The authoritative `rules` array must survive normalisation with
+        all four fields populated."""
+        from novelforge.agents.planning import normalise_technology_rules
+
+        raw = {
+            "rules": [
+                {
+                    "capability": "the binding",
+                    "cost": "one specific memory, permanently lost",
+                    "forbidden": "binding without consent; binding twice in one lunar cycle",
+                    "exception": "none",
+                },
+                {
+                    "capability": "shadowstep",
+                    "cost": "24 hours of sleeplessness",
+                    "forbidden": "crossing running water; stepping into sunlight",
+                },
+            ],
+            "systems": [],
+            "global_constraints": [],
+            "chapter_constraints": [],
+            "continuity_risks": [],
+        }
+        normalised = normalise_technology_rules(raw, [{"number": 1, "title": "Setup", "summary": ""}])
+        assert "rules" in normalised
+        rules_out = normalised["rules"]
+        assert len(rules_out) == 2
+        assert rules_out[0]["capability"] == "the binding"
+        assert rules_out[0]["cost"] == "one specific memory, permanently lost"
+        assert "binding without consent" in rules_out[0]["forbidden"]
+        assert rules_out[0]["exception"] == "none"
+        # Missing `exception` defaults to "none" rather than being dropped.
+        assert rules_out[1]["exception"] == "none"
+
+    def test_normalise_drops_rules_without_capability(self):
+        from novelforge.agents.planning import normalise_technology_rules
+
+        raw = {
+            "rules": [
+                {"capability": "", "cost": "x", "forbidden": "y"},
+                {"capability": "   ", "cost": "x", "forbidden": "y"},
+                {"cost": "no capability field at all"},
+                {"capability": "valid rule", "cost": "", "forbidden": ""},
+            ],
+        }
+        normalised = normalise_technology_rules(raw, [])
+        capabilities = [r["capability"] for r in normalised["rules"]]
+        assert capabilities == ["valid rule"]
+
+    def test_normalise_fallback_includes_rules(self):
+        """The deterministic fallback must produce at least one rule so the
+        gatekeeper always has something to enforce."""
+        from novelforge.agents.planning import normalise_technology_rules
+
+        normalised = normalise_technology_rules({}, [{"number": 1, "title": "x", "summary": ""}])
+        assert "rules" in normalised
+        assert len(normalised["rules"]) >= 1
+        assert normalised["rules"][0]["capability"]
+        assert normalised["rules"][0]["forbidden"]
+
+    def test_get_chapter_technology_context_surfaces_rules_first(self):
+        """Rules must appear under 'ENFORCEABLE RULES' with capability/cost/forbidden visible."""
+        from novelforge.agents.planning import get_chapter_technology_context
+
+        plan = {
+            "rules": [
+                {
+                    "capability": "the binding",
+                    "cost": "a specific memory",
+                    "forbidden": "binding without consent",
+                    "exception": "none",
+                }
+            ],
+            "systems": [],
+        }
+        context_text = get_chapter_technology_context(plan, 1)
+        assert "ENFORCEABLE RULES" in context_text
+        assert "the binding" in context_text
+        assert "a specific memory" in context_text
+        assert "binding without consent" in context_text
+
 
 class TestThemeReinforcementPlanner:
     def test_normalise_theme_reinforcement_uses_fallback(self):
@@ -937,6 +1174,112 @@ class TestContinuityGatekeeper:
         assert "Master Timeline Builder" in content
         assert "Character Fate Registry" in content
         assert "FORBIDDEN SCENARIOS" in content
+
+    def test_build_continuity_gatekeeper_prompt_surfaces_world_rules(self):
+        """When chapter_technology_context is supplied, the gatekeeper prompt
+        must surface it and the system message must carry the world-rule
+        enforcement instructions."""
+        from novelforge.agents.chapter import build_continuity_gatekeeper_prompt
+
+        messages = build_continuity_gatekeeper_prompt(
+            chapter_num=2,
+            chapter_title="The Cost",
+            chapter_summary="The protagonist considers invoking the binding.",
+            previous_summaries="Chapter 1: Introduction.",
+            chapter_technology_context=(
+                "Technology Rules Designer output for this chapter:\n"
+                "- ENFORCEABLE RULES:\n"
+                "  - Rule 'the binding':\n"
+                "    · cost: one specific memory\n"
+                "    · forbidden: binding without consent\n"
+                "    · exception: none"
+            ),
+        )
+        system_content = messages[0]["content"]
+        user_content = messages[1]["content"]
+        assert "WORLD-RULE ENFORCEMENT" in system_content
+        assert "World-Rules Designer" in user_content
+        assert "the binding" in user_content
+
+    def test_gatekeeper_prompt_adds_climax_gate_for_climax_focal(self):
+        """When the assigned rhythm is climax-focal, the gatekeeper renders
+        the CLIMAX GATE enforcement block."""
+        from novelforge.agents.chapter import build_continuity_gatekeeper_prompt
+
+        messages = build_continuity_gatekeeper_prompt(
+            chapter_num=8,
+            chapter_title="The Turn",
+            chapter_summary="The protagonist confronts the antagonist.",
+            previous_summaries="Chapter 1: Setup.",
+            chapter_rhythm_shape="climax-focal",
+        )
+        user_content = messages[1]["content"]
+        assert "CLIMAX GATE" in user_content
+        assert "AFTERMATH GATE" not in user_content
+
+    def test_gatekeeper_prompt_adds_aftermath_gate_for_aftermath(self):
+        from novelforge.agents.chapter import build_continuity_gatekeeper_prompt
+
+        messages = build_continuity_gatekeeper_prompt(
+            chapter_num=10,
+            chapter_title="What Remains",
+            chapter_summary="The dust settles.",
+            previous_summaries="Chapter 8: Climax. Chapter 9: Immediate fallout.",
+            chapter_rhythm_shape="aftermath",
+        )
+        user_content = messages[1]["content"]
+        assert "AFTERMATH GATE" in user_content
+        assert "CLIMAX GATE" not in user_content
+
+    def test_gatekeeper_prompt_skips_both_for_regular_rhythms(self):
+        """For any non-reserved rhythm the climax/aftermath blocks stay silent."""
+        from novelforge.agents.chapter import build_continuity_gatekeeper_prompt
+
+        messages = build_continuity_gatekeeper_prompt(
+            chapter_num=4,
+            chapter_title="Pursuit",
+            chapter_summary="The chase through the market district.",
+            previous_summaries="Chapter 1: Setup.",
+            chapter_rhythm_shape="cat-and-mouse",
+        )
+        user_content = messages[1]["content"]
+        assert "CLIMAX GATE" not in user_content
+        assert "AFTERMATH GATE" not in user_content
+
+    def test_gatekeeper_prompt_renders_object_ledger_when_provided(self):
+        """When object_ledger_context is supplied, the gatekeeper user prompt
+        surfaces it verbatim and adds the OBJECT CUSTODY ENFORCEMENT block."""
+        from novelforge.agents.chapter import build_continuity_gatekeeper_prompt
+
+        ledger_text = (
+            "Object Ledger — plot-critical items and current custody:\n"
+            "- \"the sealed writ\": held by Aldric Holt (last transfer: ch 4 — handed off)"
+        )
+        messages = build_continuity_gatekeeper_prompt(
+            chapter_num=5,
+            chapter_title="Test",
+            chapter_summary="Aldric uses the writ.",
+            previous_summaries="Chapter 4: Aldric received the writ.",
+            object_ledger_context=ledger_text,
+        )
+        content = messages[1]["content"]
+        assert "the sealed writ" in content
+        assert "Aldric Holt" in content
+        assert "OBJECT CUSTODY ENFORCEMENT" in content
+
+    def test_gatekeeper_prompt_omits_object_ledger_when_empty(self):
+        from novelforge.agents.chapter import build_continuity_gatekeeper_prompt
+
+        messages = build_continuity_gatekeeper_prompt(
+            chapter_num=5,
+            chapter_title="Test",
+            chapter_summary="A scene.",
+            previous_summaries="Chapter 4: Setup.",
+            object_ledger_context="",
+        )
+        content = messages[1]["content"]
+        assert "OBJECT CUSTODY ENFORCEMENT" not in content
+        assert "Object Ledger" not in content
 
     def test_run_continuity_gatekeeper_returns_empty_on_failure(self, monkeypatch):
         import novelforge.agents.chapter as chapter_agents
@@ -1050,7 +1393,7 @@ class TestOperationalDistinctivenessAgent:
         assert isinstance(messages, list)
         assert len(messages) == 2
         content = messages[1]["content"]
-        assert "operational repetition" in content
+        assert "four-vector distinctiveness check" in content
         assert "same strategic approach" in content
         assert "Iron Meridian" in content
         assert "Return ONLY the complete revised chapter text" in content
@@ -1129,8 +1472,164 @@ class TestCharacterStateUpdater:
         content = messages[1]["content"]
         assert "Iron Meridian" in content
         assert "Chapter 7" in content
-        assert "captured" in content.lower() or "injuries" in content.lower()
-        assert "Return ONLY the character state log" in content
+        # JSON return format with both character_state_log and object_ledger_updates
+        assert "Return ONLY a valid JSON object" in content
+        assert "character_state_log" in content
+        assert "object_ledger_updates" in content
+
+    def test_run_state_updater_parses_json_into_tuple(self, monkeypatch):
+        """The runner returns ``(state_log, ledger_updates)``. Tests verify
+        both halves are populated when the LLM returns a well-formed JSON
+        body."""
+        import json
+        import novelforge.agents.chapter as chapter_agents
+        import novelforge.agents.chapter.pipeline as chapter_pipeline
+
+        payload = {
+            "character_state_log": "--- After Chapter 5 ---\nALDRIC: alive – uneventful | flaw: stalled | goal: stalled",
+            "object_ledger_updates": [
+                {
+                    "object_name": "the sealed writ",
+                    "current_holder": "Aldric Holt",
+                    "last_transfer_method": "handed to him by Vesper",
+                    "plot_critical": True,
+                }
+            ],
+        }
+        monkeypatch.setattr(chapter_agents, "call_llm", lambda *a, **kw: json.dumps(payload))
+        monkeypatch.setattr(chapter_pipeline, "call_llm", lambda *a, **kw: json.dumps(payload))
+
+        result = chapter_agents.run_character_state_updater(
+            chapter_text="t", chapter_summary="s",
+            characters_text="c", chapter_num=5, title="Novel",
+        )
+        assert isinstance(result, tuple)
+        state_log, ledger_updates = result
+        assert "After Chapter 5" in state_log
+        assert len(ledger_updates) == 1
+        assert ledger_updates[0]["object_name"] == "the sealed writ"
+        assert ledger_updates[0]["current_holder"] == "Aldric Holt"
+
+    def test_run_state_updater_drops_ledger_records_without_object_name(self, monkeypatch):
+        import json
+        import novelforge.agents.chapter as chapter_agents
+        import novelforge.agents.chapter.pipeline as chapter_pipeline
+
+        payload = {
+            "character_state_log": "--- After Chapter 5 ---\nlog",
+            "object_ledger_updates": [
+                {"object_name": "valid", "current_holder": "A"},
+                {"object_name": "", "current_holder": "B"},
+                {"current_holder": "C"},  # no object_name key
+                "not a dict",
+            ],
+        }
+        monkeypatch.setattr(chapter_agents, "call_llm", lambda *a, **kw: json.dumps(payload))
+        monkeypatch.setattr(chapter_pipeline, "call_llm", lambda *a, **kw: json.dumps(payload))
+
+        _, ledger_updates = chapter_agents.run_character_state_updater(
+            chapter_text="t", chapter_summary="s",
+            characters_text="c", chapter_num=5, title="Novel",
+        )
+        assert len(ledger_updates) == 1
+        assert ledger_updates[0]["object_name"] == "valid"
+
+    def test_run_state_updater_handles_legacy_plain_text_response(self, monkeypatch):
+        """Legacy plain-text responses (e.g., a mid-run prompt cache) must
+        still produce a usable state log with an empty ledger."""
+        import novelforge.agents.chapter as chapter_agents
+        import novelforge.agents.chapter.pipeline as chapter_pipeline
+
+        legacy = "ALDRIC: alive | flaw: stalled | goal: stalled"
+        monkeypatch.setattr(chapter_agents, "call_llm", lambda *a, **kw: legacy)
+        monkeypatch.setattr(chapter_pipeline, "call_llm", lambda *a, **kw: legacy)
+
+        state_log, ledger_updates = chapter_agents.run_character_state_updater(
+            chapter_text="t", chapter_summary="s",
+            characters_text="c", chapter_num=5, title="Novel",
+        )
+        assert "ALDRIC" in state_log
+        assert ledger_updates == []
+
+
+class TestObjectLedgerHelpers:
+    """Helpers in chapters.py that maintain and format the cumulative ledger."""
+
+    def test_merge_stamps_chapter_number_and_keeps_only_plot_critical(self):
+        from novelforge.routes.generation.chapters import _merge_object_ledger_updates
+
+        ledger: dict = {}
+        _merge_object_ledger_updates(ledger, [
+            {"object_name": "writ", "current_holder": "A",
+             "last_transfer_method": "handed off", "plot_critical": True},
+            {"object_name": "scarf", "current_holder": "B",
+             "plot_critical": False},  # non-critical: dropped
+            {"current_holder": "C", "plot_critical": True},  # no name: dropped
+        ], chapter_num=4)
+        assert "writ" in ledger
+        assert ledger["writ"]["last_transfer_chapter"] == 4
+        assert ledger["writ"]["current_holder"] == "A"
+        assert "scarf" not in ledger
+        assert len(ledger) == 1
+
+    def test_merge_overwrites_existing_object(self):
+        from novelforge.routes.generation.chapters import _merge_object_ledger_updates
+
+        ledger = {
+            "writ": {
+                "object_name": "writ", "current_holder": "Aldric",
+                "last_transfer_method": "found", "last_transfer_chapter": 2,
+                "plot_critical": True,
+            }
+        }
+        _merge_object_ledger_updates(ledger, [
+            {"object_name": "writ", "current_holder": "Vesper",
+             "last_transfer_method": "stolen", "plot_critical": True},
+        ], chapter_num=7)
+        assert ledger["writ"]["current_holder"] == "Vesper"
+        assert ledger["writ"]["last_transfer_chapter"] == 7
+        assert ledger["writ"]["last_transfer_method"] == "stolen"
+
+    def test_format_returns_empty_string_when_ledger_is_empty(self):
+        from novelforge.routes.generation.chapters import _format_object_ledger_context
+
+        assert _format_object_ledger_context({}) == ""
+        assert _format_object_ledger_context(None) == ""  # type: ignore[arg-type]
+
+    def test_format_renders_each_entry_with_chapter_and_method(self):
+        from novelforge.routes.generation.chapters import _format_object_ledger_context
+
+        ledger = {
+            "writ": {
+                "object_name": "writ", "current_holder": "Aldric",
+                "last_transfer_method": "handed off",
+                "last_transfer_chapter": 4, "plot_critical": True,
+            },
+            "key": {
+                "object_name": "key", "current_holder": "Vesper",
+                "last_transfer_method": "stolen",
+                "last_transfer_chapter": 2, "plot_critical": True,
+            },
+        }
+        out = _format_object_ledger_context(ledger)
+        assert "Object Ledger" in out
+        # Stable alphabetical ordering by object name
+        assert out.index('"key"') < out.index('"writ"')
+        assert "held by Aldric" in out
+        assert "ch 4" in out
+        assert "handed off" in out
+
+    def test_format_handles_missing_holder_with_unattached(self):
+        from novelforge.routes.generation.chapters import _format_object_ledger_context
+
+        ledger = {
+            "orphan": {
+                "object_name": "orphan", "current_holder": "",
+                "last_transfer_chapter": 3, "plot_critical": True,
+            },
+        }
+        out = _format_object_ledger_context(ledger)
+        assert "held by unattached" in out
 
     def test_build_prompt_includes_character_roster(self):
         from novelforge.agents.chapter import build_character_state_updater_prompt

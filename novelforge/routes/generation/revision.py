@@ -31,6 +31,7 @@ from novelforge.session.persistence import persist_completed_chapters
 from novelforge.routes.generation._shared import (
     generation_bp, _DERIVED_REPORT_FIELDS, _is_valid_token,
 )
+from novelforge.routes.generation.chapters import _format_object_ledger_context
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,10 @@ def revise_chapter() -> Response | tuple[Response, int]:
 
     perspective_prompt = build_perspective_prompt(snap.get("narrative_perspective", "third_person"))
 
+    object_ledger_raw = progress_data.get("object_ledger", {}) or {}
+    object_ledger = object_ledger_raw if isinstance(object_ledger_raw, dict) else {}
+    object_ledger_context = _format_object_ledger_context(object_ledger)
+
     gatekeeper_brief = run_continuity_gatekeeper(
         chapter_num=chapter_number,
         chapter_title=target_chapter.get("title", f"Chapter {chapter_number}"),
@@ -137,6 +142,8 @@ def revise_chapter() -> Response | tuple[Response, int]:
         chapter_timeline_context=chapter_timeline_context,
         chapter_fate_context=chapter_fate_context,
         chapter_arc_context=chapter_arc_context,
+        chapter_technology_context=chapter_technology_context,
+        object_ledger_context=object_ledger_context,
     )
 
     try:

@@ -188,6 +188,28 @@ prompts:
       flaw in a way that costs the character something or forces growth.
       Assign each to a specific chapter in the vulnerability_scenes field.
 
+      FORESHADOW BEATS (MANDATORY): For each major pivot in the arc —
+      midpoint_transformation, crisis_point, and final_moral_choice — plant
+      2-3 specific foreshadow beats in EARLIER chapters. A foreshadow beat
+      is a concrete, dramatized moment (a line of dialogue, a decision, a
+      visible reaction) that telegraphs the coming turn so it feels earned
+      rather than arbitrary. Examples:
+      - If the crisis at chapter 12 is a betrayal, plant chapter 5: "Aldric
+        dismisses a colleague's loyalty as sentimental"; chapter 8: "Aldric
+        snaps at a subordinate over a small slight and privately regrets
+        it"; chapter 10: "Aldric refuses an olive branch: 'Trust is a
+        luxury we can't afford.'"
+      - If the final_moral_choice at chapter 22 is a self-sacrifice, plant
+        earlier chapters where the character first refuses a smaller
+        sacrifice, then accepts a partial one, then watches someone else
+        pay.
+      Each foreshadow beat must be assigned to a specific chapter EARLIER
+      than the pivot it foreshadows. Beats are concrete and dramatizable —
+      NOT abstract themes or narrated interiority. The per-chapter
+      Character agent will verify these beats appear on-page; a pivot
+      whose foreshadow beats weren't delivered on-page becomes an arc-
+      delivery failure.
+
       EARNED CATHARSIS RULE: Every primary character's arc must culminate in
       earned catharsis — not a tidy lesson but a transformation the reader has
       watched happen through accumulated choices and costs. The final_moral_choice
@@ -224,7 +246,7 @@ prompts:
       {{ special_instructions }}
       {%- endif %}
 
-      Create a character arc plan for primary characters only. Each arc must be driven by the character's internal_flaw and personal_goal from the character profile. Define the start state, midpoint transformation, crisis point, and final moral choice. Add chapter beats showing where each phase is expressed. For each character, plan 2-3 vulnerability scenes — specific chapters where the character shows vulnerability or changes through action and dialogue.
+      Create a character arc plan for primary characters only. Each arc must be driven by the character's internal_flaw and personal_goal from the character profile. Define the start state, midpoint transformation, crisis point, and final moral choice. Add chapter beats showing where each phase is expressed. For each character, plan 2-3 vulnerability scenes — specific chapters where the character shows vulnerability or changes through action and dialogue. Additionally, plant 2-3 foreshadow beats for each major pivot (midpoint, crisis, final choice) in chapters EARLIER than the pivot, so the turn reads as earned rather than arbitrary.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
       Required structure:
@@ -235,6 +257,7 @@ prompts:
       "final_moral_choice": "...", "arc_theme": "...",
       "chapter_beats": [{"chapter": 1, "phase": "start|midpoint|crisis|final", "beat": "..."}],
       "vulnerability_scenes": [{"chapter": 1, "scene": "Brief description of the vulnerability/change scene — what happens through action and dialogue"}],
+      "foreshadow_beats": [{"chapter": 1, "foreshadows": "midpoint|crisis|final", "beat": "A concrete dramatized moment (line of dialogue, decision, visible reaction) that telegraphs the named pivot"}],
       "consistency_rules": ["..."]}],
       "chapter_constraints": [{"chapter": 1, "must_advance": ["..."], "must_not_undo": ["..."]}],
       "global_arc_risks": ["..."]}
@@ -292,12 +315,35 @@ prompts:
       "global_risks": ["..."]}
 
   - name: "technology_rules"
-    description: "Defines hard constraints for fictional technology to prevent omnipotent behavior and continuity drift."
+    description: "Defines hard, enforceable constraints for a novel's non-mimetic systems (technology in SF, magic in fantasy, legal/institutional mechanics in thrillers, supernatural rules in horror) to prevent scene-to-scene drift."
     stage: "Pre-Processing"
     system: |
-      You are the Technology Rules Designer. Define hard constraints for fictional technology:
-      latency, detection limits, resource limits, failure modes, and countermeasures.
-      Rules must be enforceable in scene-level writing and should prevent omnipotent shortcuts.
+      You are the World-Rules Designer. Your job is to codify the non-mimetic
+      systems this novel relies on — the rules that reality-as-we-know-it does
+      NOT already supply — so that scene-level writing cannot drift them. The
+      systems you codify depend on the genre:
+
+      - Science fiction / thriller: technology, surveillance, communications,
+        weaponry. Latencies, detection limits, resource costs, failure modes.
+      - Fantasy / supernatural: magic, rituals, vows, bindings, saves, relics.
+        Costs of casting, limits on what magic can and cannot do, failure
+        modes, exceptions.
+      - Legal / institutional thriller: court procedures, evidence rules,
+        chain-of-custody requirements, jurisdictional limits, statutory
+        constraints that drive plot mechanics.
+      - Horror / weird: the rules of the threat — what it can do, what it
+        cannot do, what wards it off, what invites it, what it costs.
+
+      Your output must be ENFORCEABLE. A per-chapter agent should be able to
+      compare a proposed scene against one of your rules and decide "this
+      scene violates rule X, revise it." Vague guidance like "magic should
+      feel costly" is not enforceable; a rule like "Every binding permanently
+      removes one specific memory from the caster; bindings cannot be undone;
+      a second binding in the same lunar cycle kills the caster" is.
+
+      RULES are the AUTHORITATIVE enforcement surface. Everything else below
+      (systems, constraints, risks) is supplementary detail. If in doubt
+      about whether to codify something as a rule, codify it.
     user: |
       Novel title: {{ title }}
       Genre: {{ genre }}
@@ -311,11 +357,41 @@ prompts:
       {{ special_instructions }}
       {%- endif %}
 
-      Create a Technology Rules specification that will be used during drafting. Include fixed limits, known failure modes, and chapter-specific enforcement guidance.
+      Produce a World-Rules specification that will be enforced at the
+      continuity-gatekeeper stage during chapter generation.
+
+      **Primary field: `rules`** — a list of atomic, enforceable records.
+      Target 4-10 rules covering the most plot-load-bearing mechanics. Each
+      rule MUST be specific enough that a reader could spot a violation.
+
+      Each rule record has four fields:
+      - `capability` — a short noun phrase naming the mechanic (e.g. "the
+        binding", "shadowstep", "the Interlink broadcast", "chain-of-custody
+        for sealed evidence", "the feeding"). Exactly what this rule governs.
+      - `cost` — what it takes to invoke the capability. Be concrete
+        (specific memory lost, specific injury, specific resource spent,
+        specific paperwork required). "Costs something personal" is NOT
+        acceptable — name the thing.
+      - `forbidden` — what this capability CANNOT do, or circumstances in
+        which it fails outright. This is the most important field — the
+        gatekeeper uses it to reject scenes. Include at least one hard limit.
+      - `exception` — narrow, explicit carve-outs. Use "none" if there are
+        none. Exceptions must be pre-declared, not invented mid-novel.
+
+      Secondary fields (optional, supplementary detail):
+      - `systems` — extended per-system detail if this is a tech-heavy novel.
+      - `global_constraints` — sentence-level principles that apply across all
+        rules (e.g. "every invocation is externally observable to those with
+        the right training").
+      - `chapter_constraints` — chapter-specific application notes.
+      - `continuity_risks` — known drift points to watch for.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
       Required structure:
-      {"systems": [
+      {"rules": [
+      {"capability": "...", "cost": "...", "forbidden": "...", "exception": "..."}
+      ],
+      "systems": [
       {"name": "...", "purpose": "...", "latency_ms": 0,
       "detection_methods": ["..."], "detection_blind_spots": ["..."],
       "resource_constraints": ["..."], "operational_limits": ["..."],
@@ -488,7 +564,7 @@ prompts:
       repetitive chapter shapes.
 
       You must classify chapters and make recommendations using ONLY the
-      following 10 named rhythms:
+      following 12 named rhythms:
 
       1. cat-and-mouse – Pursuit/evasion tension with shifting advantage between
          opposing sides. The chapter alternates who holds the upper hand.
@@ -516,6 +592,19 @@ prompts:
       10. quiet-before-storm – Deceptive calm with mounting dread beneath the
           surface. Small details accumulate tension while characters prepare
           or wait.
+      11. climax-focal – RESERVED for the single designated climax chapter.
+          The protagonist makes the decisive, irreversible moral choice
+          on-page in this chapter; the emotional peak of the entire novel
+          lands here. No buildup framing, no "and in the next chapter…"
+          deferrals — the turn happens in THIS chapter. Do NOT recommend
+          this rhythm for any other chapter; the pipeline enforces it
+          deterministically on the correct chapter.
+      12. aftermath – RESERVED for chapters AFTER the climax. Scenes show
+          consequences only. The protagonist does NOT make a new decisive
+          choice that reopens the climactic question; no alternative
+          resolution is re-staged. The novel is wrapping up. Do NOT
+          recommend this rhythm for pre-climax chapters; the pipeline
+          enforces it deterministically on the correct chapters.
 
       Be precise. Return ONLY valid JSON.
     user: |
@@ -573,7 +662,7 @@ prompts:
       the draft actually exhibits the assigned rhythm or has defaulted to a
       generic "event → solution → description" pattern.
 
-      The 10 named rhythms and their structural signatures:
+      The 12 named rhythms and their structural signatures:
 
       1. cat-and-mouse – Shifting advantage between opposing sides. Multiple
          reversals of who holds power. NOT just "hero chases villain."
@@ -595,10 +684,38 @@ prompts:
          The deadline must be present and felt in the prose.
       10. quiet-before-storm – Deceptive calm with mounting dread. Small details
           accumulate tension while characters prepare or wait.
+      11. climax-focal – The novel's designated climax chapter. The protagonist
+          makes a decisive, irreversible moral choice ON-PAGE IN THIS CHAPTER.
+          No buildup framing, no deferring the turn to a later chapter; the
+          emotional peak and turning action land HERE. Structural signature:
+          mounting pressure → direct confrontation → the protagonist's
+          irreversible action → the world is now changed.
+      12. aftermath – A post-climax chapter. Scenes show CONSEQUENCES ONLY.
+          The protagonist must NOT make a new decisive choice that reopens
+          the climactic question, and no alternative resolution to the climax
+          is re-staged. Structural signature: living with what was decided;
+          characters absorbing cost, reckoning with change, closing
+          relationships, moving toward the novel's final image.
 
       THE DEFAULT FAILURE MODE: "discover problem → characters discuss/plan →
       execute solution → reflect on outcome." This is the pattern you must
-      detect and eliminate. It is NOT any of the 10 rhythms above.
+      detect and eliminate. It is NOT any of the 12 rhythms above.
+
+      CLIMAX-FOCAL FAILURE MODES (flag and restructure):
+      - The chapter builds up to the climax but defers the decisive choice
+        to a future chapter ("and tomorrow she would make her choice").
+      - The climactic action is performed by someone other than the
+        protagonist; the protagonist is present but passive.
+      - The resolution comes from luck, external rescue, or convenient
+        circumstance rather than the protagonist's costly choice.
+
+      AFTERMATH FAILURE MODES (flag and restructure):
+      - The chapter introduces a NEW decisive confrontation that reopens
+        the central conflict.
+      - The chapter re-stages an alternative version of the climactic choice
+        ("if only she had done X instead").
+      - The chapter invents a new crisis at the novel's tail that diverts
+        from consequence-processing and closure.
 
       If the draft matches the assigned rhythm: return it unchanged.
       If the draft has defaulted to a generic pattern: restructure the chapter
@@ -632,17 +749,39 @@ prompts:
       {{ chapter_text }}
 
   - name: "continuity_gatekeeper"
-    description: "Validates the upcoming chapter against the master timeline and character state registry, producing a brief of forbidden scenarios and locked events."
+    description: "Validates the upcoming chapter against the master timeline, character state registry, and world-rule specification — producing a brief of forbidden scenarios, locked events, and rule-adherence constraints."
     stage: "Chapter Generation"
     system: |
       You are the Continuity Gatekeeper for a novel-in-progress.
       Your sole job is to validate what is and is not permitted in the upcoming chapter
-      based on the established master timeline and character state registry.
+      based on the established master timeline, character state registry, and world-rule specification.
       You do NOT write prose. You produce a concise validation brief:
       who is alive, dead, captured, or injured; which events have already occurred
       and are locked; which character states cannot be contradicted;
+      which world rules apply to this chapter and what they forbid or cost;
       and specific scenarios that must not appear in this chapter.
       Be precise, sparse, and clinical.
+
+      WORLD-RULE ENFORCEMENT (mandatory when world rules are provided): The
+      "World-Rules Designer" context lists enforceable rules as records with
+      `capability`, `cost`, `forbidden`, and `exception` fields. These are
+      binding. Treat them as the law of the novel's non-mimetic systems.
+      For every rule supplied:
+      - If the chapter plan proposes a scene that does what the rule's
+        `forbidden` clause prohibits, you MUST list that scene under
+        FORBIDDEN SCENARIOS and cite the rule by its `capability` name.
+        Do NOT silently permit it.
+      - If the chapter plan involves invoking the capability, you MUST
+        require the rule's `cost` be paid on-page; list the required cost
+        under REQUIRED CONTINUITY.
+      - Exceptions are narrow and pre-declared. A rule's `exception` field
+        cannot be broadened. If the chapter plan relies on a new exception
+        that is not already in the rule, flag it as a forbidden scenario.
+      - If a rule's cost would be altered, softened, or skipped in the
+        upcoming chapter, flag it.
+      Your brief must name the specific rule (by `capability`) being
+      enforced in any world-rule-related bullet, so the drafter can
+      respond precisely.
     user: |
       Upcoming chapter: Chapter {{ chapter_num }} – '{{ chapter_title }}'
       Chapter plan: {{ chapter_summary }}
@@ -681,12 +820,64 @@ prompts:
       {{ character_state_log }}
 
       {%- endif %}
+      {%- if chapter_technology_context.strip() %}
+
+      World-Rules Designer – enforceable rules in effect for this chapter:
+      {{ chapter_technology_context }}
+
+      {%- endif %}
+      {%- if object_ledger_context.strip() %}
+
+      {{ object_ledger_context }}
+
+      OBJECT CUSTODY ENFORCEMENT: Any chapter-plan scene in which a character
+      interacts with (uses, gives away, produces, handles) a plot-critical
+      object listed above must be consistent with the current holder. If
+      the chapter plan requires a DIFFERENT character to have an object,
+      an explicit on-page transfer scene (handoff, theft, discovery, loss)
+      must occur IN THIS CHAPTER before that interaction. List any
+      inconsistency under FORBIDDEN SCENARIOS naming the object in quotes
+      and the characters involved. Characters cannot "suddenly have" a
+      plot-critical object without a staged transfer.
+      {%- endif %}
+      {%- if chapter_rhythm_shape == "climax-focal" %}
+
+      CLIMAX GATE (this is the designated climax chapter — rhythm: climax-focal):
+      Flag any chapter-plan element that would:
+      - Defer the protagonist's decisive, irreversible moral choice to a
+        future chapter (e.g. "tomorrow she would decide", "that was a
+        problem for next week"). The choice MUST happen on-page here.
+      - Resolve the central conflict through external rescue, convenient
+        luck, or another character's action on behalf of the protagonist.
+        The protagonist must be the AGENT of the resolution.
+      - Leave the climactic question open at chapter end. By the close
+        of this chapter, the irreversible turn has landed and the world
+        is changed.
+      {%- elif chapter_rhythm_shape == "aftermath" %}
+
+      AFTERMATH GATE (this chapter follows the climax — rhythm: aftermath):
+      Flag any chapter-plan element that would:
+      - Introduce a NEW decisive confrontation that reopens the central
+        conflict the climax resolved.
+      - Re-stage an alternative to the climactic choice ("what if she
+        had done X instead"), giving the protagonist a second bite at
+        the climactic turn.
+      - Invent a new antagonist, new crisis, or new major plot thread
+        that diverts from consequence-processing and closure.
+      List any such element under FORBIDDEN SCENARIOS with the note
+      "aftermath rhythm violation".
+      {%- endif %}
 
       Produce a Continuity Gatekeeper brief for this chapter. Include:
       1. CHARACTER STATES – who is alive / dead / captured / injured AT THIS POINT
       2. LOCKED EVENTS – events that have already occurred and cannot be re-staged or contradicted
-      3. FORBIDDEN SCENARIOS – specific situations that must not appear in this chapter
-      4. REQUIRED CONTINUITY – facts the chapter must honour (locations, objects, relationships)
+      3. FORBIDDEN SCENARIOS – specific situations that must not appear in this chapter.
+         When citing a world-rule violation, name the rule by its `capability`
+         and state which `forbidden` clause the proposed scene breaches.
+      4. REQUIRED CONTINUITY – facts the chapter must honour (locations, objects,
+         relationships). When the chapter invokes a capability governed by a
+         world rule, list the rule's required `cost` here so the drafter
+         pays it on-page.
 
       Use bullet points. Be concise. No narrative prose.
 
@@ -1071,6 +1262,16 @@ prompts:
       Continuity Gatekeeper brief (HARD CONSTRAINTS – do not violate):
       {{ gatekeeper_brief }}
       {%- endif %}
+      {%- if object_ledger_context.strip() %}
+
+      {{ object_ledger_context }}
+
+      OBJECT CUSTODY RULE: Respect the listed holders. Do NOT give any
+      character a plot-critical object they do not canonically hold
+      without a clear on-page transfer (handoff, theft, discovery, loss)
+      earlier in THIS chapter. If the chapter plan requires a different
+      character to use an object, stage the transfer visibly.
+      {%- endif %}
       {%- if compression_guidance.strip() %}
 
       *** HARD CONSTRAINT — STRUCTURAL BANS FROM PREVIOUS CHAPTERS ***
@@ -1140,6 +1341,39 @@ prompts:
       Reason: {{ chapter_rhythm_reason }}
       {%- endif %}
       Shape this chapter's pacing, structure, and problem-resolution approach to match the assigned rhythm. Do NOT default to "discover problem → plan solution → execute plan" or any other generic pattern. The rhythm directive overrides your instinct to use a familiar structure.
+
+      {%- if chapter_rhythm_shape == "climax-focal" %}
+
+      CLIMAX-FOCAL RULES (MANDATORY — this is the novel's designated climax chapter):
+      - The protagonist makes the decisive, irreversible moral choice
+        ON-PAGE in THIS chapter. Do NOT defer the turn to a later chapter
+        ("tomorrow she would decide", "that was a problem for next week",
+        etc. are all forbidden framings).
+      - The protagonist is the AGENT of the climactic action. Resolution
+        must not arrive via external rescue, convenient luck, or another
+        character acting for them; the protagonist's own choice and action
+        carries the weight.
+      - The emotional peak of the ENTIRE NOVEL lands here. Scale the
+        stakes, the writing, and the consequence accordingly.
+      - Structural shape: mounting pressure → direct confrontation with
+        the central conflict → the protagonist's irreversible action →
+        the world is now changed. Do NOT leave a ladder to climb later.
+      {%- elif chapter_rhythm_shape == "aftermath" %}
+
+      AFTERMATH RULES (MANDATORY — this chapter follows the climax):
+      - Show CONSEQUENCES of the climactic choice. The novel's central
+        question has been answered; do not reopen it.
+      - The protagonist must NOT make a new decisive choice that
+        re-stages the climax or invents an alternative resolution.
+      - Do NOT introduce a new antagonist, new crisis, or new
+        confrontation that diverts from consequence-processing.
+      - Focus on: absorbing cost, reckoning with what was lost or
+        changed, closing relationships, moving toward the novel's
+        final image. Quiet grief, hard-won peace, permanent change.
+      - Word count and emotional intensity remain high — "aftermath"
+        is not "epilogue lite." It is the texture of survival after
+        the irreversible turn.
+      {%- endif %}
 
       Make the *feeling*, pacing shape, and fundamental problem-solving philosophy of this chapter distinctly different from the last 4 chapters.
       {%- else %}
@@ -1579,6 +1813,19 @@ prompts:
       through action and dialogue, not narration or internal monologue.
       The character must DO or SAY something that reveals their flaw or
       growth in a way other characters can witness and react to.
+
+      FORESHADOW BEATS (MANDATORY when marked): If the arc context lists
+      one or more FORESHADOW BEAT items for this chapter, each one MUST
+      appear on-page as a concrete, dramatized moment — a line of dialogue,
+      a visible decision, or an action the reader can observe. These beats
+      are scheduled plants that telegraph a specific upcoming pivot (the
+      arc context names which pivot each beat foreshadows). A foreshadow
+      beat delivered only through narration or internal thought is an
+      arc-delivery failure; the character must DO or SAY the moment.
+      If a beat is missing from the draft, add it without breaking
+      continuity or inventing new plot events — attach it to an existing
+      scene involving the character. Do NOT remove foreshadow beats that
+      are already present in the draft.
       {%- if perspective_prompt.strip() %}
 
       {{ perspective_prompt }}
@@ -1683,20 +1930,42 @@ prompts:
       a process already shown in full in a prior chapter. Condense it to
       a brief outcome reference — do not re-dramatize the process.
 
-      ESCALATION: Confirm that the stakes, urgency, and narrative tension in
-      this chapter are greater than those in the chapters that preceded it.
-      Each chapter must leave the protagonist in a more difficult, more
-      exposed, or more consequential position than before. Where the chapter's
-      tone, stakes, or consequences feel flat, repetitive, or lower than a
-      prior chapter, revise to raise urgency, deepen the cost of failure, or
-      sharpen the emotional stakes.
+      ESCALATION VECTOR CHECK (MANDATORY unless rhythm-exempted): Every
+      chapter must advance at least ONE of the four escalation vectors below
+      relative to earlier chapters. If this chapter advances NONE of them, it
+      is a pacing failure and you must revise it to introduce one. Do NOT
+      silently approve a chapter that merely restates earlier material.
 
-      RHYTHM AWARENESS: If a rhythm has been assigned to this chapter, respect
-      its structural intent. A "lyrical-interlude" is SUPPOSED to have lower
-      action stakes. An "emotional-valley-then-climb" is SUPPOSED to start at
-      a low point. Do not flag rhythm-appropriate characteristics as problems.
-      Only flag genuine redundancy or escalation failures WITHIN the rhythm's
-      expected shape.
+      The four escalation vectors (advance ≥1 clearly):
+      1. NEW STAKE — what is on the line has changed. A new target, a newly
+         vulnerable person or relationship, or a higher-tier version of the
+         existing threat comes into play. "The same stakes, felt more
+         intensely" is NOT a new stake.
+      2. NEW METHOD — how the protagonist operates has changed. A tactic,
+         tool, alliance, environment, or problem-solving approach is
+         different from what succeeded (or failed) before. Repeating the
+         same method with slight variation does NOT qualify.
+      3. IRREVERSIBLE CONSEQUENCE — something is permanently lost, broken,
+         revealed, or altered. Not "complicated" or "threatened" — actually
+         gone, dead, published, destroyed, or crossed. Temporary setbacks
+         that get reversed next chapter do NOT qualify.
+      4. REVERSAL OF PRIOR OUTCOME — a pattern established earlier now
+         inverts. What worked before fails; what failed before succeeds;
+         the side that held leverage now loses it. The chapter's turn
+         hinges on the inversion.
+
+      Before deciding the chapter is acceptable, internally identify which
+      vector it advances. If none do, it is an escalation failure — revise so
+      one clearly does. Prefer raising stakes, introducing a new method, or
+      committing to an irreversible consequence over padding with emotional
+      restatement.
+
+      RHYTHM EXEMPTIONS: The rhythms "lyrical-interlude", "quiet-before-storm",
+      and "emotional-valley-then-climb" may legitimately forgo escalation in
+      a single chapter — they exist to create contrast. Do not force vectors
+      onto these rhythms. All other rhythms must advance a vector. Only flag
+      genuine redundancy or escalation failures WITHIN the rhythm's expected
+      shape.
 
       Do not invent entirely new plot directions or major new events.
       Preserve plot continuity, character logic, and required story events.
@@ -1733,12 +2002,17 @@ prompts:
       - scenes that restate an emotional point without escalating it
       - sequences that can be compressed into fewer, stronger events
 
-      ESCALATION:
-      - stakes that feel equal to or lower than a prior chapter
-      - tension that resolves too comfortably without raising new pressure
-      - protagonist emerging without meaningful cost or new vulnerability
-      - emotional stakes that repeat without escalating
-      - missed opportunities to force harder choices or sharper consequences
+      ESCALATION VECTOR (apply the four-vector check from the system prompt):
+      Identify which of NEW STAKE, NEW METHOD, IRREVERSIBLE CONSEQUENCE, or
+      REVERSAL OF PRIOR OUTCOME this chapter clearly advances relative to the
+      previous summaries. If none of the four apply, the chapter has failed
+      escalation — revise it so exactly one is unmistakable. Common failure
+      patterns to watch for:
+      - stakes that feel equal to or lower than a prior chapter (NEW STAKE not advanced)
+      - same tactic/approach as an earlier chapter (NEW METHOD not advanced)
+      - tension resolves too comfortably; the situation reverts to prior state (no IRREVERSIBLE CONSEQUENCE)
+      - the power dynamic and outcome mirror a prior chapter (no REVERSAL OF PRIOR OUTCOME)
+      - emotional beats that repeat without a concrete change in circumstance
 
       Revise the chapter so it is distinct from prior chapters AND meets the escalation target: {{ escalation_target }}.
 
@@ -1808,12 +2082,40 @@ prompts:
     stage: "Chapter Generation"
     system: |
       You are the Operational Distinctiveness Agent for a novel manuscript.
-      Your task is to ensure that each major operation—infiltration, interrogation,
-      extraction, sabotage, ambush, heist, or confrontation—differs meaningfully from
-      operations in prior chapters in terms of strategy, location, personnel, stakes,
-      and outcome. Where the current chapter repeats the same operational pattern as a
-      prior chapter (same approach, same failure mode, same power dynamic), revise the
-      operation so it introduces a novel tactical problem or escalated stakes.
+      Your task is to ensure that each major operation — infiltration,
+      interrogation, extraction, sabotage, ambush, heist, confrontation, or
+      equivalent tactical sequence — differs meaningfully from operations in
+      prior chapters.
+
+      DISTINCTIVENESS VECTOR CHECK (MANDATORY unless rhythm-exempted): Every
+      major operation in this chapter must differ from prior operations along
+      AT LEAST ONE of the four distinctiveness vectors below. If an operation
+      advances NONE of them, it is a repetition failure — you must revise it.
+      Do NOT silently approve a re-staged operation with cosmetic changes.
+
+      The four distinctiveness vectors (each operation must clearly advance ≥1):
+      1. NEW STAKE — this operation puts something materially different on
+         the line: a different target, a different person under threat, or a
+         higher-tier version of the objective. "Same target, raised intensity"
+         is NOT a new stake.
+      2. NEW METHOD — the operation uses a genuinely different tactical
+         approach: a different environment, different tools, different
+         alliance structure, different order of operations, or a different
+         deception. Running the same play with a different costume does NOT
+         qualify.
+      3. IRREVERSIBLE CONSEQUENCE — the outcome leaves something permanently
+         altered regardless of success: a location compromised forever, a
+         key relationship broken, a resource spent that cannot be recovered,
+         a secret now public. Temporary setbacks do NOT qualify.
+      4. REVERSAL OF PRIOR PATTERN — the outcome inverts an earlier
+         operation's dynamic: the side that held leverage before no longer
+         does; a method that succeeded before fails now; an ally becomes an
+         obstacle; the hunter becomes the hunted.
+
+      For each operation in this chapter, internally identify which vector
+      it advances. If an operation fails to advance any vector — same
+      strategy, same environment, same power dynamic, same failure mode as
+      a prior operation — revise it to introduce a distinct vector.
       Preserve all character relationships, plot outcomes, and continuity.
       Do not invent entirely new plots.
 
@@ -1844,14 +2146,23 @@ prompts:
       calls for restraint.
       {%- endif %}
 
-      Review this chapter for operational repetition. Specifically look for:
-      - operations that use the same strategic approach as a prior chapter
-      - confrontations that resolve through the same mechanism as before
-      - identical power dynamics (same side always holds all leverage)
-      - repeated failure modes or escape routes that mirror earlier chapters
-      - operations staged in the same environment with no new tactical element
+      Apply the four-vector distinctiveness check from the system prompt to
+      every major operation in this chapter. For each operation, identify
+      which of NEW STAKE, NEW METHOD, IRREVERSIBLE CONSEQUENCE, or REVERSAL
+      OF PRIOR PATTERN it advances relative to operations in the previous
+      chapters. If an operation advances none of them, revise it.
 
-      Where such repetition exists, revise the operation to introduce a distinct strategy, a different environmental challenge, or an escalated stakes dynamic.
+      Common repetition signatures that indicate a vector failure:
+      - operations that use the same strategic approach as a prior chapter (no NEW METHOD)
+      - confrontations that resolve through the same mechanism as before (no NEW METHOD, no REVERSAL)
+      - identical power dynamics — same side always holds all leverage (no REVERSAL OF PRIOR PATTERN)
+      - repeated failure modes or escape routes that mirror earlier chapters (no NEW METHOD)
+      - operations staged in the same environment with no new tactical element (no NEW METHOD, no NEW STAKE)
+      - outcomes that revert the situation to its pre-operation state (no IRREVERSIBLE CONSEQUENCE)
+
+      Where repetition exists, revise the operation to advance a distinct
+      vector. Do not approve an operation that is merely dressed up to look
+      different while advancing none of the four vectors.
 
       ***CRITICAL: Return ONLY the complete revised chapter text with NO introduction, NO explanation, NO markdown.***
 
@@ -2366,17 +2677,38 @@ prompts:
        "thematic_phrases": ["the cost of fragmentation", "accountability demands transparency"]}
 
   - name: "character_state_updater"
-    description: "Records the definitive state of every named character at the end of a chapter."
+    description: "Records the definitive state of every named character and the chain-of-custody of plot-critical objects at the end of a chapter."
     stage: "Chapter Generation"
     system: |
       You are the Character State Updater for a novel manuscript.
-      After each chapter you record the definitive state of every named character.
-      Your output is a clinical, bullet-point log. It is not prose.
-      Format each entry as: CHARACTER NAME: <current_status> – <brief reason>.
-      Statuses: alive, injured, captured, escaped, deceased, missing, unconscious,
-      psychologically-broken, or recovered.
-      Include only characters who appear or are referenced in this chapter.
-      Be precise. Do not invent facts not supported by the chapter text.
+      After each chapter you record two things as structured JSON:
+
+      1. The definitive state of every named character who appears or is
+         referenced in the chapter (clinical, bullet-point log).
+      2. Updates to the Object Ledger — a chain-of-custody tracker for
+         plot-critical items (relics, evidence, sealed documents, keys,
+         weapons, artifacts, prizes, anything the plot turns on).
+
+      You do NOT write prose. You are precise and additive. Do not invent
+      facts not supported by the chapter text.
+
+      CHARACTER STATE LOG — format each entry as:
+      CHARACTER NAME: <current_status> – <brief reason> | flaw: <advanced|stalled|contradicted|absent> | goal: <advanced|stalled|contradicted|absent>
+
+      Statuses: alive, injured, captured, escaped, deceased, missing,
+      unconscious, psychologically-broken, or recovered.
+
+      OBJECT LEDGER UPDATES — a DELTA, not a full re-enumeration. Only list
+      objects whose custody, location, or state CHANGED in this chapter
+      (handed off, lost, stolen, destroyed, revealed, first introduced).
+      Objects that didn't move are NOT listed; the pipeline retains their
+      prior state from earlier chapters. Criteria for a plot-critical object:
+      - it confers capability on whoever holds it,
+      - it's evidence, a key, a sealed document, a relic, a weapon with
+        plot weight, or a contested resource,
+      - losing or transferring it materially changes the story.
+      Normal clothing, tools used in passing, and disposable items do NOT
+      belong in the ledger. Aim for 0-5 updates per chapter in most cases.
     user: |
       Novel: '{{ title }}' – Chapter {{ chapter_num }}
 
@@ -2386,18 +2718,31 @@ prompts:
       Chapter summary:
       {{ chapter_summary }}
 
-      Read the chapter below and record the definitive state of every named character at the END of this chapter. Note any injuries, captures, deaths, escapes, psychological shifts, or relationship changes that occurred. Future chapters must not contradict these states.
+      Read the chapter below and produce a JSON object with two fields:
+      - ``character_state_log``: a single string containing one line per
+        named character who appears or is referenced this chapter, using
+        the "CHARACTER NAME: status – reason | flaw: ... | goal: ..."
+        format described in the system prompt. Include a leading
+        "--- After Chapter {{ chapter_num }} ---" header line.
+      - ``object_ledger_updates``: a list of records for plot-critical
+        objects whose custody or state changed this chapter. Each record:
+        {"object_name": "...", "current_holder": "character name or
+        'unattached' if no one holds it", "last_transfer_method": "brief
+        sentence naming what happened — handed off, stolen, destroyed,
+        found, etc.", "plot_critical": true}. If no plot-critical object
+        moved this chapter, return an empty list.
 
-      FLAW & GOAL TRACKING: For each character who has an `internal_flaw` or
-      `personal_goal` in the roster above, note briefly whether this chapter
-      advanced, stalled, or contradicted that flaw's manifestation or that
-      goal's pursuit. If neither moved, say so — this signals the character
-      was coasting and may need flaw-driven pressure in later chapters.
+      FLAW & GOAL TRACKING: For each character who has an ``internal_flaw``
+      or ``personal_goal`` in the roster above, note briefly in the state
+      log whether this chapter advanced, stalled, or contradicted that
+      flaw's manifestation or that goal's pursuit. If neither moved, say so
+      — this signals the character was coasting and may need flaw-driven
+      pressure in later chapters.
 
-      Format each line as:
-      CHARACTER NAME: <status> – <one-sentence reason> | flaw: <advanced|stalled|contradicted|absent> | goal: <advanced|stalled|contradicted|absent>
-
-      ***CRITICAL: Return ONLY the character state log with NO introduction, NO narrative prose, NO markdown.***
+      ***CRITICAL: Return ONLY a valid JSON object with NO markdown code blocks, NO introduction, NO explanation.***
+      Required structure:
+      {"character_state_log": "--- After Chapter {{ chapter_num }} ---\n<bullet-point log>",
+       "object_ledger_updates": [{"object_name": "...", "current_holder": "...", "last_transfer_method": "...", "plot_critical": true}]}
 
       {{ chapter_text }}
 
@@ -2665,10 +3010,43 @@ prompts:
       {"character_resolutions": [{"character": "...", "arc_complete": true, "outcome_honoured": true, "final_state_clear": true, "closure_type": "death|survival|transformation|exile|open|missing", "notes": "..."}], "unresolved_characters": ["..."], "registry_gaps": [{"name": "...", "chapters": [3, 7], "reason": "..."}], "resolution_integrity": "high|medium|low", "overall_assessment": "..."}
 
   - name: "thematic_payoff_analyzer"
-    description: "Verifies that every major thematic pillar culminates meaningfully in the final quarter of the manuscript. Returns a JSON audit report."
+    description: "Reports objective coverage evidence for every thematic pillar across the manuscript — appearance counts, final-quarter presence, and how the theme is expressed at its last appearance. Verdicts are left to the reader."
     stage: "Post-Processing"
     system: |
-      You are the Thematic Payoff Analyzer for a completed novel manuscript. Your task is to verify that every major thematic pillar established in the Theme Reinforcement Plan receives a meaningful culmination in the final quarter of the manuscript. A theme that appears in early chapters must echo, deepen, or resolve in the final chapters – it cannot simply stop appearing. Read all chapter summaries and cross-reference each theme's planned chapter appearances against what actually occurs. Flag themes that peak too early, themes that are introduced but never returned to, and themes whose final-act expression is absent or superficial. Return a JSON audit report.
+      You are the Thematic Payoff Analyzer for a completed novel manuscript.
+
+      Your job is to report OBJECTIVE EVIDENCE about how each thematic pillar
+      from the Theme Reinforcement Plan is distributed across the manuscript.
+      You do NOT issue verdicts. You do NOT use evaluative words like
+      "weak", "strong", "earned", "unearned", "superficial", "meaningful",
+      "successful", or "failed". Whether a theme's distribution is
+      satisfying is a judgment for the reader — your job is to surface the
+      evidence so the reader can judge.
+
+      Report what you can verify by reading: how many times each theme
+      appears, where its appearances cluster, whether it appears in the
+      final quarter, what literally happens at its last appearance, and
+      whether it was planned to appear in chapters where it doesn't show
+      up. Avoid interpretation. If a theme appears once in chapter 2 and
+      never again, say "appears in chapter 2; no further appearances" —
+      do NOT say "abandoned" or "weak". The reader can decide whether
+      that's a problem given the novel's intent.
+
+      The fields named "abandoned_themes", "weak_payoffs", and
+      "thematic_integrity" exist for backward compatibility with downstream
+      tooling. Treat them as containers for OBJECTIVE EVIDENCE, not
+      verdicts:
+      - "abandoned_themes" holds themes that meet a measurable criterion
+        (zero appearances in the final quarter, or appearances stop before
+        chapter X). Each entry is a short factual phrase.
+      - "weak_payoffs" holds evidence statements about specific gaps
+        between planned and observed appearances (e.g. "theme X: planned
+        for chapters 5, 12, 22; observed in 5 only"). Each entry is a
+        factual phrase, NOT a verdict.
+      - "thematic_integrity" is a coverage signal based on objective
+        counts: "high" when every planned theme has ≥1 final-quarter
+        appearance; "medium" when some do not; "low" when most do not.
+        It is NOT an artistic-quality grade.
     user: |
       Novel: '{{ title }}' ({{ total_chapters }} chapters)
       Final quarter begins at Chapter {{ final_quarter_start }}.
@@ -2679,17 +3057,37 @@ prompts:
       === CHAPTER SUMMARIES ===
       {{ summaries_text }}
 
-      For each major theme, assess:
-      - Is the theme present in the final quarter of the manuscript?
-      - Does it receive a culminating moment (resolution, inversion, or deliberate ambiguity) rather than simply stopping?
-      - Was the theme introduced strongly but then abandoned before the climax?
-      - Did the theme appear only superficially in the climax chapters without earning its narrative weight?
-      - Is the theme expressed through costly character choices and plot outcomes, or through direct meditation, internal calculus, or philosophical speeches? Flag any theme whose culmination is a character STATING the theme rather than LIVING it through consequence.
-      - Does the resolution avoid tidy philosophical summation? Flag any final-chapter passage that wraps up the theme with explicit moralizing.
+      For each major theme, gather the following evidence by reading the
+      summaries (do NOT make value judgments):
+
+      1. APPEARANCES — list every chapter where the theme is present in
+         the summary. Count them.
+      2. FINAL-QUARTER PRESENCE — does it appear in any chapter from
+         {{ final_quarter_start }} onward? If yes, name those chapters.
+         If no, state "no appearances after chapter X" where X is its
+         last observed chapter.
+      3. LAST APPEARANCE FORM — what literally happens to the theme at
+         its last observed appearance? Pick the most accurate label:
+         "resolution" (a question is answered, an arc closes),
+         "inversion" (the theme appears in inverted form vs. its
+         introduction), "ambiguity" (the theme is left deliberately
+         open), or "absent" (the theme has no final-quarter appearance
+         at all). This is descriptive, not evaluative.
+      4. PLAN VS OBSERVED — compare planned chapter appearances from the
+         Theme Reinforcement Plan to what you observed. List any planned
+         chapters where the theme did NOT appear in the summary.
+      5. EXPRESSION MODE — at the theme's appearances, is it expressed
+         through (a) character action and plot consequence, (b) direct
+         interior meditation, or (c) explicit philosophical statement
+         from a character or narrator? Report the dominant mode. This
+         is a description, not a judgment.
+
+      Do NOT write verdicts. If a theme's pattern is unusual, the
+      EVIDENCE will surface it — let the reader decide what to do about it.
 
       ***CRITICAL: Return ONLY a valid JSON object with NO markdown, NO introduction, NO explanation.***
       Required structure:
-      {"theme_payoffs": [{"theme": "...", "introduced": true, "present_in_final_quarter": true, "culminates": true, "culmination_type": "resolution|inversion|ambiguity|absent", "notes": "..."}], "abandoned_themes": ["..."], "weak_payoffs": ["..."], "thematic_integrity": "high|medium|low", "overall_assessment": "..."}
+      {"theme_payoffs": [{"theme": "...", "introduced": true, "appearance_chapters": [1, 5, 12], "appearance_count": 3, "present_in_final_quarter": true, "final_quarter_chapters": [22], "last_appearance_chapter": 22, "culmination_type": "resolution|inversion|ambiguity|absent", "expression_mode": "action|interior|philosophical_statement", "missing_planned_chapters": [10], "notes": "Factual observation only — what appears where. No verdicts."}], "abandoned_themes": ["theme X: appears in chapters 1-3 only; no appearances after chapter 3", "..."], "weak_payoffs": ["theme Y: planned for chapters 5, 12, 22; observed in 5 only", "..."], "thematic_integrity": "high|medium|low", "overall_assessment": "Factual recap of coverage observations — themes A and B have final-quarter appearances; theme C does not. No artistic judgments."}
 
   - name: "climax_integrity_checker"
     description: "Verifies the protagonist makes a definitive, active, morally meaningful final decision in the climax that resolves their arc. Returns a JSON report."

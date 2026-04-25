@@ -45,6 +45,7 @@ from novelforge.agents.chapter import (
     run_chapter_pattern_extractor,
     _run_all_chapter_agents, ChapterContext,
 )
+from novelforge.chapter_position import ChapterPosition
 from novelforge.session.persistence import (
     get_session_id, save_session_state, persist_completed_chapters,
 )
@@ -54,6 +55,64 @@ from novelforge.routes.generation._shared import (
 from novelforge.routes.generation.audits import run_post_manuscript_audits
 
 logger = logging.getLogger(__name__)
+
+
+def _format_object_ledger_context(object_ledger: dict) -> str:
+    """Format the cumulative object ledger for injection into per-chapter prompts.
+
+    Returns an empty string when the ledger is empty so upstream Jinja
+    conditionals can omit the section entirely. Lists each plot-critical
+    object's current holder with the last transfer chapter and method.
+    """
+    if not isinstance(object_ledger, dict) or not object_ledger:
+        return ""
+    lines = ["Object Ledger — plot-critical items and current custody:"]
+    # Stable ordering by object_name for determinism in logs/tests.
+    for object_name in sorted(object_ledger):
+        entry = object_ledger[object_name]
+        if not isinstance(entry, dict):
+            continue
+        holder = str(entry.get("current_holder", "")).strip() or "unattached"
+        last_ch = entry.get("last_transfer_chapter")
+        method = str(entry.get("last_transfer_method", "")).strip()
+        detail = f"last transfer: ch {last_ch}" if last_ch else "last transfer: unknown"
+        if method:
+            detail += f" — {method}"
+        lines.append(f"- \"{object_name}\": held by {holder} ({detail})")
+    return "\n".join(lines)
+
+
+def _merge_object_ledger_updates(
+    ledger: dict,
+    updates: list[dict],
+    chapter_num: int,
+) -> None:
+    """Merge per-chapter object_ledger_updates into the cumulative ledger.
+
+    Updates are applied in place. Each record must carry ``object_name``;
+    records without one are skipped. Non-plot-critical records are dropped
+    so the ledger stays focused on items the continuity gatekeeper should
+    actually enforce. The ``last_transfer_chapter`` is stamped from
+    *chapter_num* — the LLM cannot spoof it.
+    """
+    for update in updates or []:
+        if not isinstance(update, dict):
+            continue
+        object_name = str(update.get("object_name", "")).strip()
+        if not object_name:
+            continue
+        if not update.get("plot_critical", True):
+            # Non-plot-critical items are not tracked; if the LLM marks an
+            # existing tracked item as non-critical, leave the prior entry
+            # intact rather than dropping it silently.
+            continue
+        ledger[object_name] = {
+            "object_name": object_name,
+            "current_holder": str(update.get("current_holder", "")).strip(),
+            "last_transfer_method": str(update.get("last_transfer_method", "")).strip(),
+            "last_transfer_chapter": chapter_num,
+            "plot_critical": True,
+        }
 
 
 @generation_bp.route("/generate_chapters", methods=["POST"])
@@ -129,11 +188,13 @@ def _resume_chapter_generation(
     token: str, snap: dict, chapters_done: list[dict],
     summaries: list[str], start_idx: int,
     character_state_log: list[str] | None = None,
+    object_ledger: dict | None = None,
 ) -> None:
     """Resume chapter generation from a specific chapter index after a crash."""
     _run_chapter_generation_internal(
         token, snap, chapters_done, summaries, start_idx,
         character_state_log=character_state_log,
+        object_ledger=object_ledger,
     )
 
 
@@ -152,6 +213,7 @@ def _run_chapter_generation_internal(
     summaries: list[str],
     start_idx: int,
     character_state_log: list[str] | None = None,
+    object_ledger: dict | None = None,
 ) -> None:
     """
     Internal function that performs the actual chapter generation.
@@ -196,6 +258,12 @@ def _run_chapter_generation_internal(
     target_per_chapter = min(4500, max(3500, word_count // total_chapters))
     characters_text = _format_characters(character_list)
     character_state_log = list(character_state_log) if character_state_log else []
+    # Object-custody ledger: cumulative dict keyed by object_name. Each entry
+    # is the most recent state of a plot-critical object. Merged chapter-by-
+    # chapter from the character_state_updater's object_ledger_updates delta,
+    # with last_transfer_chapter stamped from the current chapter number.
+    # Survives crash-resume via the progress snapshot JSON.
+    object_ledger = dict(object_ledger) if object_ledger else {}
     compression_guidance: str = ""
     degraded_passes: list[dict] = []
     rhythm_log: list[dict] = []
@@ -245,6 +313,7 @@ def _run_chapter_generation_internal(
                             "chapters_done": chapters_done,
                             "summaries": summaries,
                             "character_state_log": character_state_log,
+                            "object_ledger": object_ledger,
                             "progress": progress_manager.get(token),
                         },
                         fh,
@@ -291,6 +360,36 @@ def _run_chapter_generation_internal(
                 f"Chapter {i+1}: {s}" for i, s in enumerate(summaries)
             )
 
+            # Climax-chapter rhythm gate: the canonical climax chapter is
+            # always "climax-focal" and every chapter after it is "aftermath".
+            # These are deterministic from chapter position, so we compute
+            # them UP FRONT (before the gatekeeper) and let them override the
+            # LLM classifier's recommendation on the matching chapters. This
+            # prevents the two most common failure modes flagged in post-
+            # manuscript audit reports: diffused climaxes (climax spread
+            # across 3-5 chapters) and post-climax re-staging (new decisive
+            # confrontations invented after the climactic turn).
+            _position = ChapterPosition(chapter_num, total_chapters)
+            forced_rhythm_shape = ""
+            forced_rhythm_reason = ""
+            if _position.is_climax_chapter():
+                forced_rhythm_shape = "climax-focal"
+                forced_rhythm_reason = (
+                    "Reserved rhythm: this is the canonical climax chapter. "
+                    "The protagonist's decisive, irreversible moral choice "
+                    "must land on-page in this chapter."
+                )
+            elif _position.is_aftermath_chapter():
+                forced_rhythm_shape = "aftermath"
+                forced_rhythm_reason = (
+                    "Reserved rhythm: this chapter follows the canonical "
+                    "climax. Show consequences only — do not re-stage "
+                    "alternative resolutions or introduce a new decisive "
+                    "confrontation."
+                )
+
+            object_ledger_context = _format_object_ledger_context(object_ledger)
+
             _set_step(f"Chapter {chapter_num}: continuity gatekeeper")
             gatekeeper_brief = run_continuity_gatekeeper(
                 chapter_num=chapter_num, chapter_title=chapter_title,
@@ -300,6 +399,9 @@ def _run_chapter_generation_internal(
                 chapter_fate_context=chapter_fate_context,
                 chapter_arc_context=chapter_arc_context,
                 character_state_log="\n\n".join(character_state_log),
+                chapter_technology_context=chapter_technology_context,
+                chapter_rhythm_shape=forced_rhythm_shape,
+                object_ledger_context=object_ledger_context,
                 degraded_passes=degraded_passes,
             )
 
@@ -315,6 +417,13 @@ def _run_chapter_generation_internal(
             chapter_rhythm_shape = str(rhythm_result.get("recommended_shape_for_this_chapter", "")).strip()
             chapter_rhythm_reason = str(rhythm_result.get("recommendation_reason", "")).strip()
             chapter_detected_patterns = rhythm_result.get("detected_patterns", [])
+
+            # Apply the climax gate override. Forced values win over the
+            # LLM classifier's recommendation for climax and aftermath
+            # chapters.
+            if forced_rhythm_shape:
+                chapter_rhythm_shape = forced_rhythm_shape
+                chapter_rhythm_reason = forced_rhythm_reason
 
             # Format tracker context for the draft prompt
             _procedural_exemplars_text = ""
@@ -399,6 +508,7 @@ def _run_chapter_generation_internal(
                     voice_prompt, perspective_prompt,
                     _procedural_exemplars_text, _openings_log_text,
                     _consequence_log_text, total_chapters,
+                    object_ledger_context=object_ledger_context,
                 ),
                 action=f"Chapter {chapter_num}: drafting",
                 special_instructions=special_instructions,
@@ -450,13 +560,20 @@ def _run_chapter_generation_internal(
                 snap["character_list"] = list(character_list)
 
             _set_step(f"Chapter {chapter_num}: updating character states")
-            state_update = run_character_state_updater(
+            state_update, ledger_updates = run_character_state_updater(
                 chapter_text=text, chapter_summary=summary,
                 characters_text=characters_text, chapter_num=chapter_num, title=title,
                 degraded_passes=degraded_passes,
             )
             if state_update.strip():
-                character_state_log.append(f"--- After Chapter {chapter_num} ---\n{state_update}")
+                # Avoid doubling the header when the LLM already emitted one
+                # under the new JSON schema; older plain-text responses do not
+                # include a header, so we prepend one in that case.
+                state_log_entry = state_update
+                if not state_log_entry.lstrip().startswith("--- After Chapter"):
+                    state_log_entry = f"--- After Chapter {chapter_num} ---\n{state_log_entry}"
+                character_state_log.append(state_log_entry)
+            _merge_object_ledger_updates(object_ledger, ledger_updates, chapter_num)
 
             _set_step(f"Chapter {chapter_num}: compression check")
             compression_guidance = run_per_chapter_compression_check(
@@ -554,6 +671,7 @@ def _run_chapter_generation_internal(
                 "step": f"Chapter {chapter_num}: complete",
                 "chapters_done": list(chapters_done),
                 "character_state_log": list(character_state_log),
+                "object_ledger": dict(object_ledger),
                 "degraded_passes": list(degraded_passes),
                 "length_enforcement": list(length_enforcement_log),
                 "character_list": list(character_list),

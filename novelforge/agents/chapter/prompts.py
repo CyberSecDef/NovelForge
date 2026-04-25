@@ -116,8 +116,15 @@ def build_chapter_draft_prompt(
     voice_prompt: str = "", perspective_prompt: str = "",
     procedural_exemplars: str = "", chapter_openings_log: str = "",
     consequence_log: str = "", total_chapters: int = 0,
+    object_ledger_context: str = "",
 ) -> list[dict[str, str]]:
-    """Build the initial chapter draft prompt with all planning context."""
+    """Build the initial chapter draft prompt with all planning context.
+
+    ``object_ledger_context`` carries the cumulative chain-of-custody for
+    plot-critical items. When non-empty, the draft prompt surfaces each
+    item's current holder so the LLM does not invent new custody (giving a
+    character an object they don't canonically hold).
+    """
     return render_prompt(
         "chapter_draft",
         title=title, genre=genre, premise=premise,
@@ -146,6 +153,7 @@ def build_chapter_draft_prompt(
         soft_limited_words=", ".join(get_soft_limited_words(genre)),
         voice_prompt=voice_prompt or "",
         perspective_prompt=perspective_prompt or "",
+        object_ledger_context=object_ledger_context or "",
     )
 
 
@@ -380,8 +388,28 @@ def build_continuity_gatekeeper_prompt(
     chapter_num: int, chapter_title: str, chapter_summary: str, previous_summaries: str,
     chapter_timeline_context: str = "", chapter_fate_context: str = "",
     chapter_arc_context: str = "", character_state_log: str = "",
+    chapter_technology_context: str = "",
+    chapter_rhythm_shape: str = "",
+    object_ledger_context: str = "",
 ) -> list[dict[str, str]]:
-    """Build the pre-chapter continuity validation prompt."""
+    """Build the pre-chapter continuity validation prompt.
+
+    ``chapter_technology_context`` carries the world-rule specification
+    (``rules`` array plus supplementary detail) for this chapter. When
+    present, the gatekeeper is expected to flag scenes that violate any
+    rule's forbidden clause or alter its cost.
+
+    ``chapter_rhythm_shape`` carries the assigned rhythm. When it is
+    ``"climax-focal"`` or ``"aftermath"`` (the two reserved climax-gate
+    rhythms) the gatekeeper enforces the extra rules in the template —
+    blocking deferred climactic choices, externally-resolved climaxes, and
+    post-climax re-staging.
+
+    ``object_ledger_context`` carries the cumulative chain-of-custody for
+    plot-critical items. When non-empty, the gatekeeper flags any
+    chapter-plan scene that would have a character interact with an object
+    they do not canonically hold, without an explicit transfer scene.
+    """
     return render_prompt(
         "continuity_gatekeeper",
         chapter_num=chapter_num, chapter_title=chapter_title,
@@ -391,6 +419,9 @@ def build_continuity_gatekeeper_prompt(
         chapter_fate_context=chapter_fate_context or "",
         chapter_arc_context=chapter_arc_context or "",
         character_state_log=character_state_log or "",
+        chapter_technology_context=chapter_technology_context or "",
+        chapter_rhythm_shape=chapter_rhythm_shape or "",
+        object_ledger_context=object_ledger_context or "",
     )
 
 

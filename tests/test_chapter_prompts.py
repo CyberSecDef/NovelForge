@@ -275,3 +275,90 @@ class TestScannerPerCharacterTokenSets:
         assert "Marcus Reid" in result["known"] or any(
             "Marcus Reid" in s for s in result["known"]
         )
+
+
+# ---------------------------------------------------------------------------
+# build_chapter_draft_prompt — climax rhythm gate enforcement
+# ---------------------------------------------------------------------------
+
+class TestChapterDraftClimaxRhythmGate:
+    """The chapter_draft prompt must render the reserved climax-focal and
+    aftermath rule blocks when the matching rhythm is assigned."""
+
+    def _call(self, rhythm: str) -> str:
+        from novelforge.agents.chapter import build_chapter_draft_prompt
+
+        messages = build_chapter_draft_prompt(
+            premise="A lone detective uncovers a city-wide conspiracy.",
+            genre="Crime",
+            title="Iron Meridian",
+            chapter_num=8,
+            chapter_title="The Reckoning",
+            chapter_summary="The detective confronts the architect.",
+            characters_text="- Holt: detective\n- Crane: architect",
+            previous_summaries="Chapter 1: Setup.",
+            target_words=4000,
+            special_instructions="",
+            chapter_rhythm_shape=rhythm,
+            chapter_rhythm_reason="test",
+            total_chapters=10,
+        )
+        return "\n".join(m["content"] for m in messages)
+
+    def test_climax_focal_rhythm_renders_climax_rules(self):
+        rendered = self._call("climax-focal")
+        assert "CLIMAX-FOCAL RULES" in rendered
+        assert "AFTERMATH RULES" not in rendered
+
+    def test_aftermath_rhythm_renders_aftermath_rules(self):
+        rendered = self._call("aftermath")
+        assert "AFTERMATH RULES" in rendered
+        assert "CLIMAX-FOCAL RULES" not in rendered
+
+    def test_regular_rhythm_renders_neither_block(self):
+        rendered = self._call("cat-and-mouse")
+        assert "CLIMAX-FOCAL RULES" not in rendered
+        assert "AFTERMATH RULES" not in rendered
+
+
+# ---------------------------------------------------------------------------
+# build_chapter_draft_prompt — object ledger custody block
+# ---------------------------------------------------------------------------
+
+class TestChapterDraftObjectLedger:
+    """The chapter_draft prompt surfaces the object ledger and the custody
+    rule when ``object_ledger_context`` is provided."""
+
+    def _call(self, ledger_text: str) -> str:
+        from novelforge.agents.chapter import build_chapter_draft_prompt
+
+        messages = build_chapter_draft_prompt(
+            premise="A premise.",
+            genre="Crime",
+            title="Iron Meridian",
+            chapter_num=4,
+            chapter_title="The Handoff",
+            chapter_summary="Aldric receives the writ.",
+            characters_text="- Aldric: detective",
+            previous_summaries="Chapter 1: Setup.",
+            target_words=4000,
+            special_instructions="",
+            total_chapters=10,
+            object_ledger_context=ledger_text,
+        )
+        return "\n".join(m["content"] for m in messages)
+
+    def test_ledger_text_appears_in_draft_prompt(self):
+        ledger_text = (
+            "Object Ledger — plot-critical items and current custody:\n"
+            "- \"the sealed writ\": held by Aldric Holt (last transfer: ch 3 — handed off)"
+        )
+        rendered = self._call(ledger_text)
+        assert "the sealed writ" in rendered
+        assert "Aldric Holt" in rendered
+        assert "OBJECT CUSTODY RULE" in rendered
+
+    def test_ledger_block_omitted_when_empty(self):
+        rendered = self._call("")
+        assert "OBJECT CUSTODY RULE" not in rendered
+        assert "Object Ledger" not in rendered
