@@ -420,6 +420,75 @@ _NAMED_CHARACTER_STOP_WORDS: frozenset[str] = frozenset({
     "not", "never", "always", "still", "only", "even", "also",
     "now", "before", "after", "later", "soon", "ago", "once", "twice",
     "yes", "no", "ok", "okay",
+    # Prepositions (frequently sentence-initial; the roster check still
+    # protects any unusual character actually named one of these).
+    "in", "on", "at", "by", "for", "to", "from", "with", "of", "off",
+    "into", "onto", "upon", "about", "against", "between", "through",
+    "during", "throughout", "despite", "towards", "toward", "beyond",
+    "beneath", "behind", "beside", "besides", "above", "below", "under",
+    "over", "across", "around", "near", "past", "along", "amid", "among",
+    "without", "within", "out", "up", "down", "outside", "inside",
+    "back", "forward",
+    # Modal verbs and auxiliaries
+    "can", "could", "may", "might", "must", "will", "would", "should",
+    "shall", "be", "is", "was", "were", "are", "am", "been", "being",
+    "have", "has", "had", "do", "does", "did", "doing", "done",
+    # Common sentence-starting verbs (telling/dialogue tags, imperatives)
+    "let", "look", "looked", "looking", "see", "seen", "seeing",
+    "go", "going", "went", "gone", "come", "came", "coming",
+    "make", "making", "made", "take", "taking", "took", "taken",
+    "give", "giving", "gave", "given", "get", "getting", "got",
+    "put", "putting", "say", "saying", "said", "says",
+    "find", "finding", "found", "feel", "feeling", "felt",
+    "think", "thinking", "thought", "know", "knowing", "knew",
+    "tell", "telling", "told", "want", "wanting", "wanted",
+    "need", "needing", "needed", "try", "trying", "tried",
+    "keep", "keeping", "kept", "leave", "leaving", "left",
+    "stay", "staying", "stayed", "stand", "standing", "stood",
+    "sit", "sitting", "sat", "hold", "holding", "held",
+    "wait", "waiting", "waited", "stop", "stopping", "stopped",
+    "watch", "watching", "watched", "listen", "listening", "listened",
+    "speak", "speaking", "spoke", "spoken", "call", "calling", "called",
+    "ask", "asking", "asked", "answer", "answering", "answered",
+    "move", "moving", "moved", "run", "running", "ran",
+    "walk", "walking", "walked", "follow", "following", "followed",
+    "remember", "remembering", "remembered", "forget", "forgetting", "forgot",
+    "check", "checking", "checked", "report", "reporting", "reported",
+    "send", "sending", "sent", "pull", "pulling", "pulled",
+    "push", "pushing", "pushed", "cut", "cutting",
+    "turn", "turning", "turned", "open", "opening", "opened",
+    "close", "closing", "closed", "begin", "beginning", "began", "begun",
+    "start", "starting", "started", "end", "ending", "ended",
+    "finish", "finishing", "finished",
+    # Adverbs and transitions that often start sentences
+    "thus", "hence", "therefore", "however", "moreover", "indeed",
+    "perhaps", "maybe", "sometimes", "suddenly", "finally", "eventually",
+    "gradually", "slowly", "quickly", "today", "tomorrow", "yesterday",
+    "tonight", "midnight", "noon", "dawn", "dusk",
+    "somehow", "somewhere", "nowhere", "everywhere", "anywhere", "instead",
+    "meanwhile", "afterward", "afterwards", "again", "often", "usually",
+    "almost", "nearly", "barely", "hardly", "really", "truly", "rather",
+    "just", "well", "fine", "sure",
+    # Possessive pronouns / determiners (capitalized at sentence start)
+    "my", "your", "our", "their",
+    # Indefinite pronouns / quantifiers
+    "everything", "nothing", "anything", "something", "everyone",
+    "anyone", "someone", "nobody", "somebody", "anybody", "everybody",
+    "whoever", "whatever", "whenever", "wherever", "whomever",
+    "all", "any", "some", "none", "few", "many", "much", "more", "most",
+    "less", "least", "each", "every", "either", "neither", "both",
+    "another", "others", "several",
+    # Cardinal numbers (frequently sentence-initial)
+    "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve", "twenty", "thirty", "forty",
+    "fifty", "hundred", "thousand", "million",
+    # Comparatives / common evaluatives (rarely names)
+    "good", "better", "best", "bad", "worse", "worst",
+    "limited", "public", "private",
+    # Common collective / role nouns (frequently sentence-initial; the
+    # roster check protects against the rare character named these).
+    "people", "men", "women", "children", "students", "trustees",
+    "donors", "nurses", "doctors", "officers", "guards",
     # Days
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
     # Months (excluding May — often a character name; roster check handles it)
@@ -526,6 +595,13 @@ def extract_named_characters(
     unknown_counts: dict[str, int] = {}
     for span, count in raw_counts.items():
         span_tokens_list = [t.lower() for t in span.split()]
+        # Strip leading stop-word tokens before classification so a span
+        # like "If Meridian" (sentence-initial conjunction + roster name)
+        # is evaluated as "Meridian". The original span text is still
+        # reported when the residual is unknown, but most leading-stopword
+        # cases collapse onto a known roster character.
+        while len(span_tokens_list) > 1 and span_tokens_list[0] in _NAMED_CHARACTER_STOP_WORDS:
+            span_tokens_list = span_tokens_list[1:]
         span_tokens = set(span_tokens_list)
         # Roster check first: a span is known only when it maps entirely to
         # a single roster character — either the span's tokens are a subset

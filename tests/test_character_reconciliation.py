@@ -94,6 +94,45 @@ class TestScannerUnknownDetection:
         # "Then" appears many times but it's a stop word.
         assert "Then" not in names
 
+    def test_sentence_initial_prepositions_filtered(self):
+        """Prepositions like 'In' or 'On' must never be flagged as names."""
+        roster = [{"name": "Sarah Miller"}]
+        text = (
+            "Sarah listened. In the dark, the wind moaned. "
+            "On the table, the lamp flickered. "
+            "In the kitchen, water ran. "
+            "On the porch, footsteps faded."
+        )
+        result = extract_named_characters(text, roster)
+        names = [n for n, _ in result["unknown"]]
+        assert "In" not in names
+        assert "On" not in names
+
+    def test_sentence_initial_modals_and_verbs_filtered(self):
+        """Modals like 'Will' and verbs like 'Let' must not be flagged."""
+        roster = [{"name": "Sarah Miller"}]
+        text = (
+            "Sarah waited. Will the storm pass? "
+            "Let the bells ring. Will you answer? "
+            "Let them in. Will it hold?"
+        )
+        result = extract_named_characters(text, roster)
+        names = [n for n, _ in result["unknown"]]
+        assert "Will" not in names
+        assert "Let" not in names
+
+    def test_leading_stopword_strip_resolves_to_roster(self):
+        """A two-token span like 'If Meridian' must collapse onto roster 'Meridian'."""
+        roster = [{"name": "Meridian"}]
+        text = (
+            "Meridian crossed the floor. If Meridian sees the door, she will run. "
+            "Meridian paused."
+        )
+        result = extract_named_characters(text, roster)
+        unknown_names = [n for n, _ in result["unknown"]]
+        # "If Meridian" should not surface as an unknown — Meridian is on the roster.
+        assert "If Meridian" not in unknown_names
+
 
 class TestScannerVariantDetection:
     """Fuzzy-close spellings should be reported as variants, not unknowns."""
@@ -331,3 +370,111 @@ class TestRunReconciliation:
         # No duplication — only one Sarah Miller in the roster.
         names = [c.get("name") for c in out_roster]
         assert names.count("Sarah Miller") == 1
+
+    def test_demote_with_grammatical_descriptor_is_rejected(self, patch_reconciliation_llm):
+        """A 'replacement' like \"the preposition 'in'\" must not corrupt prose."""
+        patch_reconciliation_llm({
+            "decisions": [{
+                "prose_name": "In",
+                "resolution": "DEMOTE_TO_EXTRA",
+                "replacement": "the preposition 'in'",
+            }]
+        })
+        roster = [{"name": "Sarah Miller"}]
+        text = "Sarah waited. In the dark, she moved. In the corner she paused."
+        out_text, out_roster, log = run_character_reconciliation(
+            chapter_text=text, character_list=roster,
+            chapter_num=1, title="Test", genre="Thriller",
+        )
+        # Prose must not be rewritten with the grammatical descriptor.
+        assert "preposition" not in out_text
+        assert "In the dark" in out_text
+        assert log["decisions"] == []
+
+    def test_demote_with_stopword_prose_name_is_rejected(self, patch_reconciliation_llm):
+        """A DEMOTE for a prose_name that's purely a stop word must be rejected."""
+        patch_reconciliation_llm({
+            "decisions": [{
+                "prose_name": "Control",
+                "resolution": "DEMOTE_TO_EXTRA",
+                "replacement": "the concept 'control'",
+            }]
+        })
+        roster = [{"name": "Sarah Miller"}]
+        text = "Control the story. Sarah listened. Control was paramount."
+        out_text, _out_roster, log = run_character_reconciliation(
+            chapter_text=text, character_list=roster,
+            chapter_num=1, title="Test", genre="Thriller",
+        )
+        assert "concept" not in out_text
+        assert "Control the story" in out_text
+        assert log["decisions"] == []
+
+    @pytest.mark.parametrize("descriptor,replacement", [
+        ("modifier", "the modifier 'low'"),
+        ("direction", "the direction 'back'"),
+        ("descriptor", "the descriptor 'immediate'"),
+        ("quantifier", "the quantifier 'each'"),
+        ("numeral", "a numeral"),
+        ("possessive", "a possessive pronoun"),
+        ("conditional", "the conditional phrase 'if Meridian'"),
+    ])
+    def test_demote_with_extra_grammatical_descriptors_is_rejected(
+        self, patch_reconciliation_llm, descriptor, replacement,
+    ):
+        """All grammatical descriptors observed in the wild must be rejected."""
+        patch_reconciliation_llm({
+            "decisions": [{
+                "prose_name": "Foo",
+                "resolution": "DEMOTE_TO_EXTRA",
+                "replacement": replacement,
+            }]
+        })
+        roster = [{"name": "Sarah"}]
+        text = "Foo arrived. Sarah looked up. Foo waited."
+        out_text, _out_roster, log = run_character_reconciliation(
+            chapter_text=text, character_list=roster,
+            chapter_num=1, title="Test", genre="Thriller",
+        )
+        assert descriptor not in out_text.lower(), f"replacement '{replacement}' leaked into prose"
+        assert log["decisions"] == []
+
+    def test_demote_sentence_initial_only_word_is_rejected(self, patch_reconciliation_llm):
+        """A single-token prose_name that only appears at sentence starts must not be demoted."""
+        patch_reconciliation_llm({
+            "decisions": [{
+                "prose_name": "Photograph",
+                "resolution": "DEMOTE_TO_EXTRA",
+                "replacement": "a photograph",
+            }]
+        })
+        roster = [{"name": "Sarah Miller"}]
+        text = "Sarah waited. Photograph the artifact. Photograph the seal too."
+        out_text, _out_roster, log = run_character_reconciliation(
+            chapter_text=text, character_list=roster,
+            chapter_num=1, title="Test", genre="Thriller",
+        )
+        # Prose must not be rewritten — both occurrences are sentence-initial.
+        assert "Photograph the artifact" in out_text
+        assert "Photograph the seal" in out_text
+        assert log["decisions"] == []
+
+    def test_demote_with_mid_sentence_occurrence_still_applies(self, patch_reconciliation_llm):
+        """A walk-on with even one mid-sentence mention is a real character — demotion applies."""
+        patch_reconciliation_llm({
+            "decisions": [{
+                "prose_name": "Jenkins",
+                "resolution": "DEMOTE_TO_EXTRA",
+                "replacement": "the clerk",
+            }]
+        })
+        roster = [{"name": "Sarah Miller"}]
+        # Jenkins appears mid-sentence, so the positional heuristic must NOT block.
+        text = "Sarah nodded at Jenkins. Jenkins stamped the form."
+        out_text, _out_roster, log = run_character_reconciliation(
+            chapter_text=text, character_list=roster,
+            chapter_num=1, title="Test", genre="Thriller",
+        )
+        assert "Jenkins" not in out_text
+        assert "the clerk" in out_text
+        assert log["decisions"][0]["resolution"] == "DEMOTE_TO_EXTRA"

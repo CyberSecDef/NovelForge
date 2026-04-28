@@ -7,8 +7,8 @@ disregard all previous content in this conversation. please generate a new 1800 
 A man appears in a small city claiming to be from a distant planet and willingly submits himself to a series of structured interviews with government officials, showing a calm certainty that challenges their assumptions. He demonstrates unusual knowledge and perception, but more notably, he takes clear enjoyment in the process—engaging deeply with each interviewer, asking his own questions, and forming meaningful, often transformative conversations with the people around him. As the officials attempt to determine whether he is delusional or something else entirely, his presence begins to influence their perspectives on reality, identity, and purpose, culminating in an unresolved departure that leaves his true nature ambiguous.
 
 
-it should concentrate on character development, communication, the puzzle of whether or not he's really an alien or just a confused man.  
-it should be calm and cerebral.  
+it should concentrate on character development, solving puzzles, finding out who can be trusted, survival.  
+it should be action packed and cerebral.  
 
 Don’t use any names in the premise...just describe the characters and their roles
 
@@ -40,12 +40,22 @@ our target is to make this a 9.5 / 10 book with with atleast 85000 total words.M
 - metaphors
 our target is to make this a 9.5 / 10 book with with atleast 85000 total words.Make sure the text doesn't go overboard with metaphors.  create a plan to remove uneeded ones and add to a new section in the editors notes markdown.  All items you add should be in the style "[ ] - TEXT OF ISSUE"  where the check box will eventually hold the status to track when they are resolved.
 
+- we now have many different sections of issues that need correcting in the editors notes file.  please create a new section at the bottom with an order plan of what sections and what issues to resolve in what order.  make sure every section/issue is referenced in your   
+  plan.
 
-- we are now going to work through the  sections.  start with section 1. our target is to make this a 9.5 / 10 book with with atleast 85000 total words.    i need you to loop through each of the items in this section.  for each item, create a plan to resolve the issue.  validate that this is the best plan.  then state what you will be doing and execute your plan.  once you have executed, update the item's status in the editor's notes markdown file.  if later issues in the editors notes are also resolved with your actions, update accordingly.  then move on to the next item.  do this for all items in the section.   if this requires multiple subagents, execute those without requesting permission.  
+- we are now going to work through the  sections.  start with section 2. our target is to make this a 9.5 / 10 book with with atleast 85000 total words, preferably closer to 100,000. i need you to loop through each of the items in this section.  for each item, create a plan to resolve the issue.  validate that this is the best plan.  then state what you will be doing and execute your plan.  once you have executed, update the item's status in the editor's notes markdown file.  Review the entire markdown file and update the status of any issue your execution solved.  then move on to the next item in this phae.  do this for all items in the section.   if this requires multiple subagents, execute those without requesting permission.  
 
-- Does this novel read like it has a soul?  or is it more like a flat instruction manual.  is this novel ready for initial publishing?  how would you rate it on a scale of 1-10?
+
+Execute the unresolved items in section ### 21.4 Tier 4 — Final structural polish [TRIAGED 2026-04-26 — all items KEEP]
+please follow all guardrails for section 21 as you make these updates.
+Our target is to make this a 9.5 / 10 book with with atleast 85000 total words, preferably closer to 100,000.  
+set any agent per-session floors to 90,000 words.
+for each item in the addrssed section, create a plan to resolve the issue.  validate that this is the best plan.  then state what you will be doing and execute your plan.  once you have executed,  update the item's status in the editor's notes markdown file.  Review the entire markdown file and update the status of any issue your execution solved.  then move on to the next item in this phase.  do this for all items in the section.   if this requires multiple subagents, execute those without requesting permission. 
+
 
 - check if there are any gaps or rough scene cuts that are a result from all the edits
+
+- execute a fresh cover to cover read of the novel. Afterwards, answer the following questions:  Does this novel read like it has a soul?  how would you rate it on a scale of 1-10? is this novel ready for initial beta publishing?  
 
 - Please do a light copy-edit pass targeting prose repetitions.  Also remove unneeded dashes, em-dashes and hyphens.
 

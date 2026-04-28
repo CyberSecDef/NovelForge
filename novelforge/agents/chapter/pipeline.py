@@ -14,6 +14,7 @@ from novelforge.validation import (
 
 from novelforge.agents.chapter._helpers import (
     PASS_FAILURE_KEY,
+    _NAMED_CHARACTER_STOP_WORDS,
     _call_with_content_retry,
     _log_pass_failure,
     extract_named_characters,
@@ -175,6 +176,78 @@ def run_character_state_updater(
         return state_log, ledger_updates
     # Legacy / non-JSON response: keep the text and emit no ledger updates.
     return str(raw or "").strip(), []
+
+
+# Words that signal the LLM has produced a grammatical/meta description
+# instead of an in-fiction role phrase. A replacement containing any of
+# these is almost always the result of the scanner mistaking a sentence-
+# initial common word ("In", "Control") for a name; substituting it would
+# corrupt the prose with nonsense like "the preposition 'in' the dark".
+_DEMOTION_DESCRIPTOR_TELLS: frozenset[str] = frozenset({
+    # Parts of speech
+    "preposition", "conjunction", "pronoun", "article", "determiner",
+    "noun", "verb", "adjective", "adverb", "interjection", "particle",
+    # Grammatical role descriptors
+    "modifier", "qualifier", "quantifier", "intensifier", "descriptor",
+    "possessive", "demonstrative", "subordinator",
+    "subject", "object", "predicate",
+    "imperative", "command", "exclamation", "expletive",
+    "conditional", "subordinate",
+    # Numerical / structural tells
+    "numeral", "number", "digit", "ordinal", "cardinal", "syllable",
+    # Generic meta-references
+    "concept", "phrase", "word", "term",
+})
+
+
+def _all_occurrences_sentence_initial(prose_name: str, chapter_text: str) -> bool:
+    """Return True if every occurrence of *prose_name* in *chapter_text* is
+    at a sentence-initial position (start-of-text or after ``.!?\\n``).
+
+    Used as a defense-in-depth check before applying DEMOTE_TO_EXTRA: a
+    single-token capitalized word that *only* ever sits at sentence starts
+    is almost certainly a common English word the LLM mistook for a
+    walk-on character. Substituting it would corrupt every sentence that
+    begins with that word.
+    """
+    if not prose_name or not chapter_text:
+        return False
+    pattern = re.compile(r"\b" + re.escape(prose_name) + r"('s)?\b")
+    positions = [m.start() for m in pattern.finditer(chapter_text)]
+    if not positions:
+        return False
+    for pos in positions:
+        preceding = chapter_text[:pos].rstrip(" \t\"'")
+        if preceding and preceding[-1] not in ".!?\n":
+            return False
+    return True
+
+
+def _is_suspect_demotion(prose_name: str, replacement: str, chapter_text: str = "") -> bool:
+    """Return True if a DEMOTE_TO_EXTRA decision should be rejected.
+
+    Three failure modes are caught:
+
+    * ``prose_name`` is fully composed of stop-word tokens — the scanner
+      should have filtered it, but defense-in-depth keeps a regression
+      from rewriting prose with garbage.
+    * ``replacement`` contains a part-of-speech or meta tell (e.g.
+      ``"the preposition 'in'"``, ``"the concept 'control'"``), which
+      means the LLM described the token grammatically instead of as a
+      role.
+    * The single-token ``prose_name`` only ever appears at sentence-
+      initial positions in the chapter — strong evidence it's a common
+      English word, not a walk-on character.
+    """
+    name_tokens = [t.strip(".,;:'\"").lower() for t in prose_name.split() if t.strip(".,;:'\"")]
+    if name_tokens and all(t in _NAMED_CHARACTER_STOP_WORDS for t in name_tokens):
+        return True
+    rep_tokens = {t.strip(".,;:'\"").lower() for t in replacement.split()}
+    if rep_tokens & _DEMOTION_DESCRIPTOR_TELLS:
+        return True
+    if len(name_tokens) == 1 and chapter_text and _all_occurrences_sentence_initial(prose_name, chapter_text):
+        return True
+    return False
 
 
 def _apply_name_substitution(text: str, old_name: str, replacement: str) -> str:
@@ -355,6 +428,14 @@ def run_character_reconciliation(
         elif resolution == "DEMOTE_TO_EXTRA":
             replacement = str(decision.get("replacement", "")).strip()
             if not replacement:
+                continue
+            if _is_suspect_demotion(prose_name, replacement, updated_text):
+                logger.warning(
+                    "Chapter %d: rejecting suspect DEMOTE_TO_EXTRA %r → %r "
+                    "(stop-word name, grammatical descriptor, or sentence-"
+                    "initial-only span); leaving prose unchanged",
+                    chapter_num, prose_name, replacement,
+                )
                 continue
             updated_text = _apply_name_substitution(updated_text, prose_name, replacement)
             applied.append({
