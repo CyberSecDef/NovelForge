@@ -433,6 +433,11 @@ _NAMED_CHARACTER_STOP_WORDS: frozenset[str] = frozenset({
     "can", "could", "may", "might", "must", "will", "would", "should",
     "shall", "be", "is", "was", "were", "are", "am", "been", "being",
     "have", "has", "had", "do", "does", "did", "doing", "done",
+    # Contraction stems — the name regex strips at the apostrophe, so
+    # "Don't" → "Don", "Wouldn't" → "Wouldn", etc. Roster matches run
+    # first, so a character actually named one of these is still detected.
+    "don", "won", "wouldn", "couldn", "shouldn", "wasn", "weren",
+    "isn", "aren", "hadn", "hasn", "haven", "doesn", "mustn", "ain",
     # Common sentence-starting verbs (telling/dialogue tags, imperatives)
     "let", "look", "looked", "looking", "see", "seen", "seeing",
     "go", "going", "went", "gone", "come", "came", "coming",
