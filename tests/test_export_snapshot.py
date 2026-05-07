@@ -111,8 +111,8 @@ class TestExportUsesSnapshot:
         assert "Session Title A" not in content1
         assert "Session Title B" not in content2
 
-    def test_no_snapshot_falls_back_to_default(self, client, tmp_path, monkeypatch):
-        """When a token has no snapshot the title defaults to 'Novel'."""
+    def test_missing_snapshot_returns_400(self, client, tmp_path, monkeypatch):
+        """Without a snapshot the export would silently overwrite Novel.md — reject early."""
         import novelforge.config as config
         monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
 
@@ -127,18 +127,37 @@ class TestExportUsesSnapshot:
                 {"number": 1, "title": "Ch1", "content": "Text.", "summary": "S"},
             ],
         })
-        # Session sets a title but snapshot is absent – route should still work.
         with client.session_transaction() as sess:
             sess["title"] = "Session Only Title"
 
         r = client.post("/export", data=json.dumps({"token": token}),
                         content_type="application/json")
-        assert r.status_code == 200
-        url = r.get_json()["download_url"]
-        content = client.get(url).data.decode("utf-8")
-        # Falls back to "Novel" heading, not the session title.
-        assert "# Novel" in content
-        assert "Session Only Title" not in content
+        assert r.status_code == 400
+        assert "snapshot" in r.get_json()["error"].lower()
+        # Nothing should be written to the export dir.
+        assert not list(tmp_path.glob("*.md"))
+
+    def test_empty_snapshot_returns_400(self, client, tmp_path, monkeypatch):
+        """A snapshot key whose value is an empty dict is treated the same as missing."""
+        import novelforge.config as config
+        monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
+
+        token = "00000000-0000-4000-8000-000000000006"
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 1,
+            "total": 1,
+            "step": "Complete",
+            "error": None,
+            "snapshot": {},
+            "chapters_done": [
+                {"number": 1, "title": "Ch1", "content": "Text.", "summary": "S"},
+            ],
+        })
+
+        r = client.post("/export", data=json.dumps({"token": token}),
+                        content_type="application/json")
+        assert r.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +211,31 @@ class TestEditorsNotesUsesSnapshot:
 
         assert "Correct Notes Title" in content
         assert "Wrong Session Title" not in content
+
+    def test_missing_snapshot_returns_400(self, client, tmp_path, monkeypatch):
+        """Without a snapshot the notes file would collapse to a generic name — reject early."""
+        import novelforge.config as config
+        monkeypatch.setattr(config, "EXPORT_DIR", str(tmp_path))
+
+        token = "00000000-0000-4000-8000-000000000007"
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 1,
+            "total": 1,
+            "step": "Complete",
+            "error": None,
+            "chapters_done": [
+                {"number": 1, "title": "Ch1", "content": "Text.", "summary": "S"},
+            ],
+            "consistency": {"overall_assessment": "Good.", "issues": []},
+        })
+
+        r = client.post("/export_editors_notes",
+                        data=json.dumps({"token": token}),
+                        content_type="application/json")
+        assert r.status_code == 400
+        assert "snapshot" in r.get_json()["error"].lower()
+        assert not list(tmp_path.glob("*.md"))
 
 
 # ---------------------------------------------------------------------------

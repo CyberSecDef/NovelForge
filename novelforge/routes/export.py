@@ -120,7 +120,17 @@ def export_novel() -> Response | tuple[Response, int]:
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
 
-    title = (progress_data.get("snapshot") or {}).get("title", "Novel")
+    snapshot = progress_data.get("snapshot")
+    if not isinstance(snapshot, dict) or not snapshot:
+        # Without a snapshot the filename collapses to "Novel.md" and silently
+        # overwrites any prior export. Reject early instead of clobbering.
+        logger.warning("Export rejected: progress entry %s has no snapshot", token)
+        return jsonify({
+            "error": "Progress data is incomplete (missing generation snapshot). "
+                     "Reload or regenerate the novel before exporting."
+        }), 400
+
+    title = snapshot.get("title", "Novel")
     chapters_done = progress_data.get("chapters_done", [])
 
     markdown_content = _format_manuscript(title, chapters_done)
@@ -148,7 +158,17 @@ def export_editors_notes() -> Response | tuple[Response, int]:
     if not progress_data or progress_data.get("status") != "done":
         return jsonify({"error": "Novel generation not complete."}), 400
 
-    title = (progress_data.get("snapshot") or {}).get("title", "Novel")
+    snapshot = progress_data.get("snapshot")
+    if not isinstance(snapshot, dict) or not snapshot:
+        # Same overwrite hazard as /export — without a snapshot the filename
+        # collapses to "Novel-Editors_Notes.md" for every novel.
+        logger.warning("Editor's notes export rejected: progress entry %s has no snapshot", token)
+        return jsonify({
+            "error": "Progress data is incomplete (missing generation snapshot). "
+                     "Reload or regenerate the novel before exporting."
+        }), 400
+
+    title = snapshot.get("title", "Novel")
     consistency = progress_data.get("consistency") or {}
     global_continuity_audit = progress_data.get("global_continuity_audit") or {}
     narrative_compression_report = progress_data.get("narrative_compression_report") or {}

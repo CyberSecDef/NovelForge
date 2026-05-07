@@ -78,7 +78,19 @@ def revise_chapter() -> Response | tuple[Response, int]:
     if target_idx is None:
         return jsonify({"error": "Selected chapter was not found."}), 404
 
-    snap = progress_data.get("snapshot", {})
+    snap = progress_data.get("snapshot")
+    if not isinstance(snap, dict) or not snap:
+        # Missing snapshot would silently strip every planning context (architecture,
+        # timeline, fate, arc, etc.) before overwriting the chapter. Reachable via
+        # restored sessions whose on-disk JSON predates the snapshot field.
+        logger.warning(
+            "Revision rejected: progress entry %s has no snapshot (chapter %d)",
+            token, chapter_number,
+        )
+        return jsonify({
+            "error": "Progress data is incomplete (missing generation snapshot). "
+                     "Reload or regenerate the novel before revising chapters."
+        }), 400
     title = snap.get("title", "Novel")
     genre = snap.get("genre", "")
     total_chapters = int(snap.get("chapters", len(chapters_done) or 1))

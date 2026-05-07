@@ -440,6 +440,7 @@ class TestReviseChapter:
             "invalidation": "00000000-0000-4000-8000-000000000072",
             "persist": "00000000-0000-4000-8000-000000000073",
             "persist-invalidate": "00000000-0000-4000-8000-000000000074",
+            "no-snap": "00000000-0000-4000-8000-000000000075",
         }
         return _suffix_map.get(suffix, f"00000000-0000-4000-8000-{suffix[:12].ljust(12, '0')}")
 
@@ -543,6 +544,28 @@ class TestReviseChapter:
         assert len(saved.get("completed_chapters", [])) == 1
         assert saved["completed_chapters"][0]["content"] != "Original text."
 
+    def test_revise_missing_snapshot_returns_400(self, client, mock_llm):
+        """Without a snapshot the revision would proceed with empty planning context
+        and overwrite the chapter — reject early instead."""
+        token = self._make_token("no-snap")
+        progress_manager.create(token, {
+            "status": "done",
+            "current": 1,
+            "total": 1,
+            "step": "Complete",
+            "error": None,
+            "chapters_done": [
+                {"number": 1, "title": "Ch1", "content": "Original text.", "summary": "Old"},
+            ],
+            "consistency": {"issues": [], "overall_assessment": ""},
+        })
+        r = self._post_revise(client, token)
+        assert r.status_code == 400
+        assert "snapshot" in r.get_json()["error"].lower()
+        # Chapter content must remain untouched.
+        pd = progress_manager.get(token)
+        assert pd["chapters_done"][0]["content"] == "Original text."
+
     def test_revise_persistence_includes_invalidated_reports(self, client, mock_llm, tmp_path, monkeypatch):
         """Persisted state after revision reflects the invalidated (None) report values."""
         from novelforge.routes.generation import _DERIVED_REPORT_FIELDS
@@ -582,6 +605,7 @@ class TestExport:
             "total": 2,
             "step": "Complete",
             "error": None,
+            "snapshot": {"title": "Export Test Novel", "genre": "Fantasy"},
             "chapters_done": [
                 {"number": 1, "title": "Ch1", "content": "Chapter 1 text.", "summary": "S1"},
                 {"number": 2, "title": "Ch2", "content": "Chapter 2 text.", "summary": "S2"},

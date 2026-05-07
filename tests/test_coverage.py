@@ -24,6 +24,7 @@ class TestEditorsNotesFormatting:
     def _full_progress_data(self):
         return {
             "status": "done",
+            "snapshot": {"title": "Full Notes Test", "genre": "Fantasy"},
             "chapters_done": [
                 {"number": 1, "title": "Ch1", "content": "Text", "summary": "S1"},
                 {"number": 2, "title": "Ch2", "content": "Text", "summary": "S2"},
@@ -161,7 +162,11 @@ class TestEditorsNotesFormatting:
 
     def test_editors_notes_no_content(self, client):
         token = "00000000-0000-4000-8000-000000000021"
-        progress_manager.create(token, {"status": "done", "current": 0, "total": 0, "step": "", "chapters_done": [], "error": None})
+        progress_manager.create(token, {
+            "status": "done", "current": 0, "total": 0, "step": "",
+            "snapshot": {"title": "Empty", "genre": ""},
+            "chapters_done": [], "error": None,
+        })
         with client.session_transaction() as sess:
             sess["title"] = "Empty"
 
